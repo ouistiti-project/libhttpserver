@@ -320,114 +320,117 @@ static int _httpserver_connect(http_server_t *server)
 				server->clients = client;
 				ret = 1;
 			}
-			client = server->clients;
-			while (client != NULL)
+			else
 			{
-				http_message_t *request = _httpserver_message_create(server, NULL);
-				if (FD_ISSET(client->sock, &rfds))
+				client = server->clients;
+				while (client != NULL)
 				{
-					int size = 1;
-					request->client = client;
-					while (size > 0)
+					http_message_t *request = _httpserver_message_create(server, NULL);
+					if (FD_ISSET(client->sock, &rfds))
 					{
-						size = read(client->sock, request->buffer, request->buff_size);
-						if (size <= 0)
-							break;
-						// parse the data while the message is complete
-						do
+						int size = 1;
+						request->client = client;
+						while (size > 0)
 						{
-							ret = _httpserver_parserequest(server, request);
-						}
-						while (ret != EINCOMPLETE && ret != ESUCCESS);
-					}
-					if (ret == ESUCCESS)
-					{
-						http_server_callback_t *callback = server->callbacks;
-						http_message_t *response = _httpserver_message_create(server, request);
-						response->client = client;
-						while (callback != NULL)
-						{
-							char *cburl = callback->url;
-							if (cburl != NULL)
+							size = read(client->sock, request->buffer, request->buff_size);
+							if (size <= 0)
+								break;
+							// parse the data while the message is complete
+							do
 							{
-								char *path = request->uri;
-								if (cburl[0] != '/' && path[0] == '/')
-									path++;
-								if (!strncasecmp(cburl, path, callback->url_length))
-									cburl = NULL;
+								ret = _httpserver_parserequest(server, request);
 							}
-							if (cburl == NULL)
+							while (ret != EINCOMPLETE && ret != ESUCCESS);
+						}
+						if (ret == ESUCCESS)
+						{
+							http_server_callback_t *callback = server->callbacks;
+							http_message_t *response = _httpserver_message_create(server, request);
+							response->client = client;
+							while (callback != NULL)
 							{
-								int close = 0;
-								if (callback->func)
-									callback->func(callback->arg, request, response);
+								char *cburl = callback->url;
+								if (cburl != NULL)
+								{
+									char *path = request->uri;
+									if (cburl[0] != '/' && path[0] == '/')
+										path++;
+									if (!strncasecmp(cburl, path, callback->url_length))
+										cburl = NULL;
+								}
+								if (cburl == NULL)
+								{
+									int close = 0;
+									if (callback->func)
+										callback->func(callback->arg, request, response);
 
-								send(client->sock, "HTTP/1.1 200 OK\r\n", 17, 0);
-								http_header_t *header = response->headers;
-								while (header != NULL)
-								{
-									send(client->sock, header->key, strlen(header->key), 0);
-									send(client->sock, ": ", 2, 0);
-									send(client->sock, header->value, strlen(header->value), 0);
-									send(client->sock, "\r\n", 2, 0);
-									header = header->next;
-								}
-								if (response->keepalive)
-								{
-									send(client->sock, "Connection: keep-alive\r\n", 24, 0);
-								}
-								else
-								{
-									send(client->sock, "Connection: close\r\n", 19, 0);
-									close = 1;
-								}
-								if (response->content != NULL)
-								{
-									char content_length[32];
-									snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
-									send(client->sock, content_length, strlen(content_length), 0);
-									if (request->type == MESSAGE_TYPE_HEAD)
+									send(client->sock, "HTTP/1.1 200 OK\r\n", 17, 0);
+									http_header_t *header = response->headers;
+									while (header != NULL)
 									{
+										send(client->sock, header->key, strlen(header->key), 0);
+										send(client->sock, ": ", 2, 0);
+										send(client->sock, header->value, strlen(header->value), 0);
+										send(client->sock, "\r\n", 2, 0);
+										header = header->next;
+									}
+									if (response->keepalive)
+									{
+										send(client->sock, "Connection: keep-alive\r\n", 24, 0);
+									}
+									else
+									{
+										send(client->sock, "Connection: close\r\n", 19, 0);
 										close = 1;
 									}
-									else
+									if (response->content != NULL)
 									{
-										send(client->sock, "\r\n", 2, 0);
-										send(client->sock, response->content, response->content_length, 0);
+										char content_length[32];
+										snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
+										send(client->sock, content_length, strlen(content_length), 0);
+										if (request->type == MESSAGE_TYPE_HEAD)
+										{
+											close = 1;
+										}
+										else
+										{
+											send(client->sock, "\r\n", 2, 0);
+											send(client->sock, response->content, response->content_length, 0);
+										}
+									}
+									int flag = 1; 
+									setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+									send(client->sock, "\r\n", 2, 0);
+									_httpserver_message_destroy(response);
+									if (close)
+									{
+										shutdown(client->sock, SHUT_RDWR);
+										
+										if (client == server->clients)
+										{
+											server->clients = client->next;
+											free(client);
+										}
+										else
+										{
+											http_client_t *client2 = server->clients;
+											while (client2->next != client) client2 = client2->next;
+											client2->next = client->next;
+											free(client);
+										}
 									}
 								}
-								int flag = 1; 
-								setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
-								send(client->sock, "\r\n", 2, 0);
-								_httpserver_message_destroy(response);
-								if (close)
-								{
-									shutdown(client->sock, SHUT_RDWR);
-									
-									if (client == server->clients)
-									{
-										server->clients = client->next;
-										free(client);
-									}
-									else
-									{
-										http_client_t *client2 = server->clients;
-										while (client2->next != client) client2 = client2->next;
-										client2->next = client->next;
-										free(client);
-									}
-								}
+								callback = callback->next;
 							}
-							callback = callback->next;
+						}
+						else
+						{
+							send(client->sock, "HTTP/1.1 400 Bad Request\r\n", 17, 0);
 						}
 					}
-					else
-					{
-						send(client->sock, "HTTP/1.1 400 Bad Request\r\n", 17, 0);
-					}
+					_httpserver_message_destroy(request);
+					client = client->next;
 				}
-				_httpserver_message_destroy(request);
-				client = client->next;
 			}
 		}
 	}
