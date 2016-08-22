@@ -486,7 +486,7 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 					warn("setsockopt(SO_REUSEADDR) failed");
 #endif
 
-			((struct sockaddr_in *)rp->ai_addr)->sin_port = port;
+			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(port);
 			if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
 				break;                  /* Success */
 
