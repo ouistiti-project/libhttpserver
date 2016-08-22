@@ -347,7 +347,16 @@ static int _httpserver_connect(http_server_t *server)
 						response->client = client;
 						while (callback != NULL)
 						{
-							if ((callback->url == NULL) || (!strncasecmp(callback->url, request->uri, callback->url_length)))
+							char *cburl = callback->url;
+							if (cburl != NULL)
+							{
+								char *path = request->uri;
+								if (cburl[0] != '/' && path[0] == '/')
+									path++;
+								if (!strncasecmp(cburl, path, callback->url_length))
+									cburl = NULL;
+							}
+							if (cburl == NULL)
 							{
 								int close = 0;
 								if (callback->func)
