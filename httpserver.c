@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <err.h>
 
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -375,8 +376,15 @@ static int _httpserver_connect(http_server_t *server)
 									char content_length[32];
 									snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
 									send(client->sock, content_length, strlen(content_length), 0);
-									send(client->sock, "\r\n", 2, 0);
-									send(client->sock, response->content, response->content_length, 0);
+									if (request->type == MESSAGE_TYPE_HEAD)
+									{
+										close = 1;
+									}
+									else
+									{
+										send(client->sock, "\r\n", 2, 0);
+										send(client->sock, response->content, response->content_length, 0);
+									}
 								}
 								send(client->sock, "\r\n", 2, 0);
 								_httpserver_message_destroy(response);
@@ -426,20 +434,22 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
 		if ( server->sock < 0 )
 		{
-		 fprintf(stderr, "Error creating socket %s\n", strerror(errno));
+		 warn("Error creating socket");
 		 free(server);
 		 return NULL;
 		}
 
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
-				error("setsockopt(SO_REUSEADDR) failed");
+				warn("setsockopt(SO_REUSEADDR) failed");
+#ifdef SO_REUSEPORT
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, &(int){ 1 }, sizeof(int)) < 0)
-				error("setsockopt(SO_REUSEADDR) failed");
+				warn("setsockopt(SO_REUSEADDR) failed");
+#endif
 
 		int socklen = sizeof(struct sockaddr_in);
 		struct sockaddr_in saddr;
 
-		saddr.sin_family = AF_UNSPEC;
+		saddr.sin_family = AF_INET;
 		saddr.sin_port = htons(port);
 		saddr.sin_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
 		status = bind(server->sock, (struct sockaddr *)&saddr, socklen);
@@ -450,7 +460,7 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 		struct addrinfo *result, *rp;
 
 		memset(&hints, 0, sizeof(struct addrinfo));
-		hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
+		hints.ai_family = AF_INET;    /* Allow IPv4 or IPv6 */
 		hints.ai_socktype = SOCK_STREAM; /* Stream socket */
 		hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
 		hints.ai_protocol = 0;          /* Any protocol */
@@ -476,11 +486,13 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 				continue;
 
 			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
-					error("setsockopt(SO_REUSEADDR) failed");
+					warn("setsockopt(SO_REUSEADDR) failed");
+#ifdef SO_REUSEPORT
 			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, &(int){ 1 }, sizeof(int)) < 0)
-					error("setsockopt(SO_REUSEADDR) failed");
+					warn("setsockopt(SO_REUSEADDR) failed");
+#endif
 
-			((struct sockaddr_in *)rp->ai_addr)->sin_port = port;
+			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(port);
 			if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
 				break;                  /* Success */
 
@@ -495,7 +507,7 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 	}
 	if (status)
 	{
-		fprintf(stderr, "Error bind/listen socket %s\n", strerror(errno));
+		warn("Error bind/listen socket");
 		free(server);
 		return NULL;
 	}
