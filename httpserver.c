@@ -409,11 +409,10 @@ static int _httpserver_connect(http_server_t *server)
 							callback = callback->next;
 						}
 					}
-					
-				}
-				if (ret != ESUCCESS)
-				{
-					send(client->sock, "HTTP/1.1 400 Bad Request\r\n", 17, 0);
+					else
+					{
+						send(client->sock, "HTTP/1.1 400 Bad Request\r\n", 17, 0);
+					}
 				}
 				_httpserver_message_destroy(request);
 				client = client->next;
