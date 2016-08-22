@@ -38,6 +38,7 @@
 #include <sys/un.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
@@ -386,6 +387,8 @@ static int _httpserver_connect(http_server_t *server)
 										send(client->sock, response->content, response->content_length, 0);
 									}
 								}
+								int flag = 1; 
+								setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
 								send(client->sock, "\r\n", 2, 0);
 								_httpserver_message_destroy(response);
 								if (close)
