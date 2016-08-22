@@ -587,10 +587,13 @@ void httpmessage_addcontent(http_message_t *message, char *type, char *content, 
 		size = strlen(message->content);
 	if (length == -1)
 		length = strlen(content);
-	message->content = realloc(message->content, length + size + 1);
-	memcpy(message->content + size, content, length);
-	*(message->content + size + length) = 0;
-	message->content_length = size + length;
+	if (content != NULL)
+	{
+		message->content = realloc(message->content, length + size + 1);
+		memcpy(message->content + size, content, length);
+		*(message->content + size + length) = 0;
+		message->content_length = size + length;
+	}
 }
 
 int httpmessage_keepalive(http_message_t *message)
