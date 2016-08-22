@@ -376,8 +376,15 @@ static int _httpserver_connect(http_server_t *server)
 									char content_length[32];
 									snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
 									send(client->sock, content_length, strlen(content_length), 0);
-									send(client->sock, "\r\n", 2, 0);
-									send(client->sock, response->content, response->content_length, 0);
+									if (request->type == MESSAGE_TYPE_HEAD)
+									{
+										close = 1;
+									}
+									else
+									{
+										send(client->sock, "\r\n", 2, 0);
+										send(client->sock, response->content, response->content_length, 0);
+									}
 								}
 								send(client->sock, "\r\n", 2, 0);
 								_httpserver_message_destroy(response);
@@ -446,7 +453,6 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 		saddr.sin_port = htons(port);
 		saddr.sin_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
 		status = bind(server->sock, (struct sockaddr *)&saddr, socklen);
-		warn("Error bind socket");
 	}
 	else
 	{
