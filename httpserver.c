@@ -31,20 +31,45 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <err.h>
 
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/un.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+#ifndef WIN32
+# include <err.h>
 
-#include <pthread.h>
-#include <signal.h>
+# include <sys/socket.h>
+# include <sys/ioctl.h>
+# include <sys/un.h>
+# include <net/if.h>
+# include <netinet/in.h>
+# include <netinet/tcp.h>
+# include <arpa/inet.h>
+# include <netdb.h>
 
+#else
+# define warn(...) fprintf(stderr, __VA_ARGS__)
+
+# include <winsock2.h>
+# include <ws2tcpip.h>
+
+# define SHUT_RDWR SD_BOTH
+# pragma comment (lib, "Ws2_32.lib")
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+   void WSAAPI freeaddrinfo( struct addrinfo* );
+
+   int WSAAPI getaddrinfo( const char*, const char*, const struct addrinfo*,
+                 struct addrinfo** );
+
+   int WSAAPI getnameinfo( const struct sockaddr*, socklen_t, char*, DWORD,
+                char*, DWORD, int );
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+
+#include "vthread.h"
 #include "httpserver.h"
 
 #define ESUCCESS 0
@@ -55,7 +80,11 @@
 struct http_client_s
 {
 	int sock;
+#ifndef WIN32
 	struct sockaddr_un addr;
+#else
+	struct sockaddr_in addr;
+#endif
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
@@ -111,7 +140,7 @@ struct http_server_s
 {
 	int sock;
 	int run;
-	pthread_t thread;
+	vthread_t thread;
 	http_client_t *clients;
 	http_server_callback_t *callbacks;
 };
@@ -315,7 +344,11 @@ static int _httpserver_connect(http_server_t *server)
 				// Create new client socket to communicate
 				int size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &size);
+#ifndef WIN32
 				fcntl(client->sock, F_SETFL, fcntl(client->sock, F_GETFL, 0) | O_NONBLOCK);
+#else
+				ioctlsocket(client->sock, FIONBIO, (void *)&(int){ 1 });
+#endif
 				client->next = server->clients;
 				server->clients = client;
 				ret = 1;
@@ -443,6 +476,10 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 	int status;
 
 	server = calloc(1, sizeof(*server));
+#ifdef WIN32
+	WSADATA wsaData = {0};
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
 	if (address == NULL)
 	{
 		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
@@ -453,10 +490,10 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 		 return NULL;
 		}
 
-		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
+		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
-		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, &(int){ 1 }, sizeof(int)) < 0)
+		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(SO_REUSEADDR) failed");
 #endif
 
@@ -499,10 +536,10 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 			if (server->sock == -1)
 				continue;
 
-			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
+			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
 					warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
-			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, &(int){ 1 }, sizeof(int)) < 0)
+			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, (void *)&(int){ 1 }, sizeof(int)) < 0)
 					warn("setsockopt(SO_REUSEADDR) failed");
 #endif
 
@@ -545,29 +582,18 @@ void httpserver_addconnector(http_server_t *server, char *url, http_connector_t 
 	server->callbacks = callback;
 }
 
-typedef void *(*pthread_routine)(void*);
 void httpserver_connect(http_server_t *server)
 {
-	pthread_attr_t attr;
+	vthread_attr_t attr;
 
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-//	sigset_t set;
-//	sigemptyset(&set);
-//	sigaddset(&set, SIGINT);
-//	sigaddset(&set,SIGTERM);
-//	pthread_sigmask(SIG_BLOCK, &set, NULL);
-
-	pthread_create(&server->thread, &attr, (pthread_routine)_httpserver_connect, (void *)server);
+	vthread_create(&server->thread, &attr, (vthread_routine)_httpserver_connect, (void *)server, sizeof(*server));
 }
 
 void httpserver_disconnect(http_server_t *server)
 {
 	if (server->thread)
 	{
-		pthread_kill(server->thread, SIGINT);
-		pthread_join(server->thread, NULL);
+		vthread_join(server->thread, NULL);
 		server->thread = 0;
 	}
 }
@@ -575,6 +601,9 @@ void httpserver_disconnect(http_server_t *server)
 void httpserver_destroy(http_server_t *server)
 {
 	free(server);
+#ifdef WIN32
+	WSACleanup();
+#endif
 }
 
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
@@ -676,7 +705,9 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	return value;
 }
 #ifdef TEST
-#include <pwd.h>
+#ifndef WIN32
+# include <pwd.h>
+#endif
 
 int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
@@ -688,22 +719,26 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 
 int main(int argc, char * const *argv)
 {
+#ifndef WIN32
 	struct passwd *user;
 
 	user = getpwnam("http");
 	if (user == NULL)
 		user = getpwnam("apache");
+#endif
 	http_server_t *server = httpserver_create(NULL, 80, 10);
 	if (server)
 	{
 		httpserver_addconnector(server, NULL, test_func, NULL);
+#ifndef WIN32
 		if (user != NULL)
 		{
 			setgid(user->pw_gid);
 			setuid(user->pw_uid);
 		}
+#endif
 		httpserver_connect(server);
-		pause();
+		getchar();
 		httpserver_disconnect(server);
 	}
 	return 0;
