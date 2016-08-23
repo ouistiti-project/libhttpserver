@@ -676,6 +676,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	return value;
 }
 #ifdef TEST
+#include <pwd.h>
 
 int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
@@ -687,10 +688,20 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 
 int main(int argc, char * const *argv)
 {
+	struct passwd *user;
+
+	user = getpwnam("http");
+	if (user == NULL)
+		user = getpwnam("apache");
 	http_server_t *server = httpserver_create(NULL, 80, 10);
 	if (server)
 	{
 		httpserver_addconnector(server, NULL, test_func, NULL);
+		if (user != NULL)
+		{
+			setgid(user->pw_gid);
+			setuid(user->pw_uid);
+		}
 		httpserver_connect(server);
 		pause();
 		httpserver_disconnect(server);
