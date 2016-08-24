@@ -393,9 +393,12 @@ static int _httpserver_connect(http_server_t *server)
 								}
 								if (cburl == NULL)
 								{
-									int close = 0;
+									int doclose = 0;
+
 									if (callback->func)
+									{
 										callback->func(callback->arg, request, response);
+									}
 
 									send(client->sock, "HTTP/1.1 200 OK\r\n", 17, 0);
 									http_header_t *header = response->headers;
@@ -414,7 +417,7 @@ static int _httpserver_connect(http_server_t *server)
 									else
 									{
 										send(client->sock, "Connection: close\r\n", 19, 0);
-										close = 1;
+										doclose = 1;
 									}
 									if (response->content != NULL)
 									{
@@ -423,7 +426,7 @@ static int _httpserver_connect(http_server_t *server)
 										send(client->sock, content_length, strlen(content_length), 0);
 										if (request->type == MESSAGE_TYPE_HEAD)
 										{
-											close = 1;
+											doclose = 1;
 										}
 										else
 										{
@@ -431,11 +434,10 @@ static int _httpserver_connect(http_server_t *server)
 											send(client->sock, response->content, response->content_length, 0);
 										}
 									}
-									int flag = 1; 
-									setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+									setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 									send(client->sock, "\r\n", 2, 0);
 									_httpserver_message_destroy(response);
-									if (close)
+									if (doclose)
 									{
 										shutdown(client->sock, SHUT_RDWR);
 										
@@ -708,12 +710,21 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 #ifndef WIN32
 # include <pwd.h>
 #endif
+int client = 0;
 
-int test_func(void *arg, http_message_t *request, http_message_t *response)
+int test_func1(void *arg, http_message_t *request, http_message_t *response)
 {
 	char content[] = "<html><body>coucou<br/></body></html>";
 	httpmessage_addheader(response, "Server", "libhttpserver");
 	httpmessage_addcontent(response, "text/html", content, strlen(content));
+	return 0;
+}
+
+int test_func2(void *arg, http_message_t *request, http_message_t *response)
+{
+	httpmessage_addheader(response, "Server", "libhttpserver");
+	httpmessage_addcontent(response, "text/html", NULL, 0);
+	client = httpmessage_keepalive(response);
 	return 0;
 }
 
@@ -729,7 +740,7 @@ int main(int argc, char * const *argv)
 	http_server_t *server = httpserver_create(NULL, 80, 10);
 	if (server)
 	{
-		httpserver_addconnector(server, NULL, test_func, NULL);
+		httpserver_addconnector(server, NULL, test_func2, NULL);
 #ifndef WIN32
 		if (user != NULL)
 		{
@@ -738,7 +749,22 @@ int main(int argc, char * const *argv)
 		}
 #endif
 		httpserver_connect(server);
-		getchar();
+		char data[1550];
+		memset(data, 0xA5, sizeof(data));
+		char clock[4] = {'-','\\','|','/'};
+		int i = 0;
+		while (1)
+		{
+			sleep(1);
+			//printf(" %c\n",clock[i]);
+			i = (i + 1)%sizeof(clock);
+			if (client)
+			{
+				int ret;
+				ret = send(client, data, sizeof(data), 0);
+				printf("send stream %d\n",ret);
+			}
+		}
 		httpserver_disconnect(server);
 	}
 	return 0;
