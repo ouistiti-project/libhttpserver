@@ -27,22 +27,23 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {
 	int ret = 0;
-	*thread = calloc(1, sizeof(struct vthread_s));
+	vthread_t vthread;
+	vthread = calloc(1, sizeof(struct vthread_s));
 #ifdef WIN32
-	(*thread)->argument = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, argsize);
-	memcpy((*thread)->argument, arg, argsize);
-	(*thread)->handle = CreateThread( NULL, 0, start_routine, (*thread)->argument, 0, &(*thread)->id);
+	vthread->argument = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, argsize);
+	memcpy(vthread->argument, arg, argsize);
+	vthread->handle = CreateThread( NULL, 0, start_routine, vthreadv->argument, 0, &vthread->id);
 #else
 	if (attr == NULL)
 	{
-		attr = &(*thread)->attr;
-		pthread_attr_init(attr);
+		attr = &vthread->attr;
 	}
+	pthread_attr_init(attr);
 	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE);
 
-	ret = pthread_create(&(*thread)->pthread, attr, start_routine, arg);
-
+	ret = pthread_create(&(vthread->pthread), attr, start_routine, arg);
 #endif
+	*thread = vthread;
 	return ret;
 }
 
