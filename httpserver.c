@@ -740,7 +740,7 @@ int main(int argc, char * const *argv)
 	http_server_t *server = httpserver_create(NULL, 80, 10);
 	if (server)
 	{
-		httpserver_addconnector(server, NULL, test_func2, NULL);
+		httpserver_addconnector(server, NULL, test_func1, NULL);
 #ifndef WIN32
 		if (user != NULL)
 		{
@@ -755,7 +755,11 @@ int main(int argc, char * const *argv)
 		int i = 0;
 		while (1)
 		{
+#ifndef WIN32
 			sleep(1);
+#else
+			Sleep(1000);
+#endif
 			//printf(" %c\n",clock[i]);
 			i = (i + 1)%sizeof(clock);
 			if (client)

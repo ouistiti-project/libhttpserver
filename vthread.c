@@ -59,7 +59,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 #ifdef WIN32
 	vthread->argument = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, argsize);
 	memcpy(vthread->argument, arg, argsize);
-	vthread->handle = CreateThread( NULL, 0, start_routine, vthreadv->argument, 0, &vthread->id);
+	vthread->handle = CreateThread( NULL, 0, start_routine, vthread->argument, 0, &vthread->id);
 #else
 	if (attr == NULL)
 	{

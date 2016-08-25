@@ -10,28 +10,31 @@ endif
 
 ifeq ($(WIN32),1)
 LDFLAGS+=-lws2_32
+SLIBEXT=lib
+DLIBEXT=dll
 else
-
 LDFLAGS+=-lpthread
+SLIBEXT=a
+DLIBEXT=so
 endif
 
 all: $(TARGET)
 
-$(TARGET):CFLAGS+=-DTEST
+$(TARGET):CFLAGS+=-DTEST -g -Wall
 $(TARGET): $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 lib:CFLAGS+=-fPIC 
 lib:lib-static lib-dynamic
 
-lib-static: lib$(TARGET).a
-lib-dynamic: lib$(TARGET).so
+lib-static: lib$(TARGET).$(SLIBEXT)
+lib-dynamic: lib$(TARGET).$(DLIBEXT)
 
-lib$(TARGET).a:$(OBJS)
+lib$(TARGET).$(SLIBEXT):$(OBJS)
 	$(AR) rcs $@ $^
 
-lib$(TARGET).so:$(OBJS)
-	gcc -shared -Wl,-soname,$@.1 -o $@  $^
+lib$(TARGET).$(DLIBEXT):$(OBJS)
+	$(CC) -shared -Wl,-soname,$@.1 -o $@  $^ $(LDFLAGS)
 
 clean:
-	$(RM) $(OBJS) $(TARGET) lib$(TARGET).so lib$(TARGET).a
+	$(RM) $(OBJS) $(TARGET) lib$(TARGET).$(DLIBEXT) lib$(TARGET).$(SLIBEXT)
