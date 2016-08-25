@@ -159,7 +159,7 @@ static http_message_t * _httpserver_message_create(http_server_t *server, http_m
 static void _httpserver_message_destroy(http_message_t *message)
 {
 	free(message->buffer);
-	message->buffer == NULL;
+	message->buffer = NULL;
 	free(message);
 }
 
@@ -185,10 +185,12 @@ static int _httpserver_readline(char **out, http_message_t *message)
 			return ESPACE;
 		}
 		if (*message->offset == '\r')
+		{
+			*offset = 0; // add zero terminating  line
 			message->offset++;
+		}
 		if (*message->offset == '\n')
 		{
-			*message->offset++;
 			break;
 		}
 		*offset = *message->offset;
@@ -737,6 +739,7 @@ int main(int argc, char * const *argv)
 	if (user == NULL)
 		user = getpwnam("apache");
 #endif
+	setbuf(stdout, NULL);
 	http_server_t *server = httpserver_create(NULL, 80, 10);
 	if (server)
 	{
