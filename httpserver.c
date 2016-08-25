@@ -367,9 +367,12 @@ static int _httpserver_connect(http_server_t *server)
 						request->client = client;
 						while (size > 0)
 						{
-							size = read(client->sock, request->buffer, request->buff_size);
+							size = recv(client->sock, request->buffer, request->buff_size, 0);
 							if (size <= 0)
+							{
+								warn("recv returns\n");
 								break;
+							}
 							// parse the data while the message is complete
 							do
 							{
