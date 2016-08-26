@@ -317,6 +317,24 @@ static int _httpserver_parserequest(http_server_t *server, http_message_t *messa
 	return ECONTINUE;
 }
 
+static void _httpserver_closeclient(http_server_t *server, http_client_t *client)
+{
+	shutdown(client->sock, SHUT_RDWR);
+										
+	if (client == server->clients)
+	{
+		server->clients = client->next;
+		free(client);
+	}
+	else
+	{
+		http_client_t *client2 = server->clients;
+		while (client2->next != client) client2 = client2->next;
+		client2->next = client->next;
+		free(client);
+	}
+}
+
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
@@ -360,17 +378,21 @@ static int _httpserver_connect(http_server_t *server)
 				client = server->clients;
 				while (client != NULL)
 				{
+					http_client_t *next = client->next;
 					http_message_t *request = _httpserver_message_create(server, NULL);
 					if (FD_ISSET(client->sock, &rfds))
 					{
+						int keepalive = 0;
 						int size = 1;
 						request->client = client;
+						ret = EINCOMPLETE;
 						while (size > 0)
 						{
 							size = recv(client->sock, request->buffer, request->buff_size, 0);
 							if (size <= 0)
 							{
-								warn("recv returns\n");
+								if (errno != EAGAIN)
+									warn("recv returns\n");
 								break;
 							}
 							// parse the data while the message is complete
@@ -379,6 +401,8 @@ static int _httpserver_connect(http_server_t *server)
 								ret = _httpserver_parserequest(server, request);
 							}
 							while (ret != EINCOMPLETE && ret != ESUCCESS);
+							memset(request->buffer, 0, request->buff_size);
+							request->offset = 0;
 						}
 						if (ret == ESUCCESS)
 						{
@@ -398,8 +422,6 @@ static int _httpserver_connect(http_server_t *server)
 								}
 								if (cburl == NULL)
 								{
-									int doclose = 0;
-
 									if (callback->func)
 									{
 										callback->func(callback->arg, request, response);
@@ -418,22 +440,18 @@ static int _httpserver_connect(http_server_t *server)
 									if (response->keepalive)
 									{
 										send(client->sock, "Connection: keep-alive\r\n", 24, 0);
+										keepalive = 1;
 									}
 									else
 									{
 										send(client->sock, "Connection: close\r\n", 19, 0);
-										doclose = 1;
 									}
 									if (response->content != NULL)
 									{
 										char content_length[32];
 										snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
 										send(client->sock, content_length, strlen(content_length), 0);
-										if (request->type == MESSAGE_TYPE_HEAD)
-										{
-											doclose = 1;
-										}
-										else
+										if (request->type != MESSAGE_TYPE_HEAD)
 										{
 											send(client->sock, "\r\n", 2, 0);
 											send(client->sock, response->content, response->content_length, 0);
@@ -442,34 +460,21 @@ static int _httpserver_connect(http_server_t *server)
 									setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 									send(client->sock, "\r\n", 2, 0);
 									_httpserver_message_destroy(response);
-									if (doclose)
-									{
-										shutdown(client->sock, SHUT_RDWR);
-										
-										if (client == server->clients)
-										{
-											server->clients = client->next;
-											free(client);
-										}
-										else
-										{
-											http_client_t *client2 = server->clients;
-											while (client2->next != client) client2 = client2->next;
-											client2->next = client->next;
-											free(client);
-										}
-									}
 								}
 								callback = callback->next;
 							}
 						}
-						else
+						else if (ret != EINCOMPLETE && size > 0)
 						{
 							send(client->sock, "HTTP/1.1 400 Bad Request\r\n", 17, 0);
 						}
+						if (!keepalive)
+						{
+							_httpserver_closeclient(server, client);
+						}
 					}
 					_httpserver_message_destroy(request);
-					client = client->next;
+					client = next;
 				}
 			}
 		}
