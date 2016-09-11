@@ -1,5 +1,22 @@
-TARGET=httpserver
-OBJS=httpserver.o vthread.o
+include scripts.mk
+
+bin-$(TEST)+=httpserver
+ifneq ($(TEST),y)
+lib-y+=httpserver
+slib-y+=httpserver
+else
+httpserver_CFLAGS+=-DTEST
+endif
+httpserver_SOURCES+=httpserver.c vthread.c
+
+bin-$(TEST)+=uri
+ifneq ($(TEST),y)
+lib-y+=uri
+slib-y+=uri
+else
+uri_CFLAGS+=-DTEST
+endif
+uri_SOURCES+=uri.c
 
 ifeq ($(CC),mingw32-gcc)
 WIN32:=1
@@ -9,32 +26,12 @@ WIN32:=1
 endif
 
 ifeq ($(WIN32),1)
-LDFLAGS+=-lws2_32
+httpserver_LDFLAGS+=-lws2_32
 SLIBEXT=lib
 DLIBEXT=dll
 else
-LDFLAGS+=-lpthread
+httpserver_LDFLAGS+=-lpthread
 SLIBEXT=a
 DLIBEXT=so
 endif
 
-all: $(TARGET)
-
-$(TARGET):CFLAGS+=-DTEST -g -Wall
-$(TARGET): $(OBJS)
-	$(CC) -o $@ $^ $(LDFLAGS)
-
-lib:CFLAGS+=-fPIC 
-lib:lib-static lib-dynamic
-
-lib-static: lib$(TARGET).$(SLIBEXT)
-lib-dynamic: lib$(TARGET).$(DLIBEXT)
-
-lib$(TARGET).$(SLIBEXT):$(OBJS)
-	$(AR) rcs $@ $^
-
-lib$(TARGET).$(DLIBEXT):$(OBJS)
-	$(CC) -shared -Wl,-soname,$@.1 -o $@  $^ $(LDFLAGS)
-
-clean:
-	$(RM) $(OBJS) $(TARGET) lib$(TARGET).$(DLIBEXT) lib$(TARGET).$(SLIBEXT)
