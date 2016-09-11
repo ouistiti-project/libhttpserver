@@ -49,6 +49,7 @@ struct uri_s
 };
 
 int uri_parse(uri_t *dst, char *src);
+const char *uri_query(uri_t *uri, char *key);
 
 #ifdef __cplusplus
 }

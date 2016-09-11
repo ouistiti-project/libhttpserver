@@ -179,6 +179,25 @@ int uri_parse(uri_t *uri, char *string)
 	return 0;
 }
 
+const char *uri_query(uri_t *uri, char *key)
+{
+	int i;
+	int len = strlen(key);
+	const char *ret = NULL;
+	for (i = 0; i < uri->nbqueries; i++)
+	{
+		if (!strncmp(uri->query[i], key, len))
+		{
+			ret = &(uri->query[i][len]);
+			if (*ret == '=')
+				ret++;
+			else
+				ret = uri->query[i];
+		}
+	}
+	return (const char *)ret;
+}
+
 #ifdef TEST
 #include <stdio.h>
 
