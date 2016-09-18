@@ -42,7 +42,7 @@ ifneq ($(wildcard $(srcdir:%/=%)/$(CONFIG)),)
 include $(srcdir:%/=%)/$(CONFIG)
 endif
 
-ifneq ($(wildcard $(srcdir:%/=%)/$(file)),)
+ifneq ($(file),)
 include $(srcdir:%/=%)/$(file)
 src=$(patsubst %/,%,$(srcdir:%/=%)/$(dir $(file)))
 obj=$(patsubst %/,%,$(builddir)/$(dir $(file)))
@@ -57,11 +57,11 @@ INSTALL?=install
 INSTALL_PROGRAM?=$(INSTALL)
 INSTALL_DATA?=$(INSTALL) -m 644
 
-CC:=$(CROSS_COMPILE)gcc
-CXX:=$(CROSS_COMPILE)g++
-LD:=$(CROSS_COMPILE)gcc
-AR:=$(CROSS_COMPILE)ar
-RANLIB:=$(CROSS_COMPILE)ranlib
+CC=$(CROSS_COMPILE)gcc
+CXX=$(CROSS_COMPILE)g++
+LD=$(CROSS_COMPILE)gcc
+AR=$(CROSS_COMPILE)ar
+RANLIB?=$(CROSS_COMPILE)ranlib
 ifeq ($(findstring gcc,$(LD)),gcc)
 ldgcc=-Wl,$(1),$(2)
 else
@@ -127,7 +127,6 @@ subdir-target:=$(wildcard $(addprefix $(src)/,$(addsuffix /Makefile,$(subdir-y))
 subdir-target+=$(wildcard $(addprefix $(src)/,$(addsuffix /*$(makefile-ext:%=.%),$(subdir-y))))
 subdir-target+=$(if $(strip $(subdir-target)),,$(wildcard $(addprefix $(src)/,$(subdir-y))))
 
-## this order is important
 targets:=
 targets+=$(lib-dynamic-target)
 targets+=$(modules-target)
@@ -159,10 +158,7 @@ build:=$(action) -f $(srcdir)/scripts.mk file
 .PHONY:_entry _build _install _clean _distclean
 _entry: default_action
 
-_build: $(obj)/ $(if $(wildcard $(CONFIG)),$(join $(CURDIR:%/=%)/,$(CONFIG:%=%.h))) $(subdir-target) _targets
-	@:
-
-_targets: $(targets)
+_build: $(obj)/ $(if $(wildcard $(CONFIG)),$(join $(CURDIR:%/=%)/,$(CONFIG:%=%.h))) $(subdir-target) $(targets)
 	@:
 
 _install: action:=_install
@@ -210,7 +206,7 @@ $(join $(CURDIR:%/=%)/,$(CONFIG:%=%.h)): $(srcdir:%/=%)/$(CONFIG)
 quiet_cmd_clean=$(if $(2),CLEAN  $(notdir $(2)))
  cmd_clean=$(if $(2),$(RM) $(2))
 quiet_cmd_clean_dir=$(if $(2),CLEAN $(notdir $(2)))
- cmd_clean_dir=$(if $(2),echo $(RM) -r $(2))
+ cmd_clean_dir=$(if $(2),$(RM) -r $(2))
 ##
 # Commands for build and link
 ##
