@@ -41,7 +41,6 @@
 struct vthread_s
 {
 #ifdef WIN32
-	void *argument;
 	HANDLE handle;
 	DWORD id;
 #else
@@ -57,9 +56,17 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_t vthread;
 	vthread = calloc(1, sizeof(struct vthread_s));
 #ifdef WIN32
+	/**
+	 * the commented lines was found on internet
+	 * but after documention HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, argsize);
+	 * is the same of calloc(1, argsize); 
+	 * with one exception, with calloc the memory MUST be free inside the DLL or Application
+	 * that created the memory
 	vthread->argument = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, argsize);
 	memcpy(vthread->argument, arg, argsize);
-	vthread->handle = CreateThread( NULL, 0, start_routine, vthread->argument, 0, &vthread->id);
+	 */
+	vthread->handle = CreateThread( NULL, 0, start_routine, arg, 0, &vthread->id);
+	SwitchToThread();
 #else
 	if (attr == NULL)
 	{
@@ -69,6 +76,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE);
 
 	ret = pthread_create(&(vthread->pthread), attr, start_routine, arg);
+	pthread_yield();
 #endif
 	*thread = vthread;
 	return ret;
@@ -79,8 +87,10 @@ int vthread_join(vthread_t thread, void **value_ptr)
 	int ret;
 #ifdef WIN32
 	CloseHandle(thread->handle);
+/**
 	if (thread->argument)
 		ret = HeapFree(GetProcessHeap(), 0, thread->argument);
+*/
 #else
 	ret = pthread_join(thread->pthread, value_ptr);
 #endif
