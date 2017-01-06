@@ -38,6 +38,10 @@ typedef struct http_server_s http_server_t;
 
 typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message_t *response);
 
+typedef struct http_server_config_s
+{
+	int maxclient;
+} http_server_config_t;
 /**
  * @brief create a server object and open the main socket
  *
@@ -47,7 +51,7 @@ typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message
  *
  * @return the server object
  */
-http_server_t *httpserver_create(char *address, int port, int maxclients);
+http_server_t *httpserver_create(char *address, int port, http_server_config_t *config);
 
 /**
  * @brief add a callback on client message reception

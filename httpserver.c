@@ -80,6 +80,9 @@ extern "C" {
 struct http_client_s
 {
 	int sock;
+	int (*recv)(struct http_client_s *ctx, http_message_t *request);
+	int (*send)(struct http_client_s *ctx, http_message_t *request);
+	void *ctx;
 #ifndef WIN32
 	struct sockaddr_un addr;
 #else
@@ -119,11 +122,10 @@ struct http_message_s
 	char *buffer;
 	char *offset;
 	int buff_size;
+	int buff_length;
 	char *uri;
 	char *version;
 	http_header_t *headers;
-	char *content;
-	int content_length;
 };
 
 struct http_server_callback_s
@@ -146,21 +148,40 @@ struct http_server_s
 };
 
 /********************************************************************/
-static http_message_t * _httpserver_message_create(http_server_t *server, http_message_t *parent)
+#define CHUNKSIZE 64
+static http_message_t * _httpmessage_create(http_server_t *server, http_message_t *parent)
 {
 	http_message_t *message;
 
 	message = calloc(1, sizeof(*message));
-	message->buffer = calloc(1, 64);
-	message->buff_size = 64;
+	message->buffer = calloc(1, CHUNKSIZE);
+	message->buff_size = CHUNKSIZE;
 	message->offset = message->buffer;
 	return message;
 }
-static void _httpserver_message_destroy(http_message_t *message)
+static void _httpmessage_destroy(http_message_t *message)
 {
 	free(message->buffer);
 	message->buffer = NULL;
 	free(message);
+}
+
+static int _httpmessage_push(http_message_t *message, char *buffer, int length)
+{
+	if (message->buffer + message->buff_size < message->offset + length)
+	{
+		char *offset = message->offset;
+		char *buffer = message->buffer;
+		int chunksize = CHUNKSIZE * (CHUNKSIZE/length +1);
+		message->buffer = realloc(message->buffer, message->buff_size + chunksize);
+		message->buff_size += chunksize;
+		if (buffer != message->buffer)
+			message->offset = message->buffer + (offset - buffer);
+	} 
+	memcpy(message->offset, buffer, length);
+	message->buff_length += length;
+	message->offset += length;
+	return length;
 }
 
 static int _httpserver_readline(char **out, http_message_t *message)
@@ -335,6 +356,16 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 	}
 }
 
+static int _http_recv(http_client_t *client, http_message_t *request)
+{
+	return recv(client->sock, request->buffer, request->buff_size, 0);
+}
+
+static int _http_send(http_client_t *client, http_message_t *request)
+{
+	return send(client->sock, request->buffer, request->buff_length, 0);
+}
+
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
@@ -369,6 +400,9 @@ static int _httpserver_connect(http_server_t *server)
 #else
 				ioctlsocket(client->sock, FIONBIO, (void *)&(int){ 1 });
 #endif
+				client->recv = _http_recv;
+				client->send = _http_send;
+				client->ctx = NULL;
 				client->next = server->clients;
 				server->clients = client;
 				ret = 1;
@@ -379,7 +413,7 @@ static int _httpserver_connect(http_server_t *server)
 				while (client != NULL)
 				{
 					http_client_t *next = client->next;
-					http_message_t *request = _httpserver_message_create(server, NULL);
+					http_message_t *request = _httpmessage_create(server, NULL);
 					if (FD_ISSET(client->sock, &rfds))
 					{
 						int keepalive = 0;
@@ -388,7 +422,7 @@ static int _httpserver_connect(http_server_t *server)
 						ret = EINCOMPLETE;
 						while (size > 0)
 						{
-							size = recv(client->sock, request->buffer, request->buff_size, 0);
+							size = client->recv(client, request);
 							if (size <= 0)
 							{
 								if (errno != EAGAIN)
@@ -407,7 +441,8 @@ static int _httpserver_connect(http_server_t *server)
 						if (ret == ESUCCESS)
 						{
 							http_server_callback_t *callback = server->callbacks;
-							http_message_t *response = _httpserver_message_create(server, request);
+							http_message_t *response = _httpmessage_create(server, request);
+							http_message_t *header = _httpmessage_create(server, request);
 							response->client = client;
 							while (callback != NULL)
 							{
@@ -427,39 +462,43 @@ static int _httpserver_connect(http_server_t *server)
 										callback->func(callback->arg, request, response);
 									}
 
-									send(client->sock, "HTTP/1.1 200 OK\r\n", 17, 0);
-									http_header_t *header = response->headers;
-									while (header != NULL)
+									_httpmessage_push(header, "HTTP/1.1 200 OK\r\n", 17);
+									http_header_t *headers = response->headers;
+									while (headers != NULL)
 									{
-										send(client->sock, header->key, strlen(header->key), 0);
-										send(client->sock, ": ", 2, 0);
-										send(client->sock, header->value, strlen(header->value), 0);
-										send(client->sock, "\r\n", 2, 0);
-										header = header->next;
+										_httpmessage_push(header, headers->key, strlen(headers->key));
+										_httpmessage_push(header, ": ", 2);
+										_httpmessage_push(header, headers->value, strlen(headers->value));
+										_httpmessage_push(header, "\r\n", 2);
+										headers = headers->next;
 									}
 									if (response->keepalive)
 									{
-										send(client->sock, "Connection: keep-alive\r\n", 24, 0);
+										_httpmessage_push(header, "Connection: keep-alive\r\n", 24);
 										keepalive = 1;
 									}
 									else
 									{
-										send(client->sock, "Connection: close\r\n", 19, 0);
+										_httpmessage_push(header, "Connection: close\r\n", 19);
 									}
-									if (response->content != NULL)
+									if (response->buffer != NULL)
 									{
 										char content_length[32];
-										snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
-										send(client->sock, content_length, strlen(content_length), 0);
+										snprintf(content_length, 31, "Content-Length: %d\r\n", strlen(response->buffer));
+										_httpmessage_push(header, content_length, strlen(content_length));
+										_httpmessage_push(header, "\r\n", 2);
 										if (request->type != MESSAGE_TYPE_HEAD)
 										{
-											send(client->sock, "\r\n", 2, 0);
-											send(client->sock, response->content, response->content_length, 0);
+											client->send(client, header);
+											_httpmessage_push(response, "\r\n", 2);
+											client->send(client, response);
 										}
+										else
+											client->send(client, header);
+
 									}
 									setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-									send(client->sock, "\r\n", 2, 0);
-									_httpserver_message_destroy(response);
+									_httpmessage_destroy(response);
 								}
 								callback = callback->next;
 							}
@@ -473,7 +512,7 @@ static int _httpserver_connect(http_server_t *server)
 							_httpserver_closeclient(server, client);
 						}
 					}
-					_httpserver_message_destroy(request);
+					_httpmessage_destroy(request);
 					client = next;
 				}
 			}
@@ -482,7 +521,7 @@ static int _httpserver_connect(http_server_t *server)
 	return ret;
 }
 
-http_server_t *httpserver_create(char *address, int port, int maxclient)
+http_server_t *httpserver_create(char *address, int port, http_server_config_t *config)
 {
 	http_server_t *server;
 	int status;
@@ -566,7 +605,7 @@ http_server_t *httpserver_create(char *address, int port, int maxclient)
 
 	if (!status)
 	{
-		status = listen(server->sock, maxclient);
+		status = listen(server->sock, config->maxclient);
 	}
 	if (status)
 	{
@@ -639,16 +678,11 @@ void httpmessage_addcontent(http_message_t *message, char *type, char *content, 
 	{
 		httpmessage_addheader(message, "Content-Type", type);
 	}
-	if (message->content != NULL)
-		size = strlen(message->content);
 	if (length == -1)
 		length = strlen(content);
 	if (content != NULL)
 	{
-		message->content = realloc(message->content, length + size + 1);
-		memcpy(message->content + size, content, length);
-		*(message->content + size + length) = 0;
-		message->content_length = size + length;
+		_httpmessage_push(message, content, length);
 	}
 }
 
@@ -748,7 +782,10 @@ int main(int argc, char * const *argv)
 		user = getpwnam("apache");
 #endif
 	setbuf(stdout, NULL);
-	http_server_t *server = httpserver_create(NULL, 80, 10);
+	http_server_config_t config = { 
+		.maxclient = 10,
+	};
+	http_server_t *server = httpserver_create(NULL, 80, &config);
 	if (server)
 	{
 		httpserver_addconnector(server, NULL, test_func1, NULL);
@@ -760,6 +797,7 @@ int main(int argc, char * const *argv)
 		}
 #endif
 		httpserver_connect(server);
+/*
 		char data[1550];
 		memset(data, 0xA5, sizeof(data));
 		char clock[4] = {'-','\\','|','/'};
@@ -780,6 +818,7 @@ int main(int argc, char * const *argv)
 				printf("send stream %d\n",ret);
 			}
 		}
+*/
 		httpserver_disconnect(server);
 	}
 	return 0;
