@@ -80,8 +80,10 @@ extern "C" {
 struct http_client_s
 {
 	int sock;
-	int (*recv)(struct http_client_s *ctx, http_message_t *request);
-	int (*send)(struct http_client_s *ctx, http_message_t *request);
+	http_server_t *server;
+	http_freectx_t freectx;
+	http_recv_t recvreq;
+	http_send_t sendresp;
 	void *ctx;
 #ifndef WIN32
 	struct sockaddr_un addr;
@@ -100,8 +102,22 @@ struct http_header_s
 };
 typedef struct http_header_s http_header_t;
 
+typedef struct buffer_s
+{
+	char *data;
+	char *offset;
+	int size;
+	int length;
+} buffer_t;
+
 struct http_message_s
 {
+	enum
+	{
+		RESULT_200,
+		RESULT_400,
+		RESULT_404,
+	} result;
 	int keepalive;
 	http_client_t *client;
 	enum
@@ -119,10 +135,7 @@ struct http_message_s
 		PARSE_CONTENT,
 		PARSE_END,
 	} state;
-	char *buffer;
-	char *offset;
-	int buff_size;
-	int buff_length;
+	buffer_t *content;
 	char *uri;
 	char *version;
 	http_header_t *headers;
@@ -145,83 +158,93 @@ struct http_server_s
 	vthread_t thread;
 	http_client_t *clients;
 	http_server_callback_t *callbacks;
+	http_server_config_t *config;
 };
 
 /********************************************************************/
 #define CHUNKSIZE 64
+static buffer_t * _buffer_create()
+{
+	buffer_t *buffer = calloc(1, sizeof(*buffer));
+	buffer->data = calloc(1, CHUNKSIZE);
+	buffer->size = CHUNKSIZE;
+	buffer->offset = buffer->data;
+	return buffer;
+}
+
+static int _buffer_append(buffer_t *buffer, char *data, int length)
+{
+	if (buffer->data + buffer->size < buffer->offset + length + 1)
+	{
+		char *data = buffer->data;
+		int chunksize = CHUNKSIZE * (length/CHUNKSIZE +1);
+
+		data = realloc(buffer->data, buffer->size + chunksize);
+		buffer->size += chunksize;
+		if (data != buffer->data)
+		{
+			char *offset = buffer->offset;
+			buffer->offset = data + (offset - buffer->data);
+			buffer->data = data;
+		}
+	}
+	memcpy(buffer->offset, data, length);
+	buffer->length += length;
+	buffer->offset += length;
+	*buffer->offset = '\0';
+	return buffer->length;
+}
+
+static void _buffer_destroy(buffer_t *buffer)
+{
+	free(buffer->data);
+	free(buffer);
+}
+
 static http_message_t * _httpmessage_create(http_server_t *server, http_message_t *parent)
 {
 	http_message_t *message;
 
 	message = calloc(1, sizeof(*message));
-	message->buffer = calloc(1, CHUNKSIZE);
-	message->buff_size = CHUNKSIZE;
-	message->offset = message->buffer;
+	message->content = _buffer_create();
+	if (parent)
+	{
+		message->type = parent->type;
+		message->headers = parent->headers;
+	}
 	return message;
 }
 static void _httpmessage_destroy(http_message_t *message)
 {
-	free(message->buffer);
-	message->buffer = NULL;
+	_buffer_destroy(message->content);
 	free(message);
 }
 
-static int _httpmessage_push(http_message_t *message, char *buffer, int length)
+static int _httpmessage_readline(char **out, http_message_t *message)
 {
-	if (message->buffer + message->buff_size < message->offset + length)
+	if (*out == NULL)
+		*out = message->content->offset;
+	while (message->content->offset < message->content->data + message->content->size)
 	{
-		char *offset = message->offset;
-		char *buffer = message->buffer;
-		int chunksize = CHUNKSIZE * (CHUNKSIZE/length +1);
-		message->buffer = realloc(message->buffer, message->buff_size + chunksize);
-		message->buff_size += chunksize;
-		if (buffer != message->buffer)
-			message->offset = message->buffer + (offset - buffer);
-	} 
-	memcpy(message->offset, buffer, length);
-	message->buff_length += length;
-	message->offset += length;
-	return length;
-}
-
-static int _httpserver_readline(char **out, http_message_t *message)
-{
-	int size = 0;
-	char *offset;
-	if (*out)
-	{
-		size += strlen(*out);
-	}
-	size += message->buff_size;
-	size -= message->offset - message->buffer;
-	*out = realloc(*out, size + 1);
-	offset = *out;
-	offset += strlen(*out);
-	while (message->offset < message->buffer +message->buff_size)
-	{
-		if (*message->offset == ' ')
+		if (*message->content->offset == ' ')
 		{
-			*offset = 0; // add zero terminating  line
-			message->offset++;
+			message->content->offset++;
 			return ESPACE;
 		}
-		if (*message->offset == '\r')
+		if (*message->content->offset == '\r')
 		{
-			*offset = 0; // add zero terminating  line
-			message->offset++;
+			*message->content->offset = 0; // add zero terminating  line
+			message->content->offset++;
 		}
-		if (*message->offset == '\n')
+		if (*message->content->offset == '\n')
 		{
-			break;
+			*message->content->offset = 0; // add zero terminating  line
+			message->content->offset++;
+			return ESUCCESS;
 		}
-		*offset = *message->offset;
-		offset++;
-		message->offset++;
-		if (message->offset > message->buffer +message->buff_size)
-			return EINCOMPLETE;
+		message->content->offset++;
 	}
-	*offset = 0; // add zero terminating  line
-	return ESUCCESS;
+	return EINCOMPLETE;
 }
 
 static int _httpserver_parserequest(http_server_t *server, http_message_t *message)
@@ -230,34 +253,35 @@ static int _httpserver_parserequest(http_server_t *server, http_message_t *messa
 	{
 		case PARSE_INIT:
 		{
-			if (!strncasecmp(message->offset,"GET ",4))
+			if (!strncasecmp(message->content->offset,"GET ",4))
 			{
 				message->type = MESSAGE_TYPE_GET;
-				message->offset += 4;
+				message->content->offset += 4;
 				message->state = PARSE_URI;
 			}
-			else if (!strncasecmp(message->offset,"POST ",5))
+			else if (!strncasecmp(message->content->offset,"POST ",5))
 			{
 				message->type = MESSAGE_TYPE_POST;
-				message->offset += 5;
+				message->content->offset += 5;
 				message->state = PARSE_URI;
 			}
-			else if (!strncasecmp(message->offset,"HEAD ",5))
+			else if (!strncasecmp(message->content->offset,"HEAD ",5))
 			{
 				message->type = MESSAGE_TYPE_HEAD;
-				message->offset += 5;
+				message->content->offset += 5;
 				message->state = PARSE_HEADER;
 			}
-			while (*message->offset == ' ')
-				message->offset++;
+			while (*message->content->offset == ' ')
+				message->content->offset++;
 		}
 		break;
 		case PARSE_URI:
 		{
-			int ret = _httpserver_readline(&message->uri, message);
+			int ret = _httpmessage_readline(&message->uri, message);
 			switch (ret)
 			{
 				case ESPACE:
+					*(message->content->offset - 1) = 0; // add zero terminating  line
 					message->state = PARSE_VERSION;
 				break;
 				case ESUCCESS:
@@ -274,7 +298,7 @@ static int _httpserver_parserequest(http_server_t *server, http_message_t *messa
 		break;
 		case PARSE_VERSION:
 		{
-			int ret = _httpserver_readline(&message->version, message);
+			int ret = _httpmessage_readline(&message->version, message);
 			switch (ret)
 			{
 				case ESPACE:
@@ -295,32 +319,31 @@ static int _httpserver_parserequest(http_server_t *server, http_message_t *messa
 		{
 			int ret;
 			char *header = NULL;
-			ret = _httpserver_readline(&header, message);
-			switch (ret)
+			do
 			{
-				case ESPACE:
-					
-				break;
-				case ESUCCESS:
+				ret = _httpmessage_readline(&header, message);
+				switch (ret)
 				{
-					if (header[0] == 0) // this is an empty line, the end of the header
+					case ESPACE:
+					break;
+					case ESUCCESS:
 					{
-						message->state = PARSE_CONTENT;
+						if (header[0] == 0) // this is an empty line, the end of the header
+						{
+							message->state = PARSE_CONTENT;
+						}
+						else
+						{
+							char *key = strtok(header, ": ");
+							char *value = strtok(NULL, "");
+							httpmessage_addheader(message, key, value);
+						}
 					}
-					else
-					{
-						http_header_t *headerinfo;
-						headerinfo = calloc(1, sizeof(http_header_t));
-						headerinfo->key = strtok(header, ": ");
-						headerinfo->value = strtok(NULL, "");
-						headerinfo->next = message->headers;
-						message->headers = headerinfo;
-					}
+					break;
+					case EINCOMPLETE:
+						return EINCOMPLETE;
 				}
-				break;
-				case EINCOMPLETE:
-					return EINCOMPLETE;
-			}
+			} while (ret != ESUCCESS);
 			return ECONTINUE;
 		}
 		break;
@@ -356,14 +379,49 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 	}
 }
 
-static int _http_recv(http_client_t *client, http_message_t *request)
+static int _http_recv(void *ctx, char *data, int length)
 {
-	return recv(client->sock, request->buffer, request->buff_size, 0);
+	http_client_t *client = (http_client_t *)ctx;
+
+	return recv(client->sock, data, length, 0);
 }
 
-static int _http_send(http_client_t *client, http_message_t *request)
+static int _http_send(void *ctx, char *data, int length)
 {
-	return send(client->sock, request->buffer, request->buff_length, 0);
+	http_client_t *client = (http_client_t *)ctx;
+
+	return send(client->sock, data, length, 0);
+}
+
+static const char *_http_message_result[] =
+{
+	"200 OK",
+	"400 Bad Request",
+	"404 File Not Found",
+};
+
+static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
+{
+	http_header_t *headers = response->headers;
+	_buffer_append(header, "HTTP/1.1 ", 9);
+	_buffer_append(header, (char *)_http_message_result[response->result], strlen(_http_message_result[response->result]));
+	_buffer_append(header, "\r\n", 2);
+	while (headers != NULL)
+	{
+		_buffer_append(header, headers->key, strlen(headers->key));
+		_buffer_append(header, ": ", 2);
+		_buffer_append(header, headers->value, strlen(headers->value));
+		_buffer_append(header, "\r\n", 2);
+		headers = headers->next;
+	}
+	if (response->content != NULL)
+	{
+		char content_length[32];
+		snprintf(content_length, 31, "Content-Length: %d\r\n", (int)strlen(response->content->data));
+		_buffer_append(header, content_length, strlen(content_length));
+	}
+	_buffer_append(header, "\r\n", 2);
+	return ESUCCESS;
 }
 
 static int _httpserver_connect(http_server_t *server)
@@ -391,18 +449,30 @@ static int _httpserver_connect(http_server_t *server)
 			if (FD_ISSET(server->sock, &rfds))
 			{
 				http_client_t *client = calloc(1, sizeof(*client));
+				client->server = server;
 				// Client connection request recieved
 				// Create new client socket to communicate
-				int size = sizeof(client->addr);
+				unsigned int size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &size);
 #ifndef WIN32
 				fcntl(client->sock, F_SETFL, fcntl(client->sock, F_GETFL, 0) | O_NONBLOCK);
 #else
 				ioctlsocket(client->sock, FIONBIO, (void *)&(int){ 1 });
 #endif
-				client->recv = _http_recv;
-				client->send = _http_send;
-				client->ctx = NULL;
+				if (server->config && server->config->callback.getctx)
+				{
+					client->ctx = server->config->callback.getctx(client, (struct sockaddr *)&client->addr, size);
+					client->freectx = server->config->callback.freectx;
+					client->recvreq = server->config->callback.recvreq;
+					client->sendresp = server->config->callback.sendresp;
+				}
+				else
+				{
+					client->freectx = NULL;
+					client->recvreq = _http_recv;
+					client->sendresp = _http_send;
+					client->ctx = client;
+				}
 				client->next = server->clients;
 				server->clients = client;
 				ret = 1;
@@ -413,40 +483,41 @@ static int _httpserver_connect(http_server_t *server)
 				while (client != NULL)
 				{
 					http_client_t *next = client->next;
-					http_message_t *request = _httpmessage_create(server, NULL);
 					if (FD_ISSET(client->sock, &rfds))
 					{
+						http_message_t *request = _httpmessage_create(client->server, NULL);
+						http_server_callback_t *callback = client->server->callbacks;
+
 						int keepalive = 0;
 						int size = 1;
 						request->client = client;
 						ret = EINCOMPLETE;
 						while (size > 0)
 						{
-							size = client->recv(client, request);
+							char data[CHUNKSIZE];
+							size = client->recvreq(client->ctx, data, CHUNKSIZE - 1);
 							if (size <= 0)
 							{
 								if (errno != EAGAIN)
 									warn("recv returns\n");
 								break;
 							}
-							// parse the data while the message is complete
-							do
-							{
-								ret = _httpserver_parserequest(server, request);
-							}
-							while (ret != EINCOMPLETE && ret != ESUCCESS);
-							memset(request->buffer, 0, request->buff_size);
-							request->offset = 0;
+							_buffer_append(request->content, data, size);
 						}
+						// parse the data while the message is complete
+						request->content->offset = request->content->data;
+						do
+						{
+							ret = _httpserver_parserequest(server, request);
+						}
+						while (ret != EINCOMPLETE && ret != ESUCCESS);
+						http_message_t *response = _httpmessage_create(server, request);
 						if (ret == ESUCCESS)
 						{
-							http_server_callback_t *callback = server->callbacks;
-							http_message_t *response = _httpmessage_create(server, request);
-							http_message_t *header = _httpmessage_create(server, request);
-							response->client = client;
+							char *cburl = NULL;
 							while (callback != NULL)
 							{
-								char *cburl = callback->url;
+								cburl = callback->url;
 								if (cburl != NULL)
 								{
 									char *path = request->uri;
@@ -455,64 +526,57 @@ static int _httpserver_connect(http_server_t *server)
 									if (!strncasecmp(cburl, path, callback->url_length))
 										cburl = NULL;
 								}
-								if (cburl == NULL)
-								{
-									if (callback->func)
-									{
-										callback->func(callback->arg, request, response);
-									}
-
-									_httpmessage_push(header, "HTTP/1.1 200 OK\r\n", 17);
-									http_header_t *headers = response->headers;
-									while (headers != NULL)
-									{
-										_httpmessage_push(header, headers->key, strlen(headers->key));
-										_httpmessage_push(header, ": ", 2);
-										_httpmessage_push(header, headers->value, strlen(headers->value));
-										_httpmessage_push(header, "\r\n", 2);
-										headers = headers->next;
-									}
-									if (response->keepalive)
-									{
-										_httpmessage_push(header, "Connection: keep-alive\r\n", 24);
-										keepalive = 1;
-									}
-									else
-									{
-										_httpmessage_push(header, "Connection: close\r\n", 19);
-									}
-									if (response->buffer != NULL)
-									{
-										char content_length[32];
-										snprintf(content_length, 31, "Content-Length: %d\r\n", strlen(response->buffer));
-										_httpmessage_push(header, content_length, strlen(content_length));
-										_httpmessage_push(header, "\r\n", 2);
-										if (request->type != MESSAGE_TYPE_HEAD)
-										{
-											client->send(client, header);
-											_httpmessage_push(response, "\r\n", 2);
-											client->send(client, response);
-										}
-										else
-											client->send(client, header);
-
-									}
-									setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-									_httpmessage_destroy(response);
-								}
+								else /* any URL */
+									break;
 								callback = callback->next;
 							}
+							if (callback == NULL)
+								response->result = RESULT_404;
+							if (callback && callback->func)
+							{
+								ret = callback->func(callback->arg, request, response);
+							}
+							keepalive = response->keepalive;
 						}
 						else if (ret != EINCOMPLETE && size > 0)
 						{
-							send(client->sock, "HTTP/1.1 400 Bad Request\r\n", 17, 0);
+							response->result = RESULT_400;
+							request->type = MESSAGE_TYPE_HEAD;
+							ret = ESUCCESS;
 						}
+						buffer_t *header = _buffer_create();
+						_httpmessage_buildheader(client, response, header);
+
+						client->sendresp(client->ctx, header->data, header->length);
+						_buffer_destroy(header);
+
+						if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
+						{
+							client->sendresp(client->ctx, response->content->data, response->content->length);
+						}
+
+						while (ret != ESUCCESS)
+						{
+							if (callback && callback->func)
+							{
+								ret = callback->func(callback->arg, request, response);
+							}
+							if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
+							{
+								client->sendresp(client->ctx, response->content->data, response->content->length);
+							}
+						}
+						setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
+
+						_httpmessage_destroy(response);
+						_httpmessage_destroy(request);
 						if (!keepalive)
 						{
+							if (client->freectx)
+								client->freectx(client->ctx);
 							_httpserver_closeclient(server, client);
 						}
 					}
-					_httpmessage_destroy(request);
 					client = next;
 				}
 			}
@@ -527,6 +591,7 @@ http_server_t *httpserver_create(char *address, int port, http_server_config_t *
 	int status;
 
 	server = calloc(1, sizeof(*server));
+	server->config = config;
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -665,11 +730,12 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value)
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
 	message->headers = headerinfo;
+	if (!strncasecmp(key, "Connection", 10) && !strncasecmp(value, "KeepAlive", 10) )
+		message->keepalive = 1;
 }
 
 void httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
-	int size = 0;
 	if (type == NULL)
 	{
 		httpmessage_addheader(message, "Content-Type", "text/plain");
@@ -682,7 +748,7 @@ void httpmessage_addcontent(http_message_t *message, char *type, char *content, 
 		length = strlen(content);
 	if (content != NULL)
 	{
-		_httpmessage_push(message, content, length);
+		_buffer_append(message->content, content, length);
 	}
 }
 
@@ -784,6 +850,8 @@ int main(int argc, char * const *argv)
 	setbuf(stdout, NULL);
 	http_server_config_t config = { 
 		.maxclient = 10,
+		.chunksize = 64,
+		.callback = { NULL, NULL, NULL},
 	};
 	http_server_t *server = httpserver_create(NULL, 80, &config);
 	if (server)

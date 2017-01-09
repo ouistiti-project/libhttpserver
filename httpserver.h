@@ -35,13 +35,28 @@ extern "C"
 
 typedef struct http_message_s http_message_t;
 typedef struct http_server_s http_server_t;
+typedef struct http_client_s http_client_t;
 
 typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message_t *response);
+
+typedef void *(*http_getctx_t)(http_client_t *clt, struct sockaddr *addr, int addrsize);
+typedef void (*http_freectx_t)(void *ctx);
+typedef int (*http_recv_t)(void *ctx, char *data, int length);
+typedef int (*http_send_t)(void *ctx, char *data, int length);
 
 typedef struct http_server_config_s
 {
 	int maxclient;
+	int chunksize;
+	struct
+	{
+		http_getctx_t getctx;
+		http_freectx_t freectx;
+		http_recv_t recvreq;
+		http_send_t sendresp;
+	} callback;
 } http_server_config_t;
+
 /**
  * @brief create a server object and open the main socket
  *
