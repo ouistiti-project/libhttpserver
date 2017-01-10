@@ -94,13 +94,13 @@ struct http_client_s
 };
 typedef struct http_client_s http_client_t;
 
-struct http_header_s
+struct dbentry_s
 {
 	char *key;
 	char *value;
-	struct http_header_s *next;
+	struct dbentry_s *next;
 };
-typedef struct http_header_s http_header_t;
+typedef struct dbentry_s dbentry_t;
 
 typedef struct buffer_s
 {
@@ -138,7 +138,7 @@ struct http_message_s
 	buffer_t *content;
 	char *uri;
 	char *version;
-	http_header_t *headers;
+	dbentry_t *headers;
 };
 
 struct http_server_callback_s
@@ -402,7 +402,7 @@ static const char *_http_message_result[] =
 
 static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
 {
-	http_header_t *headers = response->headers;
+	dbentry_t *headers = response->headers;
 	_buffer_append(header, "HTTP/1.1 ", 9);
 	_buffer_append(header, (char *)_http_message_result[response->result], strlen(_http_message_result[response->result]));
 	_buffer_append(header, "\r\n", 2);
@@ -526,16 +526,16 @@ static int _httpserver_connect(http_server_t *server)
 									if (!strncasecmp(cburl, path, callback->url_length))
 										cburl = NULL;
 								}
-								else /* any URL */
-									break;
+								if (cburl == NULL && callback->func)
+								{
+									ret = callback->func(callback->arg, request, response);
+									if (ret == ESUCCESS)
+										break;
+								}
 								callback = callback->next;
 							}
 							if (callback == NULL)
 								response->result = RESULT_404;
-							if (callback && callback->func)
-							{
-								ret = callback->func(callback->arg, request, response);
-							}
 							keepalive = response->keepalive;
 						}
 						else if (ret != EINCOMPLETE && size > 0)
@@ -724,8 +724,8 @@ void httpserver_destroy(http_server_t *server)
 
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
-	http_header_t *headerinfo;
-	headerinfo = calloc(1, sizeof(http_header_t));
+	dbentry_t *headerinfo;
+	headerinfo = calloc(1, sizeof(dbentry_t));
 	headerinfo->key = key;
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
@@ -803,7 +803,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	}
 	else
 	{
-		http_header_t *header = message->headers;
+		dbentry_t *header = message->headers;
 		while (header != NULL)
 		{
 			if (!strcasecmp(header->key, key))
