@@ -463,13 +463,7 @@ static int _httpclient_connect(http_client_t *client)
 	}
 	if (size < 0)
 	{
-		if (client->freectx)
-			client->freectx(client->ctx);
-		_httpserver_closeclient(server, client);
-		client->state |= CLIENT_STOPPED;
-		client->state &= ~(CLIENT_RUNNING | CLIENT_STARTED);
-		dbg("%s goodbye\n",__FUNCTION__);
-		return 0;
+		goto socket_closed;
 	}
 	// parse the data while the message is complete
 	request->content->offset = request->content->data;
@@ -515,12 +509,22 @@ static int _httpclient_connect(http_client_t *client)
 	buffer_t *header = _buffer_create();
 	_httpmessage_buildheader(client, response, header);
 
-	client->sendresp(client->ctx, header->data, header->length);
+	size = client->sendresp(client->ctx, header->data, header->length);
+	if (size < 0)
+	{
+		client->state &= CLIENT_KEEPALIVE;
+		goto socket_closed;
+	}
 	_buffer_destroy(header);
 
 	if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
 	{
-		client->sendresp(client->ctx, response->content->data, response->content->length);
+		size = client->sendresp(client->ctx, response->content->data, response->content->length);
+		if (size < 0)
+		{
+			client->state &= CLIENT_KEEPALIVE;
+			goto socket_closed;
+		}
 	}
 
 	while (ret != ESUCCESS)
@@ -531,11 +535,17 @@ static int _httpclient_connect(http_client_t *client)
 		}
 		if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
 		{
-			client->sendresp(client->ctx, response->content->data, response->content->length);
+			size = client->sendresp(client->ctx, response->content->data, response->content->length);
+			if (size < 0)
+			{
+				client->state &= CLIENT_KEEPALIVE;
+				goto socket_closed;
+			}
 		}
 	}
 	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 
+socket_closed:
 	_httpmessage_destroy(response);
 	_httpmessage_destroy(request);
 	if (!(client->state & CLIENT_KEEPALIVE))
