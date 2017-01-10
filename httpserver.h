@@ -112,6 +112,7 @@ typedef struct http_server_config_s
 	/** @param callback the sender module */
 	struct
 	{
+		void *generic_ctx;
 		http_getctx_t getctx;
 		http_freectx_t freectx;
 		http_recv_t recvreq;
