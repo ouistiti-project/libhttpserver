@@ -32,7 +32,9 @@
 #include <windows.h>
 #include <tchar.h>
 #else
-#include <pthread.h>
+#if defined(HAVE_PTHREAD)
+# include <pthread.h>
+#endif
 #include <signal.h>
 #endif
 
@@ -67,7 +69,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	 */
 	vthread->handle = CreateThread( NULL, 0, start_routine, arg, 0, &vthread->id);
 	SwitchToThread();
-#else
+#elif defined(HAVE_PTHREAD)
 	if (attr == NULL)
 	{
 		attr = &vthread->attr;
@@ -76,7 +78,13 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE);
 
 	ret = pthread_create(&(vthread->pthread), attr, start_routine, arg);
+#if defined(HAVE_PTHREAD_YIELD)
 	pthread_yield();
+#elif defined(HAVE_SCHED_YIELD)
+	sched_yield();
+#endif
+#else
+	ret = (int)start_routine(arg);
 #endif
 	*thread = vthread;
 	return ret;
@@ -84,14 +92,14 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 
 int vthread_join(vthread_t thread, void **value_ptr)
 {
-	int ret;
+	int ret = 0;
 #ifdef WIN32
 	CloseHandle(thread->handle);
 /**
 	if (thread->argument)
 		ret = HeapFree(GetProcessHeap(), 0, thread->argument);
 */
-#else
+#elif defined(HAVE_PTHREAD)
 	ret = pthread_join(thread->pthread, value_ptr);
 #endif
 	free(thread);
@@ -111,22 +119,12 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 	}
 	WaitForMultipleObjects(nbthreads, threadsArray, TRUE, INFINITE);
 #else
-	sigset_t set;
-	sigemptyset(&set);
-	sigaddset(&set, SIGINT);
-	sigaddset(&set,SIGTERM);
-
-	int sig;
-	sigwait(&set, &sig);
-	if (sig == SIGINT || sig == SIGTERM)
+	int i;
+	for (i = 0; i < nbthreads; i++) 
 	{
-		int i;
-		for (i = 0; i < nbthreads; i++) 
-		{
-			vthread_t thread = threads[i];
-			pthread_kill(thread->pthread, sig);
-			//pthread_cancel(thread->pthread);
-		}
+		void *value_ptr;
+		vthread_t thread = threads[i];
+		vthread_join(thread, &value_ptr);
 	}
 #endif
 }

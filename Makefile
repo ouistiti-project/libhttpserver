@@ -17,6 +17,8 @@ slib-y+=httpserver
 
 httpserver_SOURCES+=httpserver.c vthread.c
 
+vthread_CFLAGS+=-DHAVE_PTHREAD
+
 lib-y+=uri
 slib-y+=uri
 uri_SOURCES+=uri.c
