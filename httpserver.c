@@ -379,14 +379,14 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 	}
 }
 
-static int _http_recv(void *ctx, char *data, int length)
+int httpclient_recv(void *ctx, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctx;
 
 	return recv(client->sock, data, length, 0);
 }
 
-static int _http_send(void *ctx, char *data, int length)
+int httpclient_send(void *ctx, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctx;
 
@@ -469,8 +469,8 @@ static int _httpserver_connect(http_server_t *server)
 				else
 				{
 					client->freectx = NULL;
-					client->recvreq = _http_recv;
-					client->sendresp = _http_send;
+					client->recvreq = httpclient_recv;
+					client->sendresp = httpclient_send;
 					client->ctx = client;
 				}
 				client->next = server->clients;
@@ -816,79 +816,3 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	}
 	return value;
 }
-#ifdef TEST
-#ifndef WIN32
-# include <pwd.h>
-#endif
-int client = 0;
-
-int test_func1(void *arg, http_message_t *request, http_message_t *response)
-{
-	char content[] = "<html><body>coucou<br/></body></html>";
-	httpmessage_addheader(response, "Server", "libhttpserver");
-	httpmessage_addcontent(response, "text/html", content, strlen(content));
-	return 0;
-}
-
-int test_func2(void *arg, http_message_t *request, http_message_t *response)
-{
-	httpmessage_addheader(response, "Server", "libhttpserver");
-	httpmessage_addcontent(response, "text/html", NULL, 0);
-	client = httpmessage_keepalive(response);
-	return 0;
-}
-
-int main(int argc, char * const *argv)
-{
-#ifndef WIN32
-	struct passwd *user;
-
-	user = getpwnam("http");
-	if (user == NULL)
-		user = getpwnam("apache");
-#endif
-	setbuf(stdout, NULL);
-	http_server_config_t config = { 
-		.maxclient = 10,
-		.chunksize = 64,
-		.callback = { NULL, NULL, NULL},
-	};
-	http_server_t *server = httpserver_create(NULL, 80, &config);
-	if (server)
-	{
-		httpserver_addconnector(server, NULL, test_func1, NULL);
-#ifndef WIN32
-		if (user != NULL)
-		{
-			setgid(user->pw_gid);
-			setuid(user->pw_uid);
-		}
-#endif
-		httpserver_connect(server);
-/*
-		char data[1550];
-		memset(data, 0xA5, sizeof(data));
-		char clock[4] = {'-','\\','|','/'};
-		int i = 0;
-		while (1)
-		{
-#ifndef WIN32
-			sleep(1);
-#else
-			Sleep(1000);
-#endif
-			//printf(" %c\n",clock[i]);
-			i = (i + 1)%sizeof(clock);
-			if (client)
-			{
-				int ret;
-				ret = send(client, data, sizeof(data), 0);
-				printf("send stream %d\n",ret);
-			}
-		}
-*/
-		httpserver_disconnect(server);
-	}
-	return 0;
-}
-#endif

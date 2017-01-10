@@ -162,6 +162,9 @@ char *httpmessage_SERVER(http_message_t *message, char *key);
  */
 char *httpmessage_REQUEST(http_message_t *message, char *key);
 
+int httpclient_recv(void *ctx, char *data, int length);
+int httpclient_send(void *ctx, char *data, int length);
+
 #ifdef __cplusplus
 }
 #endif
