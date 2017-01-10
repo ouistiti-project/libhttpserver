@@ -596,11 +596,6 @@ static int _httpserver_connect(http_server_t *server)
 				unsigned int size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &size);
 				dbg("new client\n");
-#ifndef WIN32
-				fcntl(client->sock, F_SETFL, fcntl(client->sock, F_GETFL, 0) | O_NONBLOCK);
-#else
-				ioctlsocket(client->sock, FIONBIO, (void *)&(int){ 1 });
-#endif
 				if (server->config && server->config->callback.getctx)
 				{
 					client->ctx = server->config->callback.getctx(client, (struct sockaddr *)&client->addr, size);
