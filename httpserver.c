@@ -78,11 +78,6 @@ extern "C" {
 # define dbg(...)
 #endif
 
-#define ESUCCESS 0
-#define EINCOMPLETE -1
-#define ECONTINUE -2
-#define ESPACE -3
-
 struct dbentry_s
 {
 	char *key;
@@ -126,12 +121,7 @@ typedef struct http_client_s http_client_t;
 
 struct http_message_s
 {
-	enum
-	{
-		RESULT_200,
-		RESULT_400,
-		RESULT_404,
-	} result;
+	http_message_result_e result;
 	int keepalive;
 	http_client_t *client;
 	enum
@@ -635,18 +625,29 @@ static int _httpserver_connect(http_server_t *server)
 	return ret;
 }
 
-http_server_t *httpserver_create(char *address, int port, http_server_config_t *config)
+static http_server_config_t defaultconfig = { 
+	.addr = NULL,
+	.port = 80,
+	.maxclient = 10,
+	.chunksize = 64,
+	.callback = { NULL, NULL, NULL},
+};
+
+http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
 	int status;
 
 	server = calloc(1, sizeof(*server));
-	server->config = config;
+	if (config)
+		server->config = config;
+	else
+		server->config = &defaultconfig;
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
-	if (address == NULL)
+	if (server->config->addr == NULL)
 	{
 		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
 		if ( server->sock < 0 )
@@ -660,14 +661,14 @@ http_server_t *httpserver_create(char *address, int port, http_server_config_t *
 				warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, (void *)&(int){ 1 }, sizeof(int)) < 0)
-				warn("setsockopt(SO_REUSEADDR) failed");
+				warn("setsockopt(SO_REUSEPORT) failed");
 #endif
 
 		int socklen = sizeof(struct sockaddr_in);
 		struct sockaddr_in saddr;
 
 		saddr.sin_family = AF_INET;
-		saddr.sin_port = htons(port);
+		saddr.sin_port = htons(server->config->port);
 		saddr.sin_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
 		status = bind(server->sock, (struct sockaddr *)&saddr, socklen);
 	}
@@ -685,7 +686,7 @@ http_server_t *httpserver_create(char *address, int port, http_server_config_t *
 		hints.ai_addr = NULL;
 		hints.ai_next = NULL;
 
-		status = getaddrinfo(address, NULL, &hints, &result);
+		status = getaddrinfo(server->config->addr, NULL, &hints, &result);
 		if (status != 0) {
 			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
 			return NULL;
@@ -706,10 +707,10 @@ http_server_t *httpserver_create(char *address, int port, http_server_config_t *
 					warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
 			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, (void *)&(int){ 1 }, sizeof(int)) < 0)
-					warn("setsockopt(SO_REUSEADDR) failed");
+					warn("setsockopt(SO_REUSEPORT) failed");
 #endif
 
-			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(port);
+			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
 			if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
 				break;                  /* Success */
 

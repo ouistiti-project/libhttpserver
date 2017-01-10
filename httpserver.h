@@ -28,6 +28,12 @@
 #ifndef __HTTPSERVER_H__
 #define __HTTPSERVER_H__
 
+#ifndef WIN32
+# include <sys/socket.h>
+#else
+# include <winsock2.h>
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -96,8 +102,14 @@ typedef int (*http_send_t)(void *ctx, char *data, int length);
 
 typedef struct http_server_config_s
 {
+	/** @param address the IP address of the network bridge to use, NULL to use ANY network bridge */
+	char *addr;
+	/** @param port the TCP/IP prot to bind the server */
+	int port;
+	/** @param maxclients the maximum number of clients accepted by the server. */
 	int maxclient;
 	int chunksize;
+	/** @param callback the sender module */
 	struct
 	{
 		http_getctx_t getctx;
@@ -110,13 +122,11 @@ typedef struct http_server_config_s
 /**
  * @brief create a server object and open the main socket
  *
- * @param address the IP address of the network bridge to use, NULL to use ANY network bridge
- * @param port the TCP/IP prot to bind the server
- * @param maxclients the maximum number of clients accepted by the server.
+ * @param config	the server configuration structure
  *
  * @return the server object
  */
-http_server_t *httpserver_create(char *address, int port, http_server_config_t *config);
+http_server_t *httpserver_create(http_server_config_t *config);
 
 /**
  * @brief add a callback on client message reception
@@ -221,23 +231,23 @@ char *httpmessage_REQUEST(http_message_t *message, char *key);
 /**
  * @brief read data on the client socket
  * 
- * @param ctx		the client data (see http_getctx_t)
+ * @param ctl		the client data (see http_getctx_t)
  * @param data		the buffer to push the data from the socket
  * @param length	the length of the buffer
  * 
  * @return the number of bytes read on the socket
  */
-int httpclient_recv(void *ctx, char *data, int length);
+int httpclient_recv(void *ctl, char *data, int length);
 /**
  * @brief send data on the client socket
  * 
- * @param ctx		the client data (see http_getctx_t)
+ * @param ctl		the client data (see http_getctx_t)
  * @param data		the buffer to send the data on the socket
  * @param length	the number of bytes to send
  * 
  * @return the number of bytes sent on the socket
  */
-int httpclient_send(void *ctx, char *data, int length);
+int httpclient_send(void *ctl, char *data, int length);
 
 #ifdef __cplusplus
 }
