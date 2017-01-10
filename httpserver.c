@@ -393,15 +393,17 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 int httpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
-
-	return recv(client->sock, data, length, MSG_NOSIGNAL);
+	int ret = recv(client->sock, data, length, MSG_NOSIGNAL);
+	dbg("recv %d\n", ret);
+	return ret;
 }
 
 int httpclient_send(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
-
-	return send(client->sock, data, length, MSG_NOSIGNAL);
+	int ret = send(client->sock, data, length, MSG_NOSIGNAL);
+	dbg("send %d\n", ret);
+	return ret;
 }
 
 http_server_config_t *httpclient_getconfig(void *ctl)
@@ -445,10 +447,11 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 
 static int _httpclient_connect(http_client_t *client)
 {
-	http_message_t *request;
+	http_message_t *request = NULL;
+	http_message_t *response = NULL;
 	http_server_t *server = client->server;
 	http_server_callback_t *callback = server->callbacks;
-	int size = 1;
+	int size = CHUNKSIZE - 1;
 	int ret = EINCOMPLETE;
 
 	dbg("%s hello\n",__FUNCTION__);
@@ -456,7 +459,7 @@ static int _httpclient_connect(http_client_t *client)
 	client->state |= CLIENT_RUNNING;
 	request = _httpmessage_create(client->server, NULL);
 	request->client = client;
-	while (size > 0)
+	while (size == CHUNKSIZE - 1)
 	{
 		char data[CHUNKSIZE];
 		size = client->recvreq(client->ctx, data, CHUNKSIZE - 1);
@@ -464,6 +467,8 @@ static int _httpclient_connect(http_client_t *client)
 		{
 			if (errno != EAGAIN)
 				warn("recv returns\n");
+			else
+				size = 0;
 			break;
 		}
 		if (size > 0)
@@ -480,7 +485,7 @@ static int _httpclient_connect(http_client_t *client)
 		ret = _httpserver_parserequest(server, request);
 	}
 	while (ret != EINCOMPLETE && ret != ESUCCESS);
-	http_message_t *response = _httpmessage_create(server, request);
+	response = _httpmessage_create(server, request);
 	if (ret == ESUCCESS)
 	{
 		char *cburl = NULL;
@@ -554,8 +559,10 @@ static int _httpclient_connect(http_client_t *client)
 	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 
 socket_closed:
-	_httpmessage_destroy(response);
-	_httpmessage_destroy(request);
+	if (response)
+		_httpmessage_destroy(response);
+	if (request)
+		_httpmessage_destroy(request);
 	if (!(client->state & CLIENT_KEEPALIVE))
 	{
 		if (client->freectx)
@@ -563,7 +570,9 @@ socket_closed:
 		_httpserver_closeclient(server, client);
 	}
 	else
+	{
 		dbg("keepalive\n");
+	}
 	client->state |= CLIENT_STOPPED;
 	client->state &= ~(CLIENT_RUNNING | CLIENT_STARTED);
 	dbg("%s goodbye\n",__FUNCTION__);
@@ -744,7 +753,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 
 	if (!status)
 	{
-		status = listen(server->sock, config->maxclient);
+		status = listen(server->sock, server->config->maxclient);
 	}
 	if (status)
 	{
@@ -887,6 +896,17 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 			}
 			header = header->next;
 		}
+	}
+	return value;
+}
+
+char *httpmessage_REQUEST(http_message_t *message, char *key)
+{
+	char *value = "";
+	if (!strcasecmp(key, "uri"))
+	{
+		if (message->uri != NULL)
+			value = message->uri;
 	}
 	return value;
 }
