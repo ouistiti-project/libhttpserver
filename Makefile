@@ -1,5 +1,9 @@
 include scripts.mk
 
+httpserver_CFLAGS-$(DEBUG)+=-g -DDEBUG
+uri_CFLAGS-$(DEBUG)+=-g -DDEBUG
+httptest_CFLAGS-$(DEBUG)+=-g -DDEBUG
+
 bin-$(TEST)+=httptest
 httptest_CFLAGS+=-DHTTPSERVER
 httptest_LDFLAGS+=-DHTTPSERVER
