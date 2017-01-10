@@ -394,14 +394,14 @@ int httpclient_recv(void *ctx, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctx;
 
-	return recv(client->sock, data, length, 0);
+	return recv(client->sock, data, length, MSG_NOSIGNAL);
 }
 
 int httpclient_send(void *ctx, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctx;
 
-	return send(client->sock, data, length, 0);
+	return send(client->sock, data, length, MSG_NOSIGNAL);
 }
 
 static const char *_http_message_result[] =
