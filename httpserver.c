@@ -390,19 +390,27 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 	free(client);
 }
 
-int httpclient_recv(void *ctx, char *data, int length)
+int httpclient_recv(void *ctl, char *data, int length)
 {
-	http_client_t *client = (http_client_t *)ctx;
+	http_client_t *client = (http_client_t *)ctl;
 
 	return recv(client->sock, data, length, MSG_NOSIGNAL);
 }
 
-int httpclient_send(void *ctx, char *data, int length)
+int httpclient_send(void *ctl, char *data, int length)
 {
-	http_client_t *client = (http_client_t *)ctx;
+	http_client_t *client = (http_client_t *)ctl;
 
 	return send(client->sock, data, length, MSG_NOSIGNAL);
 }
+
+http_server_config_t *httpclient_getconfig(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+
+	return client->server->config;
+}
+ 
 
 static const char *_http_message_result[] =
 {

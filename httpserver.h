@@ -249,6 +249,16 @@ int httpclient_recv(void *ctl, char *data, int length);
  */
 int httpclient_send(void *ctl, char *data, int length);
 
+
+/**
+ * @brief give server configuration
+ * 
+ * @param ctl		the client data (see http_getctx_t)
+ * 
+ * @return the configuration structure of the server
+ */
+http_server_config_t *httpclient_getconfig(void *ctl);
+
 #ifdef __cplusplus
 }
 #endif
