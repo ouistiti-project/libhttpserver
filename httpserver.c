@@ -85,6 +85,14 @@ struct dbentry_s
 };
 typedef struct dbentry_s dbentry_t;
 
+typedef struct buffer_s
+{
+	char *data;
+	char *offset;
+	int size;
+	int length;
+} buffer_t;
+
 struct http_client_s
 {
 	int sock;
@@ -94,6 +102,7 @@ struct http_client_s
 	http_send_t sendresp;
 	void *ctx;
 	dbentry_t *session;
+	buffer_t *session_storage;
 #ifndef WIN32
 	struct sockaddr_un addr;
 #else
@@ -102,14 +111,6 @@ struct http_client_s
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
-
-typedef struct buffer_s
-{
-	char *data;
-	char *offset;
-	int size;
-	int length;
-} buffer_t;
 
 struct http_message_s
 {
@@ -173,7 +174,7 @@ static buffer_t * _buffer_create()
 	return buffer;
 }
 
-static int _buffer_append(buffer_t *buffer, char *data, int length)
+static char *_buffer_append(buffer_t *buffer, char *data, int length)
 {
 	if (buffer->data + buffer->size < buffer->offset + length + 1)
 	{
@@ -189,11 +190,12 @@ static int _buffer_append(buffer_t *buffer, char *data, int length)
 			buffer->data = data;
 		}
 	}
+	char *offset = buffer->offset;
 	memcpy(buffer->offset, data, length);
 	buffer->length += length;
 	buffer->offset += length;
 	*buffer->offset = '\0';
-	return buffer->length;
+	return offset;
 }
 
 static void _buffer_destroy(buffer_t *buffer)
@@ -369,15 +371,16 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 	if (client == server->clients)
 	{
 		server->clients = client->next;
-		free(client);
 	}
 	else
 	{
 		http_client_t *client2 = server->clients;
 		while (client2->next != client) client2 = client2->next;
 		client2->next = client->next;
-		free(client);
 	}
+	if (client->session_storage)
+		free(client->session_storage);
+	free(client);
 }
 
 int httpclient_recv(void *ctx, char *data, int length)
@@ -827,13 +830,20 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 	if (!sessioninfo)
 	{
 		sessioninfo = calloc(1, sizeof(*sessioninfo));
-		sessioninfo->key = key;
+		if (!message->client->session_storage)
+			message->client->session_storage = _buffer_create();
+		sessioninfo->key = 
+			_buffer_append(message->client->session_storage, key, strlen(key) + 1);
 		sessioninfo->next = message->client->session;
 		message->client->session = sessioninfo;
 	}
 	if (value != NULL)
 	{
-		sessioninfo->value = value;
+		if (strlen(value) <= strlen(sessioninfo->value))
+			strcpy(sessioninfo->value, value);
+		else
+			sessioninfo->value = 
+				_buffer_append(message->client->session_storage, value, strlen(value) + 1);
 	}
 	return sessioninfo->value;
 }
