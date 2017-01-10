@@ -72,6 +72,12 @@ extern "C" {
 #include "vthread.h"
 #include "httpserver.h"
 
+#ifdef DEBUG
+# define dbg	printf
+#else
+# define dbg(...)
+#endif
+
 #define ESUCCESS 0
 #define EINCOMPLETE -1
 #define ECONTINUE -2
@@ -93,10 +99,16 @@ typedef struct buffer_s
 	int length;
 } buffer_t;
 
+#define CLIENT_STARTED 0x01
+#define CLIENT_RUNNING 0x02
+#define CLIENT_STOPPED 0x04
+#define CLIENT_KEEPALIVE 0x80
 struct http_client_s
 {
 	int sock;
+	int state;
 	http_server_t *server;
+	vthread_t thread;
 	http_freectx_t freectx;
 	http_recv_t recvreq;
 	http_send_t sendresp;
@@ -214,6 +226,7 @@ static http_message_t * _httpmessage_create(http_server_t *server, http_message_
 	{
 		message->type = parent->type;
 		message->headers = parent->headers;
+		message->client = parent->client;
 	}
 	return message;
 }
@@ -366,8 +379,12 @@ static int _httpserver_parserequest(http_server_t *server, http_message_t *messa
 
 static void _httpserver_closeclient(http_server_t *server, http_client_t *client)
 {
+#ifndef WIN32
 	shutdown(client->sock, SHUT_RDWR);
-										
+	close(client->sock);
+#else
+	closesocket(client->sock);
+#endif
 	if (client == server->clients)
 	{
 		server->clients = client->next;
@@ -430,12 +447,16 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 
 static int _httpclient_connect(http_client_t *client)
 {
-	http_message_t *request = _httpmessage_create(client->server, NULL);
-	http_server_callback_t *callback = client->server->callbacks;
-	int keepalive = 0;
+	http_message_t *request;
+	http_server_t *server = client->server;
+	http_server_callback_t *callback = server->callbacks;
 	int size = 1;
 	int ret = EINCOMPLETE;
 
+	dbg("%s hello\n",__FUNCTION__);
+	client->state &= ~CLIENT_STARTED;
+	client->state |= CLIENT_RUNNING;
+	request = _httpmessage_create(client->server, NULL);
 	request->client = client;
 	while (size > 0)
 	{
@@ -453,10 +474,10 @@ static int _httpclient_connect(http_client_t *client)
 	request->content->offset = request->content->data;
 	do
 	{
-		ret = _httpserver_parserequest(client->server, request);
+		ret = _httpserver_parserequest(server, request);
 	}
 	while (ret != EINCOMPLETE && ret != ESUCCESS);
-	http_message_t *response = _httpmessage_create(client->server, request);
+	http_message_t *response = _httpmessage_create(server, request);
 	if (ret == ESUCCESS)
 	{
 		char *cburl = NULL;
@@ -481,7 +502,8 @@ static int _httpclient_connect(http_client_t *client)
 		}
 		if (callback == NULL)
 			response->result = RESULT_404;
-		keepalive = response->keepalive;
+		if (response->keepalive)
+			client->state |= CLIENT_KEEPALIVE;
 	}
 	else if (ret != EINCOMPLETE && size > 0)
 	{
@@ -515,7 +537,18 @@ static int _httpclient_connect(http_client_t *client)
 
 	_httpmessage_destroy(response);
 	_httpmessage_destroy(request);
-	return keepalive;
+	if (!(client->state & CLIENT_KEEPALIVE))
+	{
+		if (client->freectx)
+			client->freectx(client->ctx);
+		_httpserver_closeclient(server, client);
+	}
+	else
+		dbg("keepalive\n");
+	client->state |= CLIENT_STOPPED;
+	client->state &= ~(CLIENT_RUNNING | CLIENT_STARTED);
+	dbg("%s goodbye\n",__FUNCTION__);
+	return 0;
 }
 
 static int _httpserver_connect(http_server_t *server)
@@ -533,8 +566,11 @@ static int _httpserver_connect(http_server_t *server)
 		http_client_t *client = server->clients;
 		while (client != NULL)
 		{
-			FD_SET(client->sock, &rfds);
-			maxfd = (maxfd > client->sock)? maxfd:client->sock;
+			if (!(client->state & CLIENT_STARTED))
+			{
+				FD_SET(client->sock, &rfds);
+				maxfd = (maxfd > client->sock)? maxfd:client->sock;
+			}
 			client = client->next;
 		}
 		ret = select(maxfd +1, &rfds, NULL, NULL, NULL);
@@ -548,6 +584,7 @@ static int _httpserver_connect(http_server_t *server)
 				// Create new client socket to communicate
 				unsigned int size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &size);
+				dbg("new client\n");
 #ifndef WIN32
 				fcntl(client->sock, F_SETFL, fcntl(client->sock, F_GETFL, 0) | O_NONBLOCK);
 #else
@@ -569,6 +606,7 @@ static int _httpserver_connect(http_server_t *server)
 				}
 				client->next = server->clients;
 				server->clients = client;
+
 				ret = 1;
 			}
 			else
@@ -579,13 +617,15 @@ static int _httpserver_connect(http_server_t *server)
 					http_client_t *next = client->next;
 					if (FD_ISSET(client->sock, &rfds))
 					{
-						int keepalive = _httpclient_connect(client);
-						if (!keepalive)
+						dbg("%s hello\n",__FUNCTION__);
+						if (!(client->state & CLIENT_STARTED))
 						{
-							if (client->freectx)
-								client->freectx(client->ctx);
-							_httpserver_closeclient(server, client);
+							vthread_attr_t attr;
+							client->state &= ~CLIENT_STOPPED;
+							vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
+							client->state |= CLIENT_STARTED;
 						}
+						dbg("%s goodbye\n",__FUNCTION__);
 					}
 					client = next;
 				}
@@ -673,7 +713,11 @@ http_server_t *httpserver_create(char *address, int port, http_server_config_t *
 			if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
 				break;                  /* Success */
 
+#ifndef WIN32
 			close(server->sock);
+#else
+			closesocket(server->sock);
+#endif
 		}
 		freeaddrinfo(result); 
 	}
