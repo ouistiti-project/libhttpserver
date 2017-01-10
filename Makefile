@@ -1,19 +1,21 @@
 include scripts.mk
 
-httpserver_CFLAGS-$(DEBUG)+=-g -DDEBUG
-uri_CFLAGS-$(DEBUG)+=-g -DDEBUG
-httptest_CFLAGS-$(DEBUG)+=-g -DDEBUG
-
 bin-$(TEST)+=httptest
 httptest_CFLAGS+=-DHTTPSERVER
 httptest_LDFLAGS+=-DHTTPSERVER
 httptest_SOURCES+=test.c
 httptest_LIBRARY+=httpserver
+httptest_LIBRARY-$(MBEDTLS)+=mod_mbedtls
+httptest_CFLAGS-$(MBEDTLS)+=-DMBEDTLS
 #bin-$(TEST)+=uritest
 #uritest_SOURCES+=test.c
 
 lib-y+=httpserver
 slib-y+=httpserver
+
+lib-$(MBEDTLS)+=mod_mbedtls
+mod_mbedtls_SOURCES+=mod_mbedtls.c
+mod_mbedtls_LIBRARY+=mbedtls mbedx509 mbedcrypto
 
 httpserver_SOURCES+=httpserver.c vthread.c
 
@@ -40,3 +42,7 @@ SLIBEXT=a
 DLIBEXT=so
 endif
 
+httpserver_CFLAGS-$(DEBUG)+=-g -DDEBUG
+uri_CFLAGS-$(DEBUG)+=-g -DDEBUG
+httptest_CFLAGS-$(DEBUG)+=-g -DDEBUG
+mod_mbedtls_CFLAGS-$(DEBUG)+=-g -DDEBUG

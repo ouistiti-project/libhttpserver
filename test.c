@@ -42,9 +42,13 @@
 
 int client = 0;
 
+#ifdef MBEDTLS
+#include "mod_mbedtls.h"
+#endif
+
 int test_func1(void *arg, http_message_t *request, http_message_t *response)
 {
-	char content[] = "<html><body>coucou<br/></body></html>";
+	char content[] = "<html><head><link rel=\"stylesheet\" href=\"styles.css\"></head><body>coucou<br/></body></html>";
 	httpmessage_addheader(response, "Server", "libhttpserver");
 	httpmessage_addcontent(response, "text/html", content, strlen(content));
 	return 0;
@@ -60,6 +64,7 @@ int test_func2(void *arg, http_message_t *request, http_message_t *response)
 
 int main(int argc, char * const *argv)
 {
+	http_server_config_t *config = NULL;
 #ifndef WIN32
 	struct passwd *user;
 
@@ -68,12 +73,11 @@ int main(int argc, char * const *argv)
 		user = getpwnam("apache");
 #endif
 	setbuf(stdout, NULL);
-	http_server_config_t config = { 
-		.maxclient = 10,
-		.chunksize = 64,
-		.callback = { NULL, NULL, NULL},
-	};
-	http_server_t *server = httpserver_create(NULL, 80, &config);
+#ifdef MBEDTLS
+	void * mod = mod_mbedtls_create("/etc/ssl/private/server.pem",NULL,NULL);
+	config = mod_mbedtls_getmod(mod);
+#endif
+	http_server_t *server = httpserver_create(config);
 	if (server)
 	{
 		httpserver_addconnector(server, NULL, test_func1, NULL);
@@ -109,6 +113,9 @@ int main(int argc, char * const *argv)
 */
 		httpserver_disconnect(server);
 	}
+#ifdef MBEDTLS
+	mod_mbedtls_destroy(mod);
+#endif
 	return 0;
 }
 #endif
