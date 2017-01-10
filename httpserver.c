@@ -428,6 +428,96 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 	return ESUCCESS;
 }
 
+static int _httpclient_connect(http_client_t *client)
+{
+	http_message_t *request = _httpmessage_create(client->server, NULL);
+	http_server_callback_t *callback = client->server->callbacks;
+	int keepalive = 0;
+	int size = 1;
+	int ret = EINCOMPLETE;
+
+	request->client = client;
+	while (size > 0)
+	{
+		char data[CHUNKSIZE];
+		size = client->recvreq(client->ctx, data, CHUNKSIZE - 1);
+		if (size <= 0)
+		{
+			if (errno != EAGAIN)
+				warn("recv returns\n");
+			break;
+		}
+		_buffer_append(request->content, data, size);
+	}
+	// parse the data while the message is complete
+	request->content->offset = request->content->data;
+	do
+	{
+		ret = _httpserver_parserequest(client->server, request);
+	}
+	while (ret != EINCOMPLETE && ret != ESUCCESS);
+	http_message_t *response = _httpmessage_create(client->server, request);
+	if (ret == ESUCCESS)
+	{
+		char *cburl = NULL;
+		while (callback != NULL)
+		{
+			cburl = callback->url;
+			if (cburl != NULL)
+			{
+				char *path = request->uri;
+				if (cburl[0] != '/' && path[0] == '/')
+					path++;
+				if (!strncasecmp(cburl, path, callback->url_length))
+					cburl = NULL;
+			}
+			if (cburl == NULL && callback->func)
+			{
+				ret = callback->func(callback->arg, request, response);
+				if (ret == ESUCCESS)
+					break;
+			}
+			callback = callback->next;
+		}
+		if (callback == NULL)
+			response->result = RESULT_404;
+		keepalive = response->keepalive;
+	}
+	else if (ret != EINCOMPLETE && size > 0)
+	{
+		response->result = RESULT_400;
+		request->type = MESSAGE_TYPE_HEAD;
+		ret = ESUCCESS;
+	}
+	buffer_t *header = _buffer_create();
+	_httpmessage_buildheader(client, response, header);
+
+	client->sendresp(client->ctx, header->data, header->length);
+	_buffer_destroy(header);
+
+	if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
+	{
+		client->sendresp(client->ctx, response->content->data, response->content->length);
+	}
+
+	while (ret != ESUCCESS)
+	{
+		if (callback && callback->func)
+		{
+			ret = callback->func(callback->arg, request, response);
+		}
+		if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
+		{
+			client->sendresp(client->ctx, response->content->data, response->content->length);
+		}
+	}
+	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
+
+	_httpmessage_destroy(response);
+	_httpmessage_destroy(request);
+	return keepalive;
+}
+
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
@@ -489,91 +579,7 @@ static int _httpserver_connect(http_server_t *server)
 					http_client_t *next = client->next;
 					if (FD_ISSET(client->sock, &rfds))
 					{
-						http_message_t *request = _httpmessage_create(client->server, NULL);
-						http_server_callback_t *callback = client->server->callbacks;
-
-						int keepalive = 0;
-						int size = 1;
-						request->client = client;
-						ret = EINCOMPLETE;
-						while (size > 0)
-						{
-							char data[CHUNKSIZE];
-							size = client->recvreq(client->ctx, data, CHUNKSIZE - 1);
-							if (size <= 0)
-							{
-								if (errno != EAGAIN)
-									warn("recv returns\n");
-								break;
-							}
-							_buffer_append(request->content, data, size);
-						}
-						// parse the data while the message is complete
-						request->content->offset = request->content->data;
-						do
-						{
-							ret = _httpserver_parserequest(server, request);
-						}
-						while (ret != EINCOMPLETE && ret != ESUCCESS);
-						http_message_t *response = _httpmessage_create(server, request);
-						if (ret == ESUCCESS)
-						{
-							char *cburl = NULL;
-							while (callback != NULL)
-							{
-								cburl = callback->url;
-								if (cburl != NULL)
-								{
-									char *path = request->uri;
-									if (cburl[0] != '/' && path[0] == '/')
-										path++;
-									if (!strncasecmp(cburl, path, callback->url_length))
-										cburl = NULL;
-								}
-								if (cburl == NULL && callback->func)
-								{
-									ret = callback->func(callback->arg, request, response);
-									if (ret == ESUCCESS)
-										break;
-								}
-								callback = callback->next;
-							}
-							if (callback == NULL)
-								response->result = RESULT_404;
-							keepalive = response->keepalive;
-						}
-						else if (ret != EINCOMPLETE && size > 0)
-						{
-							response->result = RESULT_400;
-							request->type = MESSAGE_TYPE_HEAD;
-							ret = ESUCCESS;
-						}
-						buffer_t *header = _buffer_create();
-						_httpmessage_buildheader(client, response, header);
-
-						client->sendresp(client->ctx, header->data, header->length);
-						_buffer_destroy(header);
-
-						if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
-						{
-							client->sendresp(client->ctx, response->content->data, response->content->length);
-						}
-
-						while (ret != ESUCCESS)
-						{
-							if (callback && callback->func)
-							{
-								ret = callback->func(callback->arg, request, response);
-							}
-							if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
-							{
-								client->sendresp(client->ctx, response->content->data, response->content->length);
-							}
-						}
-						setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-
-						_httpmessage_destroy(response);
-						_httpmessage_destroy(request);
+						int keepalive = _httpclient_connect(client);
 						if (!keepalive)
 						{
 							if (client->freectx)
