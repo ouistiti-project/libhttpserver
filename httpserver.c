@@ -452,13 +452,24 @@ static int _httpclient_connect(http_client_t *client)
 	{
 		char data[CHUNKSIZE];
 		size = client->recvreq(client->ctx, data, CHUNKSIZE - 1);
-		if (size <= 0)
+		if (size < 0)
 		{
 			if (errno != EAGAIN)
 				warn("recv returns\n");
 			break;
 		}
-		_buffer_append(request->content, data, size);
+		if (size > 0)
+			_buffer_append(request->content, data, size);
+	}
+	if (size < 0)
+	{
+		if (client->freectx)
+			client->freectx(client->ctx);
+		_httpserver_closeclient(server, client);
+		client->state |= CLIENT_STOPPED;
+		client->state &= ~(CLIENT_RUNNING | CLIENT_STARTED);
+		dbg("%s goodbye\n",__FUNCTION__);
+		return 0;
 	}
 	// parse the data while the message is complete
 	request->content->offset = request->content->data;
@@ -691,11 +702,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
 			return NULL;
 		}
-
-		/* getaddrinfo() returns a list of address structures.
-		Try each address until we successfully bind(2).
-		If socket(2) (or bind(2)) fails, we (close the socket
-		and) try the next address. */
 
 		for (rp = result; rp != NULL; rp = rp->ai_next)
 		{
