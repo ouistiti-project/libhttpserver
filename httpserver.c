@@ -77,6 +77,14 @@ extern "C" {
 #define ECONTINUE -2
 #define ESPACE -3
 
+struct dbentry_s
+{
+	char *key;
+	char *value;
+	struct dbentry_s *next;
+};
+typedef struct dbentry_s dbentry_t;
+
 struct http_client_s
 {
 	int sock;
@@ -85,6 +93,7 @@ struct http_client_s
 	http_recv_t recvreq;
 	http_send_t sendresp;
 	void *ctx;
+	dbentry_t *session;
 #ifndef WIN32
 	struct sockaddr_un addr;
 #else
@@ -93,14 +102,6 @@ struct http_client_s
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
-
-struct dbentry_s
-{
-	char *key;
-	char *value;
-	struct dbentry_s *next;
-};
-typedef struct dbentry_s dbentry_t;
 
 typedef struct buffer_s
 {
@@ -815,4 +816,24 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 		}
 	}
 	return value;
+}
+
+char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
+{
+	dbentry_t *sessioninfo = message->client->session;
+	
+	while (sessioninfo && strcmp(sessioninfo->key, key))
+		sessioninfo = sessioninfo->next;
+	if (!sessioninfo)
+	{
+		sessioninfo = calloc(1, sizeof(*sessioninfo));
+		sessioninfo->key = key;
+		sessioninfo->next = message->client->session;
+		message->client->session = sessioninfo;
+	}
+	if (value != NULL)
+	{
+		sessioninfo->value = value;
+	}
+	return sessioninfo->value;
 }
