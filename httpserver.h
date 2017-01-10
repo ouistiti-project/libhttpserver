@@ -33,15 +33,65 @@ extern "C"
 {
 #endif
 
+#define ESUCCESS 0
+#define EINCOMPLETE -1
+#define ECONTINUE -2
+#define ESPACE -3
+
 typedef struct http_message_s http_message_t;
 typedef struct http_server_s http_server_t;
 typedef struct http_client_s http_client_t;
 
+/**
+ * @brief callback to manage a request
+ * 
+ * @param arg		the pointer given to httpserver_addconnector
+ * @param request	the client request received
+ * @param response	the server response to send after
+ * 
+ * @return ESUCCESS	to complete the response sending, ECONTINUE to look for another callback
+ * 
+ * The callback can set the header of the response and returns with ECONTINUE.
+ * At least one callback has to return ESUCCESS otherwise the http response will be "404 Not found".
+ */
 typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message_t *response);
 
+/**
+ * @brief callback to manage a sender module context
+ * 
+ * @param clt		the client data to use with httpclient_recv and httpclient_send
+ * @param addr		the client socket address
+ * @param addrsize	the client socket address size
+ * 
+ * @return the context pointer of the module
+ */
 typedef void *(*http_getctx_t)(http_client_t *clt, struct sockaddr *addr, int addrsize);
+/**
+ * @brief callback to manage a sender module context
+ * 
+ * @param ctx	the context pointer of the module
+ * 
+ */
 typedef void (*http_freectx_t)(void *ctx);
+/**
+ * @brief callback to read the request of the client
+ * 
+ * @param ctx		the context pointer of the module
+ * @param data		the data buffer to push the request of the client
+ * @param length	the size of the data buffer
+ * 
+ * @return the length of the request of the client
+ */
 typedef int (*http_recv_t)(void *ctx, char *data, int length);
+/**
+ * @brief callback to send the response to the client
+ * 
+ * @param ctx		the context pointer of the module
+ * @param data		the data buffer to send
+ * @param length	the size of the data buffer
+ * 
+ * @return the length of the response
+ */
 typedef int (*http_send_t)(void *ctx, char *data, int length);
 
 typedef struct http_server_config_s
@@ -102,6 +152,12 @@ void httpserver_destroy(http_server_t *server);
 /*****************************************/
 /** internal functions for the callback **/
 /*****************************************/
+typedef enum
+{
+	RESULT_200,
+	RESULT_400,
+	RESULT_404,
+} http_message_result_e;
 /**
  * @brief add a header to the response message
  *
@@ -162,7 +218,25 @@ char *httpmessage_SERVER(http_message_t *message, char *key);
  */
 char *httpmessage_REQUEST(http_message_t *message, char *key);
 
+/**
+ * @brief read data on the client socket
+ * 
+ * @param ctx		the client data (see http_getctx_t)
+ * @param data		the buffer to push the data from the socket
+ * @param length	the length of the buffer
+ * 
+ * @return the number of bytes read on the socket
+ */
 int httpclient_recv(void *ctx, char *data, int length);
+/**
+ * @brief send data on the client socket
+ * 
+ * @param ctx		the client data (see http_getctx_t)
+ * @param data		the buffer to send the data on the socket
+ * @param length	the number of bytes to send
+ * 
+ * @return the number of bytes sent on the socket
+ */
 int httpclient_send(void *ctx, char *data, int length);
 
 #ifdef __cplusplus
