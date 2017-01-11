@@ -33,7 +33,16 @@ extern "C"
 {
 #endif
 
-void *mod_mbedtls_create(char * crtfile, char *pemfile, char *keyfile);
+typedef struct mod_mbedtls_s
+{
+	char *pers;
+	char *crtfile;
+	char *pemfile;
+	char *cachain;
+	char *dhmfile;
+} mod_mbedtls_t;
+
+void *mod_mbedtls_create(mod_mbedtls_t *modconfig);
 void mod_mbedtls_destroy(void *mod);
 void *mod_mbedtls_getmod(void *mod);
 
