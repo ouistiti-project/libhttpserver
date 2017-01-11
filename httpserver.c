@@ -387,6 +387,7 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 	}
 	if (client->session_storage)
 		free(client->session_storage);
+	dbg("free %p\n",client);
 	free(client);
 }
 
@@ -461,6 +462,11 @@ static int _httpclient_connect(http_client_t *client)
 	request->client = client;
 	while (size == CHUNKSIZE - 1)
 	{
+		/**
+		 * here, it is the call to the recvreq callback from the
+		 * server configuration.
+		 * see http_server_config_t and httpserver_create
+		 */
 		char data[CHUNKSIZE];
 		size = client->recvreq(client->ctx, data, CHUNKSIZE - 1);
 		if (size < 0)
@@ -522,6 +528,11 @@ static int _httpclient_connect(http_client_t *client)
 	buffer_t *header = _buffer_create();
 	_httpmessage_buildheader(client, response, header);
 
+	/**
+	 * here, it is the call to the sendresp callback from the
+	 * server configuration.
+	 * see http_server_config_t and httpserver_create
+	 */
 	size = client->sendresp(client->ctx, header->data, header->length);
 	if (size < 0)
 	{
@@ -563,6 +574,8 @@ socket_closed:
 		_httpmessage_destroy(response);
 	if (request)
 		_httpmessage_destroy(request);
+	client->state |= CLIENT_STOPPED;
+	client->state &= ~(CLIENT_RUNNING | CLIENT_STARTED);
 	if (!(client->state & CLIENT_KEEPALIVE))
 	{
 		if (client->freectx)
@@ -573,8 +586,6 @@ socket_closed:
 	{
 		dbg("keepalive\n");
 	}
-	client->state |= CLIENT_STOPPED;
-	client->state &= ~(CLIENT_RUNNING | CLIENT_STARTED);
 	dbg("%s goodbye\n",__FUNCTION__);
 	return 0;
 }
@@ -612,7 +623,7 @@ static int _httpserver_connect(http_server_t *server)
 				// Create new client socket to communicate
 				unsigned int size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &size);
-				dbg("new client\n");
+				dbg("new client %p\n", client);
 				if (server->config && server->config->callback.getctx)
 				{
 					client->ctx = server->config->callback.getctx(client, (struct sockaddr *)&client->addr, size);
