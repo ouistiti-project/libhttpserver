@@ -143,6 +143,7 @@ struct http_message_s
 	char *uri;
 	char *version;
 	dbentry_t *headers;
+	void *private;
 };
 
 struct http_server_callback_s
@@ -818,6 +819,13 @@ void httpserver_destroy(http_server_t *server)
 #ifdef WIN32
 	WSACleanup();
 #endif
+}
+
+void *httpmessage_private(http_message_t *message, void *data)
+{
+	if (data != NULL)
+		message->private = data;
+	return message->private;
 }
 
 void httpmessage_addheader(http_message_t *message, char *key, char *value)

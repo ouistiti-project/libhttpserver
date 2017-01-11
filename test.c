@@ -27,6 +27,7 @@
 
 #ifdef HTTPSERVER
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -67,12 +68,15 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 struct test_config_s
 {
 	char *rootdoc;
-	FILE *fileno;
 };
 struct test_config_s g_test_config = 
 {
 	.rootdoc = "/srv/www/htdocs",
-	.fileno = NULL,
+};
+struct test_connection_s
+{
+	int type;
+	FILE *fileno;
 };
 struct test_config_s *test_config = &g_test_config;
 int test_func(void *arg, http_message_t *request, http_message_t *response)
@@ -80,8 +84,12 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 	struct test_config_s *config = (struct test_config_s *)arg;
 	char content[64];
 	int size;
-	if (!config->fileno)
+	struct test_connection_s *private = httpmessage_private(request, NULL);
+	if (!private)
 	{
+		private = calloc(1, sizeof(*private));
+		private->type = 0xAABBCCDD;
+
 		char filepath[512];
 		snprintf(filepath, 511, "%s%s", config->rootdoc, httpmessage_REQUEST(request, "uri"));
 		struct stat filestat;
@@ -97,17 +105,24 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 			return EREJECT;
 		}
 		printf("open file %d %s\n", filestat.st_size, filepath);
-			httpmessage_addheader(response, "Server", "libhttpserver");
-			config->fileno = fopen(filepath, "rb");
+		httpmessage_addheader(response, "Server", "libhttpserver");
+		private->fileno = fopen(filepath, "rb");
+		httpmessage_private(request, (void *)private);
 	}
-	if (feof(config->fileno))
+	/**
+	 * TODO support of private from another callback
+	 */
+	if (private->type != 0xAABBCCDD)
+		return EREJECT;
+	if (feof(private->fileno))
 	{
 		printf("end of file\n");
-		fclose(config->fileno);
-		config->fileno = NULL;
+		fclose(private->fileno);
+		private->fileno = NULL;
+		free(private);
 		return ESUCCESS;
 	}
-	size = fread(content, 1, sizeof(content), config->fileno);
+	size = fread(content, 1, sizeof(content), private->fileno);
 	printf("read %d %d\n", size, sizeof(content));
 	httpmessage_addcontent(response, "text/html", content, size);
 	return ECONTINUE;

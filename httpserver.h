@@ -164,6 +164,17 @@ void httpserver_destroy(http_server_t *server);
 /*****************************************/
 /** internal functions for the callback **/
 /*****************************************/
+/**
+ * @brief store and return private data for callback
+ *
+ * @param message the response message to update
+ * @param data the pointer on the data to store, 
+ * 	      may be null to retreive the previous storage.
+ * 
+ * @return the same pointer as stored
+ */
+void *httpmessage_private(http_message_t *message, void *data);
+
 typedef enum
 {
 	RESULT_200,
