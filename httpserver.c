@@ -509,7 +509,7 @@ static int _httpclient_connect(http_client_t *client)
 			if (cburl == NULL && callback->func)
 			{
 				ret = callback->func(callback->arg, request, response);
-				if (ret == ESUCCESS)
+				if (ret != EREJECT)
 					break;
 			}
 			callback = callback->next;
@@ -541,7 +541,9 @@ static int _httpclient_connect(http_client_t *client)
 	}
 	_buffer_destroy(header);
 
-	if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
+	if (response->result == RESULT_200 &&
+		response->content->length > 0 &&
+		request->type != MESSAGE_TYPE_HEAD)
 	{
 		size = client->sendresp(client->ctx, response->content->data, response->content->length);
 		if (size < 0)
@@ -551,13 +553,15 @@ static int _httpclient_connect(http_client_t *client)
 		}
 	}
 
-	while (ret != ESUCCESS)
+	while (ret == ECONTINUE)
 	{
 		if (callback && callback->func)
 		{
 			ret = callback->func(callback->arg, request, response);
 		}
-		if (response->content != NULL && request->type != MESSAGE_TYPE_HEAD)
+		if (response->result == RESULT_200 &&
+			response->content->length > 0 &&
+			request->type != MESSAGE_TYPE_HEAD)
 		{
 			size = client->sendresp(client->ctx, response->content->data, response->content->length);
 			if (size < 0)
