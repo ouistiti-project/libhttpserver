@@ -116,8 +116,6 @@ typedef struct http_server_config_s
 		void *generic_ctx;
 		http_getctx_t getctx;
 		http_freectx_t freectx;
-		http_recv_t recvreq;
-		http_send_t sendresp;
 	} callback;
 } http_server_config_t;
 
@@ -241,6 +239,23 @@ char *httpmessage_SERVER(http_message_t *message, char *key);
  */
 char *httpmessage_REQUEST(http_message_t *message, char *key);
 
+/**********************************************************************/
+/**
+ * @brief add a request receiver callback
+ *
+ * @param client the connection that is receiving the request
+ * @param func the callback
+ * @param arg the first parameter of the callback
+ */
+void httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg);
+/**
+ * @brief add a response sender callback
+ *
+ * @param client the connection that received the request
+ * @param func the callback
+ * @param arg the first parameter of the callback
+ */
+void httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
 /**
  * @brief read data on the client socket
  * 
@@ -262,7 +277,6 @@ int httpclient_recv(void *ctl, char *data, int length);
  */
 int httpclient_send(void *ctl, char *data, int length);
 
-
 /**
  * @brief give server configuration
  * 
@@ -271,7 +285,6 @@ int httpclient_send(void *ctl, char *data, int length);
  * @return the configuration structure of the server
  */
 http_server_config_t *httpclient_getconfig(void *ctl);
-
 #ifdef __cplusplus
 }
 #endif

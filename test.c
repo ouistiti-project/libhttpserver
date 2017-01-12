@@ -47,8 +47,9 @@ int client = 0;
 #ifdef MBEDTLS
 #include "mod_mbedtls.h"
 #endif
-
-#define TEST_FILE
+#ifdef STATIC_FILE
+#include "mod_static_file.h"
+#endif
 
 char test_content[] = "<html><head><link rel=\"stylesheet\" href=\"styles.css\"></head><body>coucou<br/></body></html>";
 #ifdef TEST_STREAMING
@@ -135,9 +136,14 @@ struct test_config_s
 struct test_config_s *test_config = NULL;
 int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
+	printf("%s hello\n", __FUNCTION__);
+	char * test = strstr(httpmessage_REQUEST(request, "uri"), "test");
+	if (test == NULL)
+		return EREJECT;
 	httpmessage_addheader(response, "Server", "libhttpserver");
 	httpmessage_addcontent(response, "text/html", test_content, strlen(test_content));
-	return 0;
+	printf("%s goodbye\n", __FUNCTION__);
+	return ESUCCESS;
 }
 #endif
 
@@ -161,14 +167,16 @@ int main(int argc, char * const *argv)
 		.cachain = NULL,
 		.dhmfile = "/etc/ssl/private/dhparam.pem",
 	};
-	void * mod = mod_mbedtls_create(&mbedtlsconfig);
-	config = mod_mbedtls_getmod(mod);
+	void *mod_mbedtls = mod_mbedtls_create(&mbedtlsconfig);
+	config = mod_mbedtls_getmod(mod_mbedtls);
 #endif
 	http_server_t *server = httpserver_create(config);
 	if (server)
 	{
-		
 		httpserver_addconnector(server, NULL, test_func, test_config);
+#ifdef STATIC_FILE
+		void *mod_static_file = mod_static_file_create(server, NULL);
+#endif
 #ifndef WIN32
 		if (user != NULL)
 		{
@@ -200,10 +208,13 @@ int main(int argc, char * const *argv)
 		}
 #endif
 		httpserver_disconnect(server);
-	}
 #ifdef MBEDTLS
-	mod_mbedtls_destroy(mod);
+		mod_mbedtls_destroy(mod_mbedtls);
 #endif
+#ifdef STATIC_FILE
+		mod_static_file_destroy(mod_static_file);
+#endif
+	}
 	return 0;
 }
 #endif

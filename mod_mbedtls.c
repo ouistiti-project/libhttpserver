@@ -27,11 +27,13 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/certs.h>
 #include <mbedtls/x509.h>
+#include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
 
 #include "httpserver.h"
@@ -58,6 +60,11 @@ typedef struct _mod_mbedtls_config_s
 } _mod_mbedtls_config_t;
 
 static http_server_config_t mod_mbedtls_config;
+
+static void *_mod_mbedtls_getctx(http_client_t *ctl, struct sockaddr *addr, int addrsize);
+static void _mod_mbedtls_freectx(void *vctx);
+static int _mod_mbedtls_recv(void *vctx, char *data, int size);
+static int _mod_mbedtls_send(void *vctx, char *data, int size);
 
 void *mod_mbedtls_create(mod_mbedtls_t *modconfig)
 {
@@ -163,6 +170,30 @@ void *mod_mbedtls_getmod(void *mod)
 	return (void *)&mod_mbedtls_config;
 }
 
+static int _mod_mbedtls_read(void *ctl, unsigned char *data, int size)
+{
+	int ret = httpclient_recv(ctl, data, size);
+	if (ret < 0  && errno == EAGAIN)
+	{
+		ret = MBEDTLS_ERR_SSL_WANT_READ;
+	}
+	else if (ret < 0)
+		ret = MBEDTLS_ERR_NET_RECV_FAILED;
+	return ret;
+}
+
+static int _mod_mbedtls_write(void *ctl, unsigned char *data, int size)
+{
+	int ret = httpclient_send(ctl, data, size);
+	if (ret < 0  && errno == EAGAIN)
+	{
+		ret = MBEDTLS_ERR_SSL_WANT_WRITE;
+	}
+	else if (ret < 0)
+		ret = MBEDTLS_ERR_NET_SEND_FAILED;
+	return ret;
+}
+
 static void *_mod_mbedtls_getctx(http_client_t *ctl, struct sockaddr *addr, int addrsize)
 {
 	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
@@ -171,12 +202,18 @@ static void *_mod_mbedtls_getctx(http_client_t *ctl, struct sockaddr *addr, int 
 
 	mbedtls_ssl_init(&ctx->ssl);
 	mbedtls_ssl_setup(&ctx->ssl, &config->conf);
-	mbedtls_ssl_set_bio(&ctx->ssl, ctl, (mbedtls_ssl_send_t *)httpclient_send, (mbedtls_ssl_recv_t *)httpclient_recv, NULL);
+	mbedtls_ssl_set_bio(&ctx->ssl, ctl, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
+	httpclient_addreceiver(ctl, _mod_mbedtls_recv, ctx);
+	httpclient_addsender(ctl, _mod_mbedtls_send, ctx);
 	return ctx;
 }
 
 static void _mod_mbedtls_freectx(void *vctx)
 {
+	int ret;
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
+	while ((ret = mbedtls_ssl_close_notify(&ctx->ssl)) == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+	mbedtls_ssl_free(&ctx->ssl);
 }
 
 static int _mod_mbedtls_recv(void *vctx, char *data, int size)
@@ -200,7 +237,11 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 	if (ctx->state & RECV_COMPLETE)
 		return ESUCCESS;
 
-	ret = mbedtls_ssl_read(&ctx->ssl, data, size);
+	do
+	{
+		ret = mbedtls_ssl_read(&ctx->ssl, data, size);
+	}
+	while (ret == MBEDTLS_ERR_SSL_WANT_READ);
 	if (ret < size)
 		ctx->state |= RECV_COMPLETE;
 	return ret;
@@ -210,7 +251,7 @@ static int _mod_mbedtls_send(void *vctx, char *data, int size)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
-	mbedtls_ssl_write(&ctx->ssl, data, size);
+	ret = mbedtls_ssl_write(&ctx->ssl, data, size);
 	return ret;
 }
 
@@ -222,7 +263,5 @@ static http_server_config_t mod_mbedtls_config =
 	{
 		.getctx = _mod_mbedtls_getctx,
 		.freectx = _mod_mbedtls_freectx,
-		.recvreq = _mod_mbedtls_recv,
-		.sendresp = _mod_mbedtls_send,
 	},
 };

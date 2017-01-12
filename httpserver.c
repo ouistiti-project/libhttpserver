@@ -69,14 +69,15 @@ extern "C" {
 
 #endif
 
-#include "vthread.h"
-#include "httpserver.h"
-
 #ifdef DEBUG
-# define dbg	printf
+# define dbg(...)	fprintf(stderr, __VA_ARGS__)
 #else
 # define dbg(...)
 #endif
+
+
+#include "vthread.h"
+#include "httpserver.h"
 
 struct dbentry_s
 {
@@ -227,7 +228,6 @@ static http_message_t * _httpmessage_create(http_server_t *server, http_message_
 	if (parent)
 	{
 		message->type = parent->type;
-		message->headers = parent->headers;
 		message->client = parent->client;
 	}
 	return message;
@@ -503,6 +503,18 @@ void httpclient_addconnector(http_client_t *client, char *url, http_connector_t 
 	client->callbacks = callback;
 }
 
+void httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
+{
+	client->recvreq = func;
+	client->ctx = arg;
+}
+
+void httpclient_addsender(http_client_t *client, http_send_t func, void *arg)
+{
+	client->sendresp = func;
+	client->ctx = arg;
+}
+
 int httpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
@@ -555,7 +567,6 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	_buffer_append(header, "\r\n", 2);
-	dbg("headers: \n%s\n", header->data);
 	return ESUCCESS;
 }
 
@@ -628,9 +639,13 @@ static int _httpclient_connect(http_client_t *client)
 			callback = callback->next;
 		}
 		if (callback == NULL)
+		{
 			response->result = RESULT_404;
+		}
 		if (response->keepalive)
+		{
 			client->state |= CLIENT_KEEPALIVE;
+		}
 	}
 	else if (ret != EINCOMPLETE && size > 0)
 	{
@@ -649,7 +664,7 @@ static int _httpclient_connect(http_client_t *client)
 	size = client->sendresp(client->ctx, header->data, header->length);
 	if (size < 0)
 	{
-		client->state &= CLIENT_KEEPALIVE;
+		client->state &= ~CLIENT_KEEPALIVE;
 		goto socket_closed;
 	}
 	_buffer_destroy(header);
@@ -661,7 +676,7 @@ static int _httpclient_connect(http_client_t *client)
 		size = client->sendresp(client->ctx, response->content->data, response->content->length);
 		if (size < 0)
 		{
-			client->state &= CLIENT_KEEPALIVE;
+			client->state &= ~CLIENT_KEEPALIVE;
 			goto socket_closed;
 		}
 	}
@@ -679,7 +694,7 @@ static int _httpclient_connect(http_client_t *client)
 			size = client->sendresp(client->ctx, response->content->data, response->content->length);
 			if (size < 0)
 			{
-				client->state &= CLIENT_KEEPALIVE;
+				client->state &= ~CLIENT_KEEPALIVE;
 				goto socket_closed;
 			}
 		}
@@ -740,20 +755,15 @@ static int _httpserver_connect(http_server_t *server)
 				// Create new client socket to communicate
 				unsigned int size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &size);
-				dbg("new client %p\n", client);
+
+				client->recvreq = httpclient_recv;
+				client->sendresp = httpclient_send;
+				client->ctx = client;
+				client->freectx = NULL;
 				if (server->config && server->config->callback.getctx)
 				{
 					client->ctx = server->config->callback.getctx(client, (struct sockaddr *)&client->addr, size);
 					client->freectx = server->config->callback.freectx;
-					client->recvreq = server->config->callback.recvreq;
-					client->sendresp = server->config->callback.sendresp;
-				}
-				else
-				{
-					client->freectx = NULL;
-					client->recvreq = httpclient_recv;
-					client->sendresp = httpclient_send;
-					client->ctx = client;
 				}
 
 				http_connector_list_t *callback = server->callbacks;
@@ -762,6 +772,7 @@ static int _httpserver_connect(http_server_t *server)
 					httpclient_addconnector(client, callback->url, callback->func, callback->arg);
 					callback = callback->next;
 				}
+
 				client->next = server->clients;
 				server->clients = client;
 
@@ -927,6 +938,7 @@ void httpserver_disconnect(http_server_t *server)
 {
 	if (server->thread)
 	{
+		server->run = 0;
 		vthread_join(server->thread, NULL);
 		server->thread = 0;
 	}
