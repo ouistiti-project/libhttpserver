@@ -102,10 +102,8 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 		}
 		if (ret != 0)
 		{
-			printf("file: %s not found\n", filepath);
 			return EREJECT;
 		}
-		printf("open file %d %s\n", filestat.st_size, filepath);
 		httpmessage_addheader(response, "Server", "libhttpserver");
 		private->fileno = fopen(filepath, "rb");
 		httpmessage_private(request, (void *)private);
@@ -117,14 +115,12 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 		return EREJECT;
 	if (feof(private->fileno))
 	{
-		printf("end of file\n");
 		fclose(private->fileno);
 		private->fileno = NULL;
 		free(private);
 		return ESUCCESS;
 	}
 	size = fread(content, 1, sizeof(content), private->fileno);
-	printf("read %d %d\n", size, sizeof(content));
 	httpmessage_addcontent(response, "text/html", content, size);
 	return ECONTINUE;
 }
@@ -136,20 +132,22 @@ struct test_config_s
 struct test_config_s *test_config = NULL;
 int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
-	printf("%s hello\n", __FUNCTION__);
 	char * test = strstr(httpmessage_REQUEST(request, "uri"), "test");
 	if (test == NULL)
 		return EREJECT;
 	httpmessage_addheader(response, "Server", "libhttpserver");
 	httpmessage_addcontent(response, "text/html", test_content, strlen(test_content));
-	printf("%s goodbye\n", __FUNCTION__);
 	return ESUCCESS;
 }
 #endif
 
 int main(int argc, char * const *argv)
 {
+#ifdef MBEDTLS
+	http_server_config_t *config = &(http_server_config_t){ .port = 443, .addr = NULL, };
+#else
 	http_server_config_t *config = NULL;
+#endif
 #ifndef WIN32
 	struct passwd *user;
 
@@ -158,22 +156,21 @@ int main(int argc, char * const *argv)
 		user = getpwnam("apache");
 #endif
 	setbuf(stdout, NULL);
-#ifdef MBEDTLS
-	mod_mbedtls_t mbedtlsconfig = 
-	{
-		.pers = "httpserver-mbedtls",
-		.crtfile = "/etc/ssl/private/server.pem",
-		.pemfile = NULL,
-		.cachain = NULL,
-		.dhmfile = "/etc/ssl/private/dhparam.pem",
-	};
-	void *mod_mbedtls = mod_mbedtls_create(&mbedtlsconfig);
-	config = mod_mbedtls_getmod(mod_mbedtls);
-#endif
 	http_server_t *server = httpserver_create(config);
 	if (server)
 	{
 		httpserver_addconnector(server, NULL, test_func, test_config);
+#ifdef MBEDTLS
+		mod_mbedtls_t mbedtlsconfig = 
+		{
+			.pers = "httpserver-mbedtls",
+			.crtfile = "/etc/ssl/private/server.pem",
+			.pemfile = NULL,
+			.cachain = NULL,
+			.dhmfile = "/etc/ssl/private/dhparam.pem",
+		};
+		void *mod_mbedtls = mod_mbedtls_create(server, &mbedtlsconfig);
+#endif
 #ifdef STATIC_FILE
 		void *mod_static_file = mod_static_file_create(server, NULL);
 #endif

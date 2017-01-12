@@ -105,6 +105,12 @@ struct http_connector_list_s
 };
 typedef struct http_connector_list_s http_connector_list_t;
 
+typedef struct http_server_mod_s
+{
+	void *arg;
+	http_getctx_t func;
+	http_freectx_t freectx;
+} http_server_mod_t;
 
 #define CLIENT_STARTED 0x01
 #define CLIENT_RUNNING 0x02
@@ -169,6 +175,7 @@ struct http_server_s
 	http_client_t *clients;
 	http_connector_list_t *callbacks;
 	http_server_config_t *config;
+	http_server_mod_t *mod;
 };
 
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
@@ -531,14 +538,6 @@ int httpclient_send(void *ctl, char *data, int length)
 	return ret;
 }
 
-http_server_config_t *httpclient_getconfig(void *ctl)
-{
-	http_client_t *client = (http_client_t *)ctl;
-
-	return client->server->config;
-}
- 
-
 static const char *_http_message_result[] =
 {
 	"200 OK",
@@ -722,6 +721,15 @@ socket_closed:
 	return 0;
 }
 
+void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg)
+{
+	if (!server->mod)
+		server->mod = calloc(1, sizeof(*server->mod));
+	server->mod->func = mod;
+	server->mod->freectx = unmod;
+	server->mod->arg = arg;
+}
+
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
@@ -760,10 +768,10 @@ static int _httpserver_connect(http_server_t *server)
 				client->sendresp = httpclient_send;
 				client->ctx = client;
 				client->freectx = NULL;
-				if (server->config && server->config->callback.getctx)
+				if (server->mod && server->mod->func)
 				{
-					client->ctx = server->config->callback.getctx(client, (struct sockaddr *)&client->addr, size);
-					client->freectx = server->config->callback.freectx;
+					client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, size);
+					client->freectx = server->mod->freectx;
 				}
 
 				http_connector_list_t *callback = server->callbacks;
@@ -809,7 +817,6 @@ static http_server_config_t defaultconfig = {
 	.port = 80,
 	.maxclient = 10,
 	.chunksize = 64,
-	.callback = { NULL, NULL, NULL},
 };
 
 http_server_t *httpserver_create(http_server_config_t *config)
@@ -946,6 +953,8 @@ void httpserver_disconnect(http_server_t *server)
 
 void httpserver_destroy(http_server_t *server)
 {
+	if (server->mod)
+		free(server->mod);
 	free(server);
 #ifdef WIN32
 	WSACleanup();

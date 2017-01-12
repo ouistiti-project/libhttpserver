@@ -61,12 +61,12 @@ typedef struct _mod_mbedtls_config_s
 
 static http_server_config_t mod_mbedtls_config;
 
-static void *_mod_mbedtls_getctx(http_client_t *ctl, struct sockaddr *addr, int addrsize);
+static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize);
 static void _mod_mbedtls_freectx(void *vctx);
 static int _mod_mbedtls_recv(void *vctx, char *data, int size);
 static int _mod_mbedtls_send(void *vctx, char *data, int size);
 
-void *mod_mbedtls_create(mod_mbedtls_t *modconfig)
+void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 {
 	int ret;
 	int is_set_pemkey = 0;
@@ -149,6 +149,8 @@ void *mod_mbedtls_create(mod_mbedtls_t *modconfig)
 		if (ret)
 			printf("mbedtls_dhm_parse_dhmfile %d\n", ret);
 	}
+
+	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config);
 	return config;
 }
 
@@ -162,12 +164,6 @@ void mod_mbedtls_destroy(void *mod)
 	mbedtls_ctr_drbg_free(&config->ctr_drbg);
 	mbedtls_entropy_free(&config->entropy);
 	mbedtls_ssl_config_free(&config->conf);
-}
-
-void *mod_mbedtls_getmod(void *mod)
-{
-	mod_mbedtls_config.callback.generic_ctx = mod;
-	return (void *)&mod_mbedtls_config;
 }
 
 static int _mod_mbedtls_read(void *ctl, unsigned char *data, int size)
@@ -194,11 +190,10 @@ static int _mod_mbedtls_write(void *ctl, unsigned char *data, int size)
 	return ret;
 }
 
-static void *_mod_mbedtls_getctx(http_client_t *ctl, struct sockaddr *addr, int addrsize)
+static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize)
 {
 	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
-	http_server_config_t *sconfig = httpclient_getconfig(ctl);
-	_mod_mbedtls_config_t *config = (_mod_mbedtls_config_t *)(sconfig->callback.generic_ctx);
+	_mod_mbedtls_config_t *config = (_mod_mbedtls_config_t *)arg;
 
 	mbedtls_ssl_init(&ctx->ssl);
 	mbedtls_ssl_setup(&ctx->ssl, &config->conf);
@@ -254,14 +249,3 @@ static int _mod_mbedtls_send(void *vctx, char *data, int size)
 	ret = mbedtls_ssl_write(&ctx->ssl, data, size);
 	return ret;
 }
-
-static http_server_config_t mod_mbedtls_config = 
-{
-	.addr = NULL,
-	.port = 443,
-	.callback =
-	{
-		.getctx = _mod_mbedtls_getctx,
-		.freectx = _mod_mbedtls_freectx,
-	},
-};
