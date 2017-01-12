@@ -94,6 +94,17 @@ typedef struct buffer_s
 	int length;
 } buffer_t;
 
+struct http_connector_list_s
+{
+	char *url;
+	int url_length;
+	http_connector_t func;
+	void *arg;
+	struct http_connector_list_s *next;
+};
+typedef struct http_connector_list_s http_connector_list_t;
+
+
 #define CLIENT_STARTED 0x01
 #define CLIENT_RUNNING 0x02
 #define CLIENT_STOPPED 0x04
@@ -107,6 +118,7 @@ struct http_client_s
 	http_freectx_t freectx;
 	http_recv_t recvreq;
 	http_send_t sendresp;
+	http_connector_list_t *callbacks;
 	void *ctx;
 	dbentry_t *session;
 	buffer_t *session_storage;
@@ -148,23 +160,13 @@ struct http_message_s
 	void *private;
 };
 
-struct http_server_callback_s
-{
-	char *url;
-	int url_length;
-	http_connector_t func;
-	void *arg;
-	struct http_server_callback_s *next;
-};
-typedef struct http_server_callback_s http_server_callback_t;
-
 struct http_server_s
 {
 	int sock;
 	int run;
 	vthread_t thread;
 	http_client_t *clients;
-	http_server_callback_t *callbacks;
+	http_connector_list_t *callbacks;
 	http_server_config_t *config;
 };
 
@@ -484,6 +486,23 @@ static void _httpserver_closeclient(http_server_t *server, http_client_t *client
 	free(client);
 }
 
+void httpclient_addconnector(http_client_t *client, char *url, http_connector_t func, void *funcarg)
+{
+	http_connector_list_t *callback;
+
+	callback = calloc(1, sizeof(*callback));
+	if (url)
+	{
+		callback->url_length = strlen(url);
+		callback->url = malloc(callback->url_length + 1);
+		strcpy(callback->url, url);
+	}
+	callback->func = func;
+	callback->arg = funcarg;
+	callback->next = client->callbacks;
+	client->callbacks = callback;
+}
+
 int httpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
@@ -536,7 +555,7 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	_buffer_append(header, "\r\n", 2);
-	printf("headers: \n%s\n", header->data);
+	dbg("headers: \n%s\n", header->data);
 	return ESUCCESS;
 }
 
@@ -545,7 +564,7 @@ static int _httpclient_connect(http_client_t *client)
 	http_message_t *request = NULL;
 	http_message_t *response = NULL;
 	http_server_t *server = client->server;
-	http_server_callback_t *callback = server->callbacks;
+	http_connector_list_t *callback = client->callbacks;
 	int size = CHUNKSIZE - 1;
 	int ret = EINCOMPLETE;
 
@@ -736,6 +755,13 @@ static int _httpserver_connect(http_server_t *server)
 					client->sendresp = httpclient_send;
 					client->ctx = client;
 				}
+
+				http_connector_list_t *callback = server->callbacks;
+				while (callback != NULL)
+				{
+					httpclient_addconnector(client, callback->url, callback->func, callback->arg);
+					callback = callback->next;
+				}
 				client->next = server->clients;
 				server->clients = client;
 
@@ -875,7 +901,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 
 void httpserver_addconnector(http_server_t *server, char *url, http_connector_t func, void *funcarg)
 {
-	http_server_callback_t *callback;
+	http_connector_list_t *callback;
 	
 	callback = calloc(1, sizeof(*callback));
 	if (url)
