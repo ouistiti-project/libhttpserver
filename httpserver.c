@@ -136,12 +136,14 @@ struct http_message_s
 		PARSE_URI,
 		PARSE_VERSION,
 		PARSE_HEADER,
+		PARSE_HEADERNEXT,
 		PARSE_CONTENT,
 		PARSE_END,
 	} state;
 	buffer_t *content;
-	char *uri;
+	buffer_t *uri;
 	char *version;
+	buffer_t *headers_storage;
 	dbentry_t *headers;
 	void *private;
 };
@@ -165,6 +167,8 @@ struct http_server_s
 	http_server_callback_t *callbacks;
 	http_server_config_t *config;
 };
+
+static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
 
 /********************************************************************/
 #define CHUNKSIZE 64
@@ -201,6 +205,11 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 	return offset;
 }
 
+static void _buffer_reset(buffer_t *buffer)
+{
+	buffer->offset = buffer->data;
+}
+
 static void _buffer_destroy(buffer_t *buffer)
 {
 	free(buffer->data);
@@ -223,149 +232,232 @@ static http_message_t * _httpmessage_create(http_server_t *server, http_message_
 }
 static void _httpmessage_destroy(http_message_t *message)
 {
-	_buffer_destroy(message->content);
+	if (message->uri)
+		_buffer_destroy(message->uri);
+	if (message->content)
+		_buffer_destroy(message->content);
+	if (message->headers_storage)
+		_buffer_destroy(message->headers_storage);
 	free(message);
 }
 
-static int _httpmessage_readline(char **out, http_message_t *message)
+static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 {
-	if (*out == NULL)
-		*out = message->content->offset;
-	while (message->content->offset < message->content->data + message->content->size)
+	int ret = ECONTINUE;
+	static char *key = NULL;
+	static char *value = NULL;
+	do
 	{
-		if (*message->content->offset == ' ')
+		int next = message->state;
+		switch (message->state)
 		{
-			message->content->offset++;
-			return ESPACE;
-		}
-		if (*message->content->offset == '\r')
-		{
-			*message->content->offset = 0; // add zero terminating  line
-			message->content->offset++;
-		}
-		if (*message->content->offset == '\n')
-		{
-			*message->content->offset = 0; // add zero terminating  line
-			message->content->offset++;
-			return ESUCCESS;
-		}
-		message->content->offset++;
-	}
-	return EINCOMPLETE;
-}
-
-static int _httpserver_parserequest(http_server_t *server, http_message_t *message)
-{
-	switch (message->state)
-	{
-		case PARSE_INIT:
-		{
-			if (!strncasecmp(message->content->offset,"GET ",4))
+			case PARSE_INIT:
 			{
-				message->type = MESSAGE_TYPE_GET;
-				message->content->offset += 4;
-				message->state = PARSE_URI;
-			}
-			else if (!strncasecmp(message->content->offset,"POST ",5))
-			{
-				message->type = MESSAGE_TYPE_POST;
-				message->content->offset += 5;
-				message->state = PARSE_URI;
-			}
-			else if (!strncasecmp(message->content->offset,"HEAD ",5))
-			{
-				message->type = MESSAGE_TYPE_HEAD;
-				message->content->offset += 5;
-				message->state = PARSE_HEADER;
-			}
-			while (*message->content->offset == ' ')
-				message->content->offset++;
-		}
-		break;
-		case PARSE_URI:
-		{
-			int ret = _httpmessage_readline(&message->uri, message);
-			switch (ret)
-			{
-				case ESPACE:
-					*(message->content->offset - 1) = 0; // add zero terminating  line
-					message->state = PARSE_VERSION;
-				break;
-				case ESUCCESS:
-					message->state = PARSE_HEADER;
-				break;
-				case EINCOMPLETE:
-					return EINCOMPLETE;
-				break;
-				default:
-				break;
-			}
-			return ECONTINUE;
-		}
-		break;
-		case PARSE_VERSION:
-		{
-			int ret = _httpmessage_readline(&message->version, message);
-			switch (ret)
-			{
-				case ESPACE:
-				break;
-				case ESUCCESS:
-					message->state = PARSE_HEADER;
-				break;
-				case EINCOMPLETE:
-					return EINCOMPLETE;
-				break;
-				default:
-				break;
-			}
-			return ECONTINUE;
-		}
-		break;
-		case PARSE_HEADER:
-		{
-			int ret;
-			char *header = NULL;
-			do
-			{
-				ret = _httpmessage_readline(&header, message);
-				switch (ret)
+				key = NULL;
+				value = NULL;
+				if (!strncasecmp(data->offset,"GET ",4))
 				{
-					case ESPACE:
-					break;
-					case ESUCCESS:
+					message->type = MESSAGE_TYPE_GET;
+					data->offset += 4;
+					next = PARSE_URI;
+				}
+				else if (!strncasecmp(data->offset,"POST ",5))
+				{
+					message->type = MESSAGE_TYPE_POST;
+					data->offset += 5;
+					next = PARSE_URI;
+				}
+				else if (!strncasecmp(data->offset,"HEAD ",5))
+				{
+					message->type = MESSAGE_TYPE_HEAD;
+					data->offset += 5;
+					next = PARSE_URI;
+				}
+				else
+				{
+					data->offset++;
+				}
+			}
+			break;
+			case PARSE_URI:
+			{
+				char *uri = data->offset;
+				int length = 0;
+				while (data->offset < (data->data + data->size) && next == PARSE_URI)
+				{
+					switch (*data->offset)
 					{
-						if (header[0] == 0) // this is an empty line, the end of the header
+						case ' ':
 						{
-							message->state = PARSE_CONTENT;
+							next = PARSE_VERSION;
 						}
-						else
+						break;
+						case '\r':
 						{
-							char *key = strtok(header, ": ");
-							char *value = strtok(NULL, "");
-							httpmessage_addheader(message, key, value);
+							next = PARSE_HEADER;
+							*data->offset = '\0';
+							if (*data->offset == '\n')
+								data->offset++;
+						}
+						break;
+						case '\n':
+						{
+							next = PARSE_HEADER;
+							*data->offset = '\0';
+						}
+						break;
+						default:
+						{
+							length++;
 						}
 					}
-					break;
-					case EINCOMPLETE:
-						return EINCOMPLETE;
+					data->offset++;
 				}
-			} while (ret != ESUCCESS);
-			return ECONTINUE;
+				
+				if (message->uri == NULL)
+					message->uri = _buffer_create();
+				_buffer_append(message->uri, uri, length);
+			}
+			break;
+			case PARSE_VERSION:
+			{
+				while (data->offset < (data->data + data->size) && next == PARSE_VERSION)
+				{
+					switch (*data->offset)
+					{
+						case '\r':
+						{
+							next = PARSE_HEADER;
+							if (data->offset[1] == '\n')
+							{
+								data->offset++;
+							}
+						}
+						break;
+						case '\n':
+						{
+							next = PARSE_HEADER;
+							if (data->offset[1] == '\r')
+							{
+								data->offset++;
+							}
+						}
+						break;
+						default:
+						{
+						}
+					}
+					data->offset++;
+				}
+			}
+			break;
+			case PARSE_HEADER:
+			{
+				char *header = data->offset;
+				int length = 0;
+				if (message->headers_storage == NULL)
+					message->headers_storage = _buffer_create();
+				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
+				{
+					switch (*data->offset)
+					{
+						case ':':
+						{
+							*data->offset = '\0';
+							header = _buffer_append(message->headers_storage, header, length + 1);
+							if (key == NULL)
+							{
+								key = header;
+								length = 0;
+							}
+							header = data->offset + 1;
+						}
+						case ' ':
+						{
+							/* remove first spaces */
+							if (header == data->offset)
+								header = data->offset + 1;
+						}
+						break;
+						case '\r':
+						{
+							*data->offset = '\0';
+						}
+						break;
+						case '\n':
+						{
+							if (length > 0)
+							{
+								*data->offset = '\0';
+								header = _buffer_append(message->headers_storage, header, length + 1);
+								if (value == NULL)
+								{
+									value = header;
+									length = 0;
+								}
+								next = PARSE_HEADERNEXT;
+							}
+							else
+								next = PARSE_CONTENT;
+						}
+						break;
+						default:
+						{
+							length++;
+						}
+					}
+					data->offset++;
+				}
+
+				/* not enougth data to complete the line */
+				if (next == PARSE_HEADER)
+				{
+					header = _buffer_append(message->headers_storage, header, length);
+					if (key == NULL)
+						key = header;
+					else if (value == NULL)
+						value = header;
+				}
+			}
+			break;
+			case PARSE_HEADERNEXT:
+			{
+				if (key != NULL && value != NULL)
+				{
+					dbg("header %s => %s\n", key, value);
+					_httpmessage_addheader(message, key, value);
+				}
+				key = NULL;
+				value = NULL;
+				next = PARSE_HEADER;
+			}
+			break;
+			case PARSE_CONTENT:
+			{
+				char *header = data->offset;
+				int length = 0;
+				while (data->offset < (data->data + data->size))
+				{
+					if (data->offset >= (data->data + data->length))
+					{
+						next = PARSE_END;
+					}
+					data->offset++;
+					length++;
+				}
+				_buffer_append(message->content, header, length);
+			}
+			case PARSE_END:
+			{
+				ret = ESUCCESS;
+			}
+			break;
 		}
-		break;
-		case PARSE_CONTENT:
-		{
-			message->state = PARSE_END;
-			return ECONTINUE;
-		}
-		case PARSE_END:
-		{
-			return ESUCCESS;
-		}
-		break;
-	}
-	return ECONTINUE;
+		if (next == message->state)
+			ret = EINCOMPLETE;
+		message->state = next;
+	} while (ret == ECONTINUE);
+	return ret;
 }
 
 static void _httpserver_closeclient(http_server_t *server, http_client_t *client)
@@ -444,6 +536,7 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	_buffer_append(header, "\r\n", 2);
+	printf("headers: \n%s\n", header->data);
 	return ESUCCESS;
 }
 
@@ -461,37 +554,37 @@ static int _httpclient_connect(http_client_t *client)
 	client->state |= CLIENT_RUNNING;
 	request = _httpmessage_create(client->server, NULL);
 	request->client = client;
-	while (size == CHUNKSIZE - 1)
+	buffer_t *tempo = _buffer_create();
+	do
 	{
 		/**
 		 * here, it is the call to the recvreq callback from the
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		char data[CHUNKSIZE];
-		size = client->recvreq(client->ctx, data, CHUNKSIZE - 1);
+		size = client->recvreq(client->ctx, tempo->data, tempo->size);
 		if (size < 0)
 		{
 			if (errno != EAGAIN)
+			{
 				warn("recv returns\n");
+				break;
+			}
 			else
 				size = 0;
-			break;
 		}
 		if (size > 0)
-			_buffer_append(request->content, data, size);
-	}
+		{
+			tempo->length = size;
+			ret = _httpmessage_parserequest(request, tempo);
+		}
+		_buffer_reset(tempo);
+	} while (ret != ESUCCESS);
+	_buffer_destroy(tempo);
 	if (size < 0)
 	{
 		goto socket_closed;
 	}
-	// parse the data while the message is complete
-	request->content->offset = request->content->data;
-	do
-	{
-		ret = _httpserver_parserequest(server, request);
-	}
-	while (ret != EINCOMPLETE && ret != ESUCCESS);
 	response = _httpmessage_create(server, request);
 	if (ret == ESUCCESS)
 	{
@@ -501,7 +594,7 @@ static int _httpclient_connect(http_client_t *client)
 			cburl = callback->url;
 			if (cburl != NULL)
 			{
-				char *path = request->uri;
+				char *path = request->uri->data;
 				if (cburl[0] != '/' && path[0] == '/')
 					path++;
 				if (!strncasecmp(cburl, path, callback->url_length))
@@ -830,6 +923,15 @@ void *httpmessage_private(http_message_t *message, void *data)
 
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
+	if (message->headers_storage == NULL)
+		message->headers_storage = _buffer_create();
+	key = _buffer_append(message->headers_storage, key, strlen(key) + 1);
+	value = _buffer_append(message->headers_storage, value, strlen(value) + 1);
+	_httpmessage_addheader(message, key, value);
+}
+
+static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
+{
 	dbentry_t *headerinfo;
 	headerinfo = calloc(1, sizeof(dbentry_t));
 	headerinfo->key = key;
@@ -872,7 +974,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
-			value = message->uri;
+			value = message->uri->data;
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
@@ -929,7 +1031,7 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
-			value = message->uri;
+			value = message->uri->data;
 	}
 	return value;
 }
