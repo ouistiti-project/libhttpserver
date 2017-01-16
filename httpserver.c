@@ -118,10 +118,11 @@ typedef struct http_server_mod_s
 #define CLIENT_KEEPALIVE 0x8000
 #define CLIENT_MACHINEMASK 0x00FF
 #define CLIENT_REQUEST 0x0000
-#define CLIENT_PARSER 0x0001
-#define CLIENT_RESPONSEHEADER 0x0002
-#define CLIENT_RESPONSECONTENT 0x0003
-#define CLIENT_COMPLETE 0x0004
+#define CLIENT_PARSER1 0x0001
+#define CLIENT_PARSER2 0x0002
+#define CLIENT_RESPONSEHEADER 0x0003
+#define CLIENT_RESPONSECONTENT 0x0004
+#define CLIENT_COMPLETE 0x0005
 struct http_client_s
 {
 	int sock;
@@ -552,101 +553,112 @@ static int _httpclient_connect(http_client_t *client)
 {
 	http_message_t *request = NULL;
 	http_message_t *response = NULL;
-	http_server_t *server = client->server;
 	http_connector_list_t *callback = client->callbacks;
-	int size = CHUNKSIZE - 1;
-	int ret = EINCOMPLETE;
 
 	client->state &= ~CLIENT_STARTED;
 	client->state |= CLIENT_RUNNING;
+	request = _httpmessage_create(client->server, NULL);
+	request->client = client;
+	response = _httpmessage_create(client->server, request);
+	response->client = client;
 	do
 	{
 		switch (client->state & CLIENT_MACHINEMASK)
 		{
 			case CLIENT_REQUEST:
 			{
-				request = _httpmessage_create(client->server, NULL);
-				request->client = client;
+				int ret = EINCOMPLETE;
+				int size = CHUNKSIZE - 1;
 				buffer_t *tempo = _buffer_create();
-				do
-				{
-					/**
-					 * here, it is the call to the recvreq callback from the
-					 * server configuration.
-					 * see http_server_config_t and httpserver_create
-					 */
-					size = client->recvreq(client->ctx, tempo->data, tempo->size);
-					if (size < 0)
-					{
-						if (errno != EAGAIN)
-						{
-							warn("recv returns\n");
-							break;
-						}
-						else
-							size = 0;
-					}
-					if (size > 0)
-					{
-						tempo->length = size;
-						ret = _httpmessage_parserequest(request, tempo);
-					}
-					_buffer_reset(tempo);
-				} while (ret != ESUCCESS);
-				_buffer_destroy(tempo);
+				/**
+				 * here, it is the call to the recvreq callback from the
+				 * server configuration.
+				 * see http_server_config_t and httpserver_create
+				 */
+				size = client->recvreq(client->ctx, tempo->data, tempo->size);
 				if (size < 0)
 				{
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-					break;
+					if (errno != EAGAIN)
+					{
+						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+						break;
+					}
+					else
+						size = 0;
 				}
-				client->state = CLIENT_PARSER | (client->state & ~CLIENT_MACHINEMASK);
-			}
-			break;
-			case CLIENT_PARSER:
-			{
-				response = _httpmessage_create(server, request);
+				if (size > 0)
+				{
+					tempo->length = size;
+					ret = _httpmessage_parserequest(request, tempo);
+				}
+				_buffer_destroy(tempo);
 				if (ret == ESUCCESS)
 				{
-					char *cburl = NULL;
-					while (callback != NULL)
-					{
-						cburl = callback->url;
-						if (cburl != NULL)
-						{
-							char *path = request->uri->data;
-							if (cburl[0] != '/' && path[0] == '/')
-								path++;
-							if (!strncasecmp(cburl, path, callback->url_length))
-								cburl = NULL;
-						}
-						if (cburl == NULL && callback->func)
-						{
-							ret = callback->func(callback->arg, request, response);
-							if (ret != EREJECT)
-								break;
-						}
-						callback = callback->next;
-					}
-					if (callback == NULL)
-					{
-						response->result = RESULT_404;
-					}
-					if (response->keepalive)
-					{
-						client->state |= CLIENT_KEEPALIVE;
-					}
+					client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				else if (ret != EINCOMPLETE && size > 0)
+				else if (ret == EREJECT)
 				{
 					response->result = RESULT_400;
-					request->type = MESSAGE_TYPE_HEAD;
-					ret = ESUCCESS;
+					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			break;
+			case CLIENT_PARSER1:
+			{
+				char *cburl = NULL;
+				if (callback == NULL)
+				{
+					response->result = RESULT_404;
+					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				else
+				{
+					cburl = callback->url;
+					if (cburl != NULL)
+					{
+						char *path = request->uri->data;
+						if (cburl[0] != '/' && path[0] == '/')
+							path++;
+						if (!strncasecmp(cburl, path, callback->url_length))
+							cburl = NULL;
+					}
+					if (cburl == NULL && callback->func)
+					{
+						int ret = EINCOMPLETE;
+						ret = callback->func(callback->arg, request, response);
+						if (ret != EREJECT)
+						{
+							/* callback is null to not recall the function */
+							if (ret == ESUCCESS)
+								callback = NULL;
+							client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+						}
+						else
+							callback = callback->next;
+					}
+					else
+						callback = callback->next;
+				}
+				if (response->keepalive)
+				{
+					client->state |= CLIENT_KEEPALIVE;
+				}
+			}
+			break;
+			case CLIENT_PARSER2:
+			{
+				int ret = EINCOMPLETE;
+				if (callback && callback->func)
+					ret = callback->func(callback->arg, request, response);
+				if (ret == ECONTINUE)
+					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+				else
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			break;
 			case CLIENT_RESPONSEHEADER:
 			{
+				int size = 0;
 				buffer_t *header = _buffer_create();
 				_httpmessage_buildheader(client, response, header);
 
@@ -672,35 +684,18 @@ static int _httpclient_connect(http_client_t *client)
 					response->content->length > 0 &&
 					request->type != MESSAGE_TYPE_HEAD)
 				{
+					int size = CHUNKSIZE - 1;
 					size = client->sendresp(client->ctx, response->content->data, response->content->length);
 					if (size < 0)
 					{
 						client->state &= ~CLIENT_KEEPALIVE;
 						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-						break;
 					}
+					else
+						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 				}
-
-				while (ret == ECONTINUE)
-				{
-					if (callback && callback->func)
-					{
-						ret = callback->func(callback->arg, request, response);
-					}
-					if (response->result == RESULT_200 &&
-						response->content->length > 0 &&
-						request->type != MESSAGE_TYPE_HEAD)
-					{
-						size = client->sendresp(client->ctx, response->content->data, response->content->length);
-						if (size < 0)
-						{
-							client->state &= ~CLIENT_KEEPALIVE;
-							client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-							break;
-						}
-					}
-				}
-				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				else
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			break;
 			case CLIENT_COMPLETE:
