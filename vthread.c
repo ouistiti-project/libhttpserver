@@ -35,7 +35,6 @@
 #if defined(HAVE_PTHREAD)
 # include <pthread.h>
 #endif
-#include <signal.h>
 #endif
 
 #include "vthread.h"
