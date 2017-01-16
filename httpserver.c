@@ -144,6 +144,7 @@ struct http_client_s
 #else
 	struct sockaddr_in addr;
 #endif
+	unsigned int addr_size;
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
@@ -553,24 +554,57 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 	return ESUCCESS;
 }
 
+static http_client_t *_httpclient_create(http_server_t *server)
+{
+	http_client_t *client = calloc(1, sizeof(*client));
+	client->server = server;
+
+	client->recvreq = httpclient_recv;
+	client->sendresp = httpclient_send;
+	client->ctx = client;
+	client->freectx = NULL;
+	if (server->mod && server->mod->func)
+	{
+		client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
+		client->freectx = server->mod->freectx;
+	}
+
+	http_connector_list_t *callback = server->callbacks;
+	while (callback != NULL)
+	{
+		httpclient_addconnector(client, callback->url, callback->func, callback->arg);
+		callback = callback->next;
+	}
+	client->callback = client->callbacks;
+
+	client->request = _httpmessage_create(client->server, NULL);
+	client->request->client = client;
+	client->response = _httpmessage_create(client->server, client->request);
+	client->response->client = client;
+
+	return client;
+}
+
+static void _httpclient_destroy(http_client_t *client)
+{
+	if (client->response)
+		_httpmessage_destroy(client->response);
+	if (client->request)
+		_httpmessage_destroy(client->request);
+	if (client->session_storage)
+		free(client->session_storage);
+	free(client);
+}
+
 static int _httpclient_connect(http_client_t *client)
 {
 
 	client->state &= ~CLIENT_STARTED;
 	client->state |= CLIENT_RUNNING;
-	client->request = _httpmessage_create(client->server, NULL);
-	client->request->client = client;
-	client->response = _httpmessage_create(client->server, client->request);
-	client->response->client = client;
-	client->callback = client->callbacks;
 	do
 	{
 		_httpclient_run(client);
 	} while(!(client->state & CLIENT_STOPPED));
-	if (client->response)
-		_httpmessage_destroy(client->response);
-	if (client->request)
-		_httpmessage_destroy(client->request);
 	return 0;
 }
 
@@ -770,9 +804,7 @@ static int _httpserver_connect(http_server_t *server)
 					client2->next = client->next;
 					client2 = client2->next;
 				}
-				if (client->session_storage)
-					free(client->session_storage);
-				free(client);
+				_httpclient_destroy(client);
 				client = client2;
 			}
 			else if (client->sock > 0)
@@ -787,29 +819,11 @@ static int _httpserver_connect(http_server_t *server)
 		{
 			if (FD_ISSET(server->sock, &rfds))
 			{
-				http_client_t *client = calloc(1, sizeof(*client));
-				client->server = server;
+				http_client_t *client = _httpclient_create(server);
 				// Client connection request recieved
 				// Create new client socket to communicate
-				unsigned int size = sizeof(client->addr);
-				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &size);
-
-				client->recvreq = httpclient_recv;
-				client->sendresp = httpclient_send;
-				client->ctx = client;
-				client->freectx = NULL;
-				if (server->mod && server->mod->func)
-				{
-					client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, size);
-					client->freectx = server->mod->freectx;
-				}
-
-				http_connector_list_t *callback = server->callbacks;
-				while (callback != NULL)
-				{
-					httpclient_addconnector(client, callback->url, callback->func, callback->arg);
-					callback = callback->next;
-				}
+				client->addr_size = sizeof(client->addr);
+				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
 
 				client->next = server->clients;
 				server->clients = client;
