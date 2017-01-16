@@ -52,20 +52,7 @@ int test_client = 0;
 #endif
 
 char test_content[] = "<html><head><link rel=\"stylesheet\" href=\"styles.css\"></head><body>coucou<br/></body></html>";
-#ifdef TEST_STREAMING
-struct test_config_s
-{
-	int unsused;
-};
-struct test_config_s *test_config = NULL;
-int test_func(void *arg, http_message_t *request, http_message_t *response)
-{
-	httpmessage_addheader(response, "Server", "libhttpserver");
-	httpmessage_addcontent(response, "text/html", NULL, 0);
-	test_client = httpmessage_keepalive(response);
-	return 0;
-}
-#elif defined(TEST_FILE)
+#if defined(TEST_FILE)
 struct test_config_s
 {
 	char *rootdoc;
@@ -135,8 +122,14 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 	char * test = strstr(httpmessage_REQUEST(request, "uri"), "test");
 	if (test == NULL)
 		return EREJECT;
+	printf("test\n");
 	httpmessage_addheader(response, "Server", "libhttpserver");
+#ifdef TEST_STREAMING
+	httpmessage_addcontent(response, "text/html", NULL, 0);
+	test_client = httpmessage_keepalive(response);
+#else
 	httpmessage_addcontent(response, "text/html", test_content, strlen(test_content));
+#endif
 	return ESUCCESS;
 }
 #endif
