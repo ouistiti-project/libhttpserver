@@ -433,7 +433,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			{
 				if (key != NULL && value != NULL)
 				{
-					dbg("header %s => %s\n", key, value);
 					_httpmessage_addheader(message, key, value);
 				}
 				key = NULL;
@@ -469,24 +468,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 	return ret;
 }
 
-static void _httpserver_closeclient(http_server_t *server, http_client_t *client)
-{
-	if (client == server->clients)
-	{
-		server->clients = client->next;
-	}
-	else
-	{
-		http_client_t *client2 = server->clients;
-		while (client2->next != client) client2 = client2->next;
-		client2->next = client->next;
-	}
-	if (client->session_storage)
-		free(client->session_storage);
-	dbg("free %p\n",client);
-	free(client);
-}
-
 void httpclient_addconnector(http_client_t *client, char *url, http_connector_t func, void *funcarg)
 {
 	http_connector_list_t *callback;
@@ -520,7 +501,6 @@ int httpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	int ret = recv(client->sock, data, length, MSG_NOSIGNAL);
-	dbg("recv %d\n", ret);
 	return ret;
 }
 
@@ -528,7 +508,6 @@ int httpclient_send(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	int ret = send(client->sock, data, length, MSG_NOSIGNAL);
-	dbg("send %d\n", ret);
 	return ret;
 }
 
@@ -572,7 +551,6 @@ static int _httpclient_connect(http_client_t *client)
 	int size = CHUNKSIZE - 1;
 	int ret = EINCOMPLETE;
 
-	dbg("%s hello\n",__FUNCTION__);
 	client->state &= ~CLIENT_STARTED;
 	client->state |= CLIENT_RUNNING;
 	request = _httpmessage_create(client->server, NULL);
@@ -711,13 +689,11 @@ socket_closed:
 		closesocket(client->sock);
 #endif
 		client->sock = -1;
-		_httpserver_closeclient(server, client);
 	}
 	else
 	{
 		dbg("keepalive\n");
 	}
-	dbg("%s goodbye\n",__FUNCTION__);
 	return 0;
 }
 
@@ -739,9 +715,21 @@ static int _httpserver_connect(http_server_t *server)
 			if (client->state & CLIENT_STOPPED)
 			{
 				vthread_join(client->thread, NULL);
-				http_client_t *tempo = client->next;
-				_httpserver_closeclient(server, client);
-				client = tempo;
+
+				http_client_t *client2 = server->clients;
+				if (client == server->clients)
+				{
+					server->clients = client->next;
+				}
+				else
+				{
+					while (client2->next != client) client2 = client2->next;
+					client2->next = client->next;
+				}
+				if (client->session_storage)
+					free(client->session_storage);
+				free(client);
+				client = client2;
 			}
 			else if (client->sock > 0)
 			{
@@ -792,7 +780,6 @@ static int _httpserver_connect(http_server_t *server)
 					http_client_t *next = client->next;
 					if (FD_ISSET(client->sock, &rfds))
 					{
-						dbg("%s hello\n",__FUNCTION__);
 						if (!(client->state & (CLIENT_STARTED | CLIENT_RUNNING)))
 						{
 							vthread_attr_t attr;
@@ -800,7 +787,6 @@ static int _httpserver_connect(http_server_t *server)
 							client->state |= CLIENT_STARTED;
 							vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
 						}
-						dbg("%s goodbye\n",__FUNCTION__);
 					}
 					client = next;
 				}
