@@ -193,7 +193,7 @@ static buffer_t * _buffer_create()
 
 static char *_buffer_append(buffer_t *buffer, char *data, int length)
 {
-	if (buffer->data + buffer->size < buffer->offset + length + 1)
+	if (buffer->data + buffer->size <= buffer->offset + length + 1)
 	{
 		char *data = buffer->data;
 		int chunksize = CHUNKSIZE * (length/CHUNKSIZE +1);
