@@ -700,7 +700,6 @@ socket_closed:
 	if (request)
 		_httpmessage_destroy(request);
 	client->state |= CLIENT_STOPPED;
-	client->state &= ~(CLIENT_RUNNING | CLIENT_STARTED);
 	if (!(client->state & CLIENT_KEEPALIVE))
 	{
 		if (client->freectx)
@@ -711,6 +710,7 @@ socket_closed:
 #else
 		closesocket(client->sock);
 #endif
+		client->sock = -1;
 		_httpserver_closeclient(server, client);
 	}
 	else
@@ -736,7 +736,14 @@ static int _httpserver_connect(http_server_t *server)
 		http_client_t *client = server->clients;
 		while (client != NULL)
 		{
-			if (!(client->state & CLIENT_STARTED))
+			if (client->state & CLIENT_STOPPED)
+			{
+				vthread_join(client->thread, NULL);
+				http_client_t *tempo = client->next;
+				_httpserver_closeclient(server, client);
+				client = tempo;
+			}
+			else if (client->sock > 0)
 			{
 				FD_SET(client->sock, &rfds);
 				maxfd = (maxfd > client->sock)? maxfd:client->sock;
@@ -786,12 +793,12 @@ static int _httpserver_connect(http_server_t *server)
 					if (FD_ISSET(client->sock, &rfds))
 					{
 						dbg("%s hello\n",__FUNCTION__);
-						if (!(client->state & CLIENT_STARTED))
+						if (!(client->state & (CLIENT_STARTED | CLIENT_RUNNING)))
 						{
 							vthread_attr_t attr;
 							client->state &= ~CLIENT_STOPPED;
-							vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
 							client->state |= CLIENT_STARTED;
+							vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
 						}
 						dbg("%s goodbye\n",__FUNCTION__);
 					}
@@ -813,7 +820,7 @@ static http_server_config_t defaultconfig = {
 http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
-7	int status;
+	int status;
 
 	server = calloc(1, sizeof(*server));
 	if (config)
