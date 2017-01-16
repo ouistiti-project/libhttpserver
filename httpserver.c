@@ -721,15 +721,6 @@ socket_closed:
 	return 0;
 }
 
-void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg)
-{
-	if (!server->mod)
-		server->mod = calloc(1, sizeof(*server->mod));
-	server->mod->func = mod;
-	server->mod->freectx = unmod;
-	server->mod->arg = arg;
-}
-
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
@@ -822,7 +813,7 @@ static http_server_config_t defaultconfig = {
 http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
-	int status;
+7	int status;
 
 	server = calloc(1, sizeof(*server));
 	if (config)
@@ -915,6 +906,15 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		return NULL;
 	}
 	return server;
+}
+
+void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg)
+{
+	if (!server->mod)
+		server->mod = calloc(1, sizeof(*server->mod));
+	server->mod->func = mod;
+	server->mod->freectx = unmod;
+	server->mod->arg = arg;
 }
 
 void httpserver_addconnector(http_server_t *server, char *url, http_connector_t func, void *funcarg)
