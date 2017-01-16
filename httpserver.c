@@ -720,11 +720,13 @@ static int _httpserver_connect(http_server_t *server)
 				if (client == server->clients)
 				{
 					server->clients = client->next;
+					client2 = server->clients;
 				}
 				else
 				{
 					while (client2->next != client) client2 = client2->next;
 					client2->next = client->next;
+					client2 = client2->next;
 				}
 				if (client->session_storage)
 					free(client->session_storage);
@@ -735,8 +737,8 @@ static int _httpserver_connect(http_server_t *server)
 			{
 				FD_SET(client->sock, &rfds);
 				maxfd = (maxfd > client->sock)? maxfd:client->sock;
+				client = client->next;
 			}
-			client = client->next;
 		}
 		ret = select(maxfd +1, &rfds, NULL, NULL, NULL);
 		if (ret > 0)
