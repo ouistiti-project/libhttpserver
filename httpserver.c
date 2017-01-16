@@ -112,10 +112,16 @@ typedef struct http_server_mod_s
 	http_freectx_t freectx;
 } http_server_mod_t;
 
-#define CLIENT_STARTED 0x01
-#define CLIENT_RUNNING 0x02
-#define CLIENT_STOPPED 0x04
-#define CLIENT_KEEPALIVE 0x80
+#define CLIENT_STARTED 0x0100
+#define CLIENT_RUNNING 0x0200
+#define CLIENT_STOPPED 0x0400
+#define CLIENT_KEEPALIVE 0x8000
+#define CLIENT_MACHINEMASK 0x00FF
+#define CLIENT_REQUEST 0x0000
+#define CLIENT_PARSER 0x0001
+#define CLIENT_RESPONSEHEADER 0x0002
+#define CLIENT_RESPONSECONTENT 0x0003
+#define CLIENT_COMPLETE 0x0004
 struct http_client_s
 {
 	int sock;
@@ -553,147 +559,178 @@ static int _httpclient_connect(http_client_t *client)
 
 	client->state &= ~CLIENT_STARTED;
 	client->state |= CLIENT_RUNNING;
-	request = _httpmessage_create(client->server, NULL);
-	request->client = client;
-	buffer_t *tempo = _buffer_create();
 	do
 	{
-		/**
-		 * here, it is the call to the recvreq callback from the
-		 * server configuration.
-		 * see http_server_config_t and httpserver_create
-		 */
-		size = client->recvreq(client->ctx, tempo->data, tempo->size);
-		if (size < 0)
+		switch (client->state & CLIENT_MACHINEMASK)
 		{
-			if (errno != EAGAIN)
+			case CLIENT_REQUEST:
 			{
-				warn("recv returns\n");
-				break;
-			}
-			else
-				size = 0;
-		}
-		if (size > 0)
-		{
-			tempo->length = size;
-			ret = _httpmessage_parserequest(request, tempo);
-		}
-		_buffer_reset(tempo);
-	} while (ret != ESUCCESS);
-	_buffer_destroy(tempo);
-	if (size < 0)
-	{
-		goto socket_closed;
-	}
-	response = _httpmessage_create(server, request);
-	if (ret == ESUCCESS)
-	{
-		char *cburl = NULL;
-		while (callback != NULL)
-		{
-			cburl = callback->url;
-			if (cburl != NULL)
-			{
-				char *path = request->uri->data;
-				if (cburl[0] != '/' && path[0] == '/')
-					path++;
-				if (!strncasecmp(cburl, path, callback->url_length))
-					cburl = NULL;
-			}
-			if (cburl == NULL && callback->func)
-			{
-				ret = callback->func(callback->arg, request, response);
-				if (ret != EREJECT)
+				request = _httpmessage_create(client->server, NULL);
+				request->client = client;
+				buffer_t *tempo = _buffer_create();
+				do
+				{
+					/**
+					 * here, it is the call to the recvreq callback from the
+					 * server configuration.
+					 * see http_server_config_t and httpserver_create
+					 */
+					size = client->recvreq(client->ctx, tempo->data, tempo->size);
+					if (size < 0)
+					{
+						if (errno != EAGAIN)
+						{
+							warn("recv returns\n");
+							break;
+						}
+						else
+							size = 0;
+					}
+					if (size > 0)
+					{
+						tempo->length = size;
+						ret = _httpmessage_parserequest(request, tempo);
+					}
+					_buffer_reset(tempo);
+				} while (ret != ESUCCESS);
+				_buffer_destroy(tempo);
+				if (size < 0)
+				{
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					break;
+				}
+				client->state = CLIENT_PARSER | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			callback = callback->next;
-		}
-		if (callback == NULL)
-		{
-			response->result = RESULT_404;
-		}
-		if (response->keepalive)
-		{
-			client->state |= CLIENT_KEEPALIVE;
-		}
-	}
-	else if (ret != EINCOMPLETE && size > 0)
-	{
-		response->result = RESULT_400;
-		request->type = MESSAGE_TYPE_HEAD;
-		ret = ESUCCESS;
-	}
-	buffer_t *header = _buffer_create();
-	_httpmessage_buildheader(client, response, header);
-
-	/**
-	 * here, it is the call to the sendresp callback from the
-	 * server configuration.
-	 * see http_server_config_t and httpserver_create
-	 */
-	size = client->sendresp(client->ctx, header->data, header->length);
-	if (size < 0)
-	{
-		client->state &= ~CLIENT_KEEPALIVE;
-		goto socket_closed;
-	}
-	_buffer_destroy(header);
-
-	if (response->result == RESULT_200 &&
-		response->content->length > 0 &&
-		request->type != MESSAGE_TYPE_HEAD)
-	{
-		size = client->sendresp(client->ctx, response->content->data, response->content->length);
-		if (size < 0)
-		{
-			client->state &= ~CLIENT_KEEPALIVE;
-			goto socket_closed;
-		}
-	}
-
-	while (ret == ECONTINUE)
-	{
-		if (callback && callback->func)
-		{
-			ret = callback->func(callback->arg, request, response);
-		}
-		if (response->result == RESULT_200 &&
-			response->content->length > 0 &&
-			request->type != MESSAGE_TYPE_HEAD)
-		{
-			size = client->sendresp(client->ctx, response->content->data, response->content->length);
-			if (size < 0)
+			break;
+			case CLIENT_PARSER:
 			{
-				client->state &= ~CLIENT_KEEPALIVE;
-				goto socket_closed;
+				response = _httpmessage_create(server, request);
+				if (ret == ESUCCESS)
+				{
+					char *cburl = NULL;
+					while (callback != NULL)
+					{
+						cburl = callback->url;
+						if (cburl != NULL)
+						{
+							char *path = request->uri->data;
+							if (cburl[0] != '/' && path[0] == '/')
+								path++;
+							if (!strncasecmp(cburl, path, callback->url_length))
+								cburl = NULL;
+						}
+						if (cburl == NULL && callback->func)
+						{
+							ret = callback->func(callback->arg, request, response);
+							if (ret != EREJECT)
+								break;
+						}
+						callback = callback->next;
+					}
+					if (callback == NULL)
+					{
+						response->result = RESULT_404;
+					}
+					if (response->keepalive)
+					{
+						client->state |= CLIENT_KEEPALIVE;
+					}
+				}
+				else if (ret != EINCOMPLETE && size > 0)
+				{
+					response->result = RESULT_400;
+					request->type = MESSAGE_TYPE_HEAD;
+					ret = ESUCCESS;
+				}
+				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 			}
-		}
-	}
-	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
+			break;
+			case CLIENT_RESPONSEHEADER:
+			{
+				buffer_t *header = _buffer_create();
+				_httpmessage_buildheader(client, response, header);
 
-socket_closed:
-	if (response)
-		_httpmessage_destroy(response);
-	if (request)
-		_httpmessage_destroy(request);
-	client->state |= CLIENT_STOPPED;
-	if (!(client->state & CLIENT_KEEPALIVE))
-	{
-		if (client->freectx)
-			client->freectx(client->ctx);
-		shutdown(client->sock, SHUT_RDWR);
-#ifndef WIN32
-		close(client->sock);
-#else
-		closesocket(client->sock);
-#endif
-		client->sock = -1;
-	}
-	else
-	{
-		dbg("keepalive\n");
-	}
+				/**
+				 * here, it is the call to the sendresp callback from the
+				 * server configuration.
+				 * see http_server_config_t and httpserver_create
+				 */
+				size = client->sendresp(client->ctx, header->data, header->length);
+				if (size < 0)
+				{
+					client->state &= ~CLIENT_KEEPALIVE;
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					break;
+				}
+				_buffer_destroy(header);
+				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			break;
+			case CLIENT_RESPONSECONTENT:
+			{
+				if (response->result == RESULT_200 &&
+					response->content->length > 0 &&
+					request->type != MESSAGE_TYPE_HEAD)
+				{
+					size = client->sendresp(client->ctx, response->content->data, response->content->length);
+					if (size < 0)
+					{
+						client->state &= ~CLIENT_KEEPALIVE;
+						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+						break;
+					}
+				}
+
+				while (ret == ECONTINUE)
+				{
+					if (callback && callback->func)
+					{
+						ret = callback->func(callback->arg, request, response);
+					}
+					if (response->result == RESULT_200 &&
+						response->content->length > 0 &&
+						request->type != MESSAGE_TYPE_HEAD)
+					{
+						size = client->sendresp(client->ctx, response->content->data, response->content->length);
+						if (size < 0)
+						{
+							client->state &= ~CLIENT_KEEPALIVE;
+							client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+							break;
+						}
+					}
+				}
+				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			break;
+			case CLIENT_COMPLETE:
+			{
+				setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
+				if (response)
+					_httpmessage_destroy(response);
+				if (request)
+					_httpmessage_destroy(request);
+				client->state |= CLIENT_STOPPED;
+				if (!(client->state & CLIENT_KEEPALIVE))
+				{
+					if (client->freectx)
+						client->freectx(client->ctx);
+					shutdown(client->sock, SHUT_RDWR);
+			#ifndef WIN32
+					close(client->sock);
+			#else
+					closesocket(client->sock);
+			#endif
+					client->sock = -1;
+				}
+				else
+				{
+					dbg("keepalive\n");
+				}
+			}
+			break;
+		}
+	} while(!(client->state & CLIENT_STOPPED));
 	return 0;
 }
 
