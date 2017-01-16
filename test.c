@@ -42,7 +42,7 @@
 
 #include "httpserver.h"
 
-int client = 0;
+int test_client = 0;
 
 #ifdef MBEDTLS
 #include "mod_mbedtls.h"
@@ -62,7 +62,7 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
 	httpmessage_addheader(response, "Server", "libhttpserver");
 	httpmessage_addcontent(response, "text/html", NULL, 0);
-	client = httpmessage_keepalive(response);
+	test_client = httpmessage_keepalive(response);
 	return 0;
 }
 #elif defined(TEST_FILE)
@@ -182,7 +182,6 @@ int main(int argc, char * const *argv)
 		}
 #endif
 		httpserver_connect(server);
-#ifdef TEST_STREAMING
 		char data[1550];
 		memset(data, 0xA5, sizeof(data));
 		char clock[4] = {'-','\\','|','/'};
@@ -194,6 +193,7 @@ int main(int argc, char * const *argv)
 #else
 			Sleep(1000);
 #endif
+#ifdef TEST_STREAMING
 			//printf(" %c\n",clock[i]);
 			i = (i + 1)%sizeof(clock);
 			if (client)
@@ -202,8 +202,8 @@ int main(int argc, char * const *argv)
 				ret = send(client, data, sizeof(data), 0);
 				printf("send stream %d\n",ret);
 			}
-		}
 #endif
+		}
 		httpserver_disconnect(server);
 #ifdef MBEDTLS
 		mod_mbedtls_destroy(mod_mbedtls);
