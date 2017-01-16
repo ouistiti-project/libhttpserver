@@ -471,12 +471,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 
 static void _httpserver_closeclient(http_server_t *server, http_client_t *client)
 {
-#ifndef WIN32
-	shutdown(client->sock, SHUT_RDWR);
-	close(client->sock);
-#else
-	closesocket(client->sock);
-#endif
 	if (client == server->clients)
 	{
 		server->clients = client->next;
@@ -711,6 +705,12 @@ socket_closed:
 	{
 		if (client->freectx)
 			client->freectx(client->ctx);
+		shutdown(client->sock, SHUT_RDWR);
+#ifndef WIN32
+		close(client->sock);
+#else
+		closesocket(client->sock);
+#endif
 		_httpserver_closeclient(server, client);
 	}
 	else
