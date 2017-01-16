@@ -789,6 +789,10 @@ static int _httpserver_connect(http_server_t *server)
 							client->state |= CLIENT_STARTED;
 							vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
 						}
+						else
+						{
+							vthread_yield(client->thread);
+						}
 					}
 					client = next;
 				}

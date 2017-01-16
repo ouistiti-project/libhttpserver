@@ -99,7 +99,8 @@ int vthread_join(vthread_t thread, void **value_ptr)
 		ret = HeapFree(GetProcessHeap(), 0, thread->argument);
 */
 #elif defined(HAVE_PTHREAD)
-	ret = pthread_join(thread->pthread, value_ptr);
+	if (thread->pthread)
+		ret = pthread_join(thread->pthread, value_ptr);
 #endif
 	free(thread);
 	return ret;
@@ -123,7 +124,21 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 	{
 		void *value_ptr;
 		vthread_t thread = threads[i];
-		vthread_join(thread, &value_ptr);
+		if (thread)
+			vthread_join(thread, &value_ptr);
 	}
+#endif
+}
+
+void vthread_yield(vthread_t thread)
+{
+#ifdef WIN32
+	SwitchToThread();
+#elif defined(HAVE_PTHREAD)
+#if defined(HAVE_PTHREAD_YIELD)
+	pthread_yield();
+#elif defined(HAVE_SCHED_YIELD)
+	sched_yield();
+#endif
 #endif
 }

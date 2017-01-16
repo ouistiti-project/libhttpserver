@@ -24,7 +24,7 @@ mod_static_file_SOURCES+=mod_static_file.c
 
 httpserver_SOURCES+=httpserver.c vthread.c
 
-vthread_CFLAGS+=-DHAVE_PTHREAD
+vthread_CFLAGS+=-DHAVE_PTHREAD -DHAVE_SCHED_YIELD
 
 lib-y+=uri
 slib-y+=uri

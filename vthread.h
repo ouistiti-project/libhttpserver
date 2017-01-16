@@ -22,4 +22,6 @@ int vthread_join(vthread_t thread, void **value_ptr);
 
 void vthread_wait(vthread_t threads[], int nbthreads);
 
+void vthread_yield(vthread_t thread);
+
 #endif
