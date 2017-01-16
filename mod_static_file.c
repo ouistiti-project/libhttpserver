@@ -50,10 +50,10 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 	mod_static_file_t *config = (mod_static_file_t *)arg;
 	char content[64];
 	char ext_str[64];
+	char *ext;
 	int size;
 	struct _static_file_connector_s *private = httpmessage_private(request, NULL);
 
-	printf("%s 0\n", __FUNCTION__);
 	if (!private)
 	{
 		private = calloc(1, sizeof(*private));
@@ -62,20 +62,22 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		char filepath[512];
 		snprintf(filepath, 511, "%s%s", config->docroot, httpmessage_REQUEST(request, "uri"));
 
-		char *fileext = strrchr(filepath,'.') + 1;
-
-		strncpy(ext_str, config->ignored_ext, 63);
-		char *ext = strtok(ext_str, " ");
-		while (ext != NULL)
+		char *fileext = strrchr(filepath,'.');
+		if (fileext != NULL)
 		{
-			if (!strcmp(ext, fileext))
-				return EREJECT;
-			ext = strtok(NULL, " ");
+			fileext++;
+
+			strncpy(ext_str, config->ignored_ext, 63);
+			ext = strtok(ext_str, " ");
+			while (ext != NULL)
+			{
+				if (!strcmp(ext, fileext))
+					return EREJECT;
+				ext = strtok(NULL, " ");
+			}
 		}
-		printf("%s 1\n", __FUNCTION__);
 		struct stat filestat;
 		int ret = stat(filepath, &filestat);
-		printf("ret %d\n", ret);
 		if (S_ISDIR(filestat.st_mode))
 		{
 			strncpy(ext_str, config->accepted_ext, 63);
@@ -96,27 +98,29 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		if (ret == 0)
 		{
 			ret = -1;
-			strncpy(ext_str, config->accepted_ext, 63);
-			ext = strtok(ext_str, " ");
-			while (ext != NULL)
+			fileext = strrchr(filepath,'.');
+			if (fileext != NULL)
 			{
-printf("%s 2 #%s# #%s#\n", __FUNCTION__, ext, fileext);
-				if (!strcmp(ext, fileext))
+				fileext++;
+				strncpy(ext_str, config->accepted_ext, 63);
+				ext = strtok(ext_str, " ");
+				while (ext != NULL)
 				{
-					ret = 0;
-					break;
+					if (!strcmp(ext, fileext))
+					{
+						ret = 0;
+						break;
+					}
+					ext = strtok(NULL, " ");
 				}
-				ext = strtok(NULL, " ");
 			}
 		}
-		printf("%s 3\n", __FUNCTION__);
 		if (ret != 0)
 		{
 			printf("file: %s not found\n", filepath);
 			free(private);
 			return EREJECT;
 		}
-		printf("open file %d %s\n", filestat.st_size, filepath);
 		private->fileno = fopen(filepath, "rb");
 		httpmessage_private(request, (void *)private);
 //		httpmessage_addcontent(response, "text/html", "\r\n", 2);
@@ -132,7 +136,6 @@ printf("%s 2 #%s# #%s#\n", __FUNCTION__, ext, fileext);
 	}
 	if (feof(private->fileno))
 	{
-		printf("end of file\n");
 		fclose(private->fileno);
 		private->fileno = NULL;
 		free(private);
@@ -146,7 +149,6 @@ printf("%s 2 #%s# #%s#\n", __FUNCTION__, ext, fileext);
 
 void *mod_static_file_create(http_server_t *server, mod_static_file_t *config)
 {
-	printf("%s hello\n", __FUNCTION__);
 	if (!config)
 		config = &default_config;
 	if (!config->docroot)
@@ -156,7 +158,6 @@ void *mod_static_file_create(http_server_t *server, mod_static_file_t *config)
 	if (!config->ignored_ext)
 		config->ignored_ext = default_config.ignored_ext;
 	httpserver_addconnector(server, NULL, static_file_connector, config);
-	printf("%s goodbye\n", __FUNCTION__);
 	return config;
 }
 
