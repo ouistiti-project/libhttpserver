@@ -133,6 +133,9 @@ struct http_client_s
 	http_recv_t recvreq;
 	http_send_t sendresp;
 	http_connector_list_t *callbacks;
+	http_connector_list_t *callback;
+	http_message_t *request;
+	http_message_t *response;
 	void *ctx;
 	dbentry_t *session;
 	buffer_t *session_storage;
@@ -186,6 +189,7 @@ struct http_server_s
 };
 
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
+static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
 #define CHUNKSIZE 64
@@ -551,18 +555,29 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 
 static int _httpclient_connect(http_client_t *client)
 {
-	http_message_t *request = NULL;
-	http_message_t *response = NULL;
-	http_connector_list_t *callback = client->callbacks;
 
 	client->state &= ~CLIENT_STARTED;
 	client->state |= CLIENT_RUNNING;
-	request = _httpmessage_create(client->server, NULL);
-	request->client = client;
-	response = _httpmessage_create(client->server, request);
-	response->client = client;
+	client->request = _httpmessage_create(client->server, NULL);
+	client->request->client = client;
+	client->response = _httpmessage_create(client->server, client->request);
+	client->response->client = client;
+	client->callback = client->callbacks;
 	do
 	{
+		_httpclient_run(client);
+	} while(!(client->state & CLIENT_STOPPED));
+	if (client->response)
+		_httpmessage_destroy(client->response);
+	if (client->request)
+		_httpmessage_destroy(client->request);
+	return 0;
+}
+
+static int _httpclient_run(http_client_t *client)
+{
+	http_message_t *request = client->request;
+	http_message_t *response = client->response;
 		switch (client->state & CLIENT_MACHINEMASK)
 		{
 			case CLIENT_REQUEST:
@@ -606,38 +621,38 @@ static int _httpclient_connect(http_client_t *client)
 			case CLIENT_PARSER1:
 			{
 				char *cburl = NULL;
-				if (callback == NULL)
+				if (client->callback == NULL)
 				{
 					response->result = RESULT_404;
 					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else
 				{
-					cburl = callback->url;
+					cburl = client->callback->url;
 					if (cburl != NULL)
 					{
 						char *path = request->uri->data;
 						if (cburl[0] != '/' && path[0] == '/')
 							path++;
-						if (!strncasecmp(cburl, path, callback->url_length))
+						if (!strncasecmp(cburl, path, client->callback->url_length))
 							cburl = NULL;
 					}
-					if (cburl == NULL && callback->func)
+					if (cburl == NULL && client->callback->func)
 					{
 						int ret = EINCOMPLETE;
-						ret = callback->func(callback->arg, request, response);
+						ret = client->callback->func(client->callback->arg, request, response);
 						if (ret != EREJECT)
 						{
 							/* callback is null to not recall the function */
 							if (ret == ESUCCESS)
-								callback = NULL;
+								client->callback = NULL;
 							client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 						}
 						else
-							callback = callback->next;
+							client->callback = client->callback->next;
 					}
 					else
-						callback = callback->next;
+						client->callback = client->callback->next;
 				}
 				if (response->keepalive)
 				{
@@ -648,8 +663,8 @@ static int _httpclient_connect(http_client_t *client)
 			case CLIENT_PARSER2:
 			{
 				int ret = EINCOMPLETE;
-				if (callback && callback->func)
-					ret = callback->func(callback->arg, request, response);
+				if (client->callback && client->callback->func)
+					ret = client->callback->func(client->callback->arg, request, response);
 				if (ret == ECONTINUE)
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				else
@@ -701,10 +716,6 @@ static int _httpclient_connect(http_client_t *client)
 			case CLIENT_COMPLETE:
 			{
 				setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-				if (response)
-					_httpmessage_destroy(response);
-				if (request)
-					_httpmessage_destroy(request);
 				client->state |= CLIENT_STOPPED;
 				if (!(client->state & CLIENT_KEEPALIVE))
 				{
@@ -725,7 +736,6 @@ static int _httpclient_connect(http_client_t *client)
 			}
 			break;
 		}
-	} while(!(client->state & CLIENT_STOPPED));
 	return 0;
 }
 
