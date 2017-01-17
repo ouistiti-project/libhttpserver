@@ -25,6 +25,12 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
+#if defined(__GNUC__) && !defined(_GNU_SOURCE)
+# define _GNU_SOURCE
+#else
+# define strcasestr strstr
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1124,7 +1130,7 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
 	message->headers = headerinfo;
-	if (!strncasecmp(key, "Connection", 10) && !strncasecmp(value, "keep-alive", 10) )
+	if (!strncasecmp(key, "Connection", 10) && strcasestr(value, "Keep-Alive") )
 	{
 		message->keepalive = 1;
 	}
