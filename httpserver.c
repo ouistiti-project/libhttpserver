@@ -721,10 +721,10 @@ static int _httpclient_run(http_client_t *client)
 				{
 					client->state &= ~CLIENT_KEEPALIVE;
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-					break;
 				}
+				else
+					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				_buffer_destroy(header);
-				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			break;
 			case CLIENT_RESPONSECONTENT:
@@ -777,12 +777,13 @@ static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
 	int maxfd = 0;
-	fd_set rfds;
+	fd_set rfds, wfds;
 
 	server->run = 1;
 	while(server->run)
 	{
 		FD_ZERO(&rfds);
+		FD_ZERO(&wfds);
 		FD_SET(server->sock, &rfds);
 		maxfd = server->sock;
 		http_client_t *client = server->clients;
@@ -790,7 +791,9 @@ static int _httpserver_connect(http_server_t *server)
 		{
 			if (client->state & CLIENT_STOPPED)
 			{
+#ifdef VTHREAD
 				vthread_join(client->thread, NULL);
+#endif
 
 				http_client_t *client2 = server->clients;
 				if (client == server->clients)
@@ -809,12 +812,21 @@ static int _httpserver_connect(http_server_t *server)
 			}
 			else if (client->sock > 0)
 			{
+#ifndef VTHREAD
+				if ((client->state & CLIENT_MACHINEMASK) != CLIENT_REQUEST)
+				{
+					FD_SET(client->sock, &wfds);
+				}
+				else
+					FD_SET(client->sock, &rfds);
+#else
 				FD_SET(client->sock, &rfds);
+#endif
 				maxfd = (maxfd > client->sock)? maxfd:client->sock;
 				client = client->next;
 			}
 		}
-		ret = select(maxfd +1, &rfds, NULL, NULL, NULL);
+		ret = select(maxfd +1, &rfds, &wfds, NULL, NULL);
 		if (ret > 0)
 		{
 			if (FD_ISSET(server->sock, &rfds))
@@ -836,8 +848,12 @@ static int _httpserver_connect(http_server_t *server)
 				while (client != NULL)
 				{
 					http_client_t *next = client->next;
-					if (FD_ISSET(client->sock, &rfds))
+					if (FD_ISSET(client->sock, &rfds) || FD_ISSET(client->sock, &wfds))
 					{
+#ifndef VTHREAD
+						client->state |= CLIENT_RUNNING;
+						_httpclient_run(client);
+#else
 						if (!(client->state & (CLIENT_STARTED | CLIENT_RUNNING)))
 						{
 							vthread_attr_t attr;
@@ -849,6 +865,7 @@ static int _httpserver_connect(http_server_t *server)
 						{
 							vthread_yield(client->thread);
 						}
+#endif
 					}
 					client = next;
 				}
@@ -993,7 +1010,11 @@ void httpserver_connect(http_server_t *server)
 {
 	vthread_attr_t attr;
 
+#ifndef VTHREAD
+	_httpserver_connect(server);
+#else
 	vthread_create(&server->thread, &attr, (vthread_routine)_httpserver_connect, (void *)server, sizeof(*server));
+#endif
 }
 
 void httpserver_disconnect(http_server_t *server)
@@ -1001,8 +1022,10 @@ void httpserver_disconnect(http_server_t *server)
 	if (server->thread)
 	{
 		server->run = 0;
+#ifdef VTHREAD
 		vthread_join(server->thread, NULL);
 		server->thread = 0;
+#endif
 	}
 }
 

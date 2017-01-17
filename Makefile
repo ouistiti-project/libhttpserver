@@ -14,6 +14,12 @@ httptest_CFLAGS-$(STATIC_FILE)+=-DSTATIC_FILE
 
 lib-y+=httpserver
 slib-y+=httpserver
+httpserver_SOURCES+=httpserver.c
+
+httpserver_SOURCES-$(VTHREAD)+=vthread.c
+httpserver_CFLAGS-$(VTHREAD)+=-DVTHREAD
+vthread_CFLAGS+=-DHAVE_PTHREAD -DHAVE_SCHED_YIELD
+
 
 lib-$(MBEDTLS)+=mod_mbedtls
 mod_mbedtls_SOURCES+=mod_mbedtls.c
@@ -21,10 +27,6 @@ mod_mbedtls_LIBRARY+=mbedtls mbedx509 mbedcrypto
 
 lib-$(STATIC_FILE)+=mod_static_file
 mod_static_file_SOURCES+=mod_static_file.c
-
-httpserver_SOURCES+=httpserver.c vthread.c
-
-vthread_CFLAGS+=-DHAVE_PTHREAD -DHAVE_SCHED_YIELD
 
 lib-y+=uri
 slib-y+=uri
@@ -42,7 +44,7 @@ httpserver_LDFLAGS+=-lws2_32
 SLIBEXT=lib
 DLIBEXT=dll
 else
-httpserver_LDFLAGS+=-lpthread
+httpserver_LDFLAGS-$(VTHREAD)+=-lpthread
 SLIBEXT=a
 DLIBEXT=so
 endif
