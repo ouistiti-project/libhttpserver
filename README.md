@@ -5,17 +5,27 @@ libhttpserver allows to accept a http communication into an application.
 Very simple and light, it is not fully featured, but may be useable for small project.
 The content of the response are defined by a callback function.
 
+## Configuration
+The configuration file (named "config") may be edited to set the following parameters:
+ * VTHREAD=y to enable the threading support
+ * STATIC_FILE=y to build the static file module
+ * MBEDTLS=y to build the SSL support with mbedTLS (PolarSSL)
+ * TEST=y to build the test application
+ * prefix=/my/installation/path to change the installation prefix (default: /usr/local)
+ * libdir=/my/libraries/path to change the installation of libraries (default: $prefix/lib)
+ * bindir=/my/binaries/path to change the installation of binaries (default: $prefix/bin)
+
 ## Build
 By default the code may be integrated directly into the project.
 
 But the Makefile builds three binary types:
- * a test application that creates a little server responding a very small HTML content.
-
-    make
-
  * a static library around 12kB and a dynamic library around 80kB.
 
-    CC=gcc make lib
+    CC=gcc make
+
+ * a test application that creates a little server responding a very small HTML content.
+
+    make TEST=y
 
 libhttpserver is WIN32 compatible and can be build with mingw32:
 
@@ -24,9 +34,8 @@ libhttpserver is WIN32 compatible and can be build with mingw32:
 and can build DLL file.
 
 ## Installation
-This library is originally created to be integrated into an other project, and no installation is availlable.
 
-But to install the library you may copy libhttpserver.so into /usr/lib and httpserver.h into /usr/include with root rights.
+    make DESTDIR=/home/me/package install
 
 ## API
 The complete API is described inside the header file.
@@ -44,7 +53,7 @@ Two examples are availlable inside the code file under the TEST flag.
 
 
     /* creates the server element */
-    http_server_t *server = httpserver_create(NULL, 80, 10);
+    http_server_t *server = httpserver_create(NULL);
     if (server)
     {
         /* add the function to response to the request */
