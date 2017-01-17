@@ -173,7 +173,7 @@ struct http_message_s
 	} state;
 	buffer_t *content;
 	buffer_t *uri;
-	char *version;
+	http_message_version_e version;
 	buffer_t *headers_storage;
 	dbentry_t *headers;
 	void *private;
@@ -193,6 +193,21 @@ struct http_server_s
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
 static int _httpclient_run(http_client_t *client);
 
+/********************************************************************/
+static const char *_http_message_result[] =
+{
+	" 200 OK",
+	" 400 Bad Request",
+	" 404 File Not Found",
+};
+
+static char *_http_message_version[] =
+{
+	"HTTP/0.9",
+	"HTTP/1.0",
+	"HTTP/1.1",
+	"HTTP/2",
+};
 /********************************************************************/
 #define CHUNKSIZE 64
 static buffer_t * _buffer_create()
@@ -249,6 +264,7 @@ static http_message_t * _httpmessage_create(http_server_t *server, http_message_
 	{
 		message->type = parent->type;
 		message->client = parent->client;
+		message->version = parent->version;
 	}
 	return message;
 }
@@ -344,6 +360,17 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_VERSION:
 			{
+				int i;
+				for (i = HTTP09; i < HTTPVERSIONS; i++)
+				{
+					int length = strlen(_http_message_version[i]);
+					if (!strncasecmp(data->offset,_http_message_version[i],length))
+					{
+						message->version = i;
+						data->offset += length;
+						break;
+					}
+				}
 				while (data->offset < (data->data + data->size) && next == PARSE_VERSION)
 				{
 					switch (*data->offset)
@@ -525,17 +552,13 @@ int httpclient_send(void *ctl, char *data, int length)
 	return ret;
 }
 
-static const char *_http_message_result[] =
-{
-	"200 OK",
-	"400 Bad Request",
-	"404 File Not Found",
-};
-
 static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
 {
 	dbentry_t *headers = response->headers;
-	_buffer_append(header, "HTTP/1.1 ", 9);
+	http_message_version_e version = response->version;
+	if (response->version > client->server->config->version)
+		version = client->server->config->version;
+	_buffer_append(header, _http_message_version[version], strlen(_http_message_version[version]));
 	_buffer_append(header, (char *)_http_message_result[response->result], strlen(_http_message_result[response->result]));
 	_buffer_append(header, "\r\n", 2);
 	while (headers != NULL)
@@ -581,8 +604,6 @@ static http_client_t *_httpclient_create(http_server_t *server)
 
 	client->request = _httpmessage_create(client->server, NULL);
 	client->request->client = client;
-	client->response = _httpmessage_create(client->server, client->request);
-	client->response->client = client;
 
 	return client;
 }
@@ -641,6 +662,8 @@ static int _httpclient_run(http_client_t *client)
 				{
 					tempo->length = size;
 					ret = _httpmessage_parserequest(request, tempo);
+					client->response = _httpmessage_create(client->server, client->request);
+					client->response->client = client;
 				}
 				_buffer_destroy(tempo);
 				if (ret == ESUCCESS)
@@ -894,6 +917,8 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->config = config;
 	else
 		server->config = &defaultconfig;
+	if (server->config->version == 0)
+		server->config->version = HTTP10;
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -1105,8 +1130,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		if (message->version != NULL)
-			value = message->version;
+		value = _http_message_version[message->version];
 	}
 	else if (!strncasecmp(key, "remote_", 7))
 	{

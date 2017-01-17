@@ -49,6 +49,23 @@ typedef struct http_message_s http_message_t;
 typedef struct http_server_s http_server_t;
 typedef struct http_client_s http_client_t;
 
+
+typedef enum
+{
+	HTTP09,
+	HTTP10,
+	HTTP11,
+	HTTP20,
+	HTTPVERSIONS,
+} http_message_version_e;
+
+typedef enum
+{
+	RESULT_200,
+	RESULT_400,
+	RESULT_404,
+} http_message_result_e;
+
 /**
  * @brief callback to manage a request
  * 
@@ -111,7 +128,8 @@ typedef struct http_server_config_s
 	/** @param maxclients the maximum number of clients accepted by the server. */
 	int maxclient;
 	int chunksize;
-	/** @param callback the sender module */
+	/** the version of the HTTP server. */
+	http_message_version_e version;
 } http_server_config_t;
 
 /**
@@ -175,13 +193,6 @@ void httpserver_destroy(http_server_t *server);
  * @return the same pointer as stored
  */
 void *httpmessage_private(http_message_t *message, void *data);
-
-typedef enum
-{
-	RESULT_200,
-	RESULT_400,
-	RESULT_404,
-} http_message_result_e;
 /**
  * @brief add a header to the response message
  *
