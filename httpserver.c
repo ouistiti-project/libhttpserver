@@ -420,6 +420,11 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 								key = header;
 								length = 0;
 							}
+							else
+							{
+								int len = strlen(key);
+								key = header - len;
+							}
 							header = data->offset + 1;
 						}
 						case ' ':
@@ -444,6 +449,11 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 								{
 									value = header;
 									length = 0;
+								}
+								else
+								{
+									int len = strlen(value);
+									value = header - len;
 								}
 								next = PARSE_HEADERNEXT;
 							}
@@ -653,17 +663,24 @@ static int _httpclient_run(http_client_t *client)
 					if (errno != EAGAIN)
 					{
 						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+						client->state &= ~CLIENT_KEEPALIVE;
 						break;
 					}
 					else
 						size = 0;
 				}
-				if (size > 0)
+				else if (size > 0)
 				{
 					tempo->length = size;
 					ret = _httpmessage_parserequest(request, tempo);
 					client->response = _httpmessage_create(client->server, client->request);
 					client->response->client = client;
+				}
+				else /* socket shutdown */
+				{
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state &= ~CLIENT_KEEPALIVE;
+					break;
 				}
 				_buffer_destroy(tempo);
 				if (ret == ESUCCESS)
