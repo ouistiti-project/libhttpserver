@@ -194,6 +194,15 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
+static http_server_config_t defaultconfig = {
+	.addr = NULL,
+	.port = 80,
+	.maxclient = 10,
+	.chunksize = 64,
+	.keepalive = 1,
+	.version = HTTP10,
+};
+
 static const char *_http_message_result[] =
 {
 	" 200 OK",
@@ -265,9 +274,22 @@ static http_message_t * _httpmessage_create(http_server_t *server, http_message_
 		message->type = parent->type;
 		message->client = parent->client;
 		message->version = parent->version;
+		if (server->config->keepalive)
+			message->keepalive = parent->keepalive;
 	}
 	return message;
 }
+
+static void _httpmessage_reset(http_message_t *message)
+{
+	if (message->uri)
+		_buffer_reset(message->uri);
+	if (message->content)
+		_buffer_reset(message->content);
+	if (message->headers_storage)
+		_buffer_reset(message->headers_storage);
+}
+
 static void _httpmessage_destroy(http_message_t *message)
 {
 	if (message->uri)
@@ -792,9 +814,9 @@ static int _httpclient_run(http_client_t *client)
 			case CLIENT_COMPLETE:
 			{
 				setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-				client->state |= CLIENT_STOPPED;
 				if (!(client->state & CLIENT_KEEPALIVE))
 				{
+					client->state |= CLIENT_STOPPED;
 					if (client->freectx)
 						client->freectx(client->ctx);
 					shutdown(client->sock, SHUT_RDWR);
@@ -807,6 +829,10 @@ static int _httpclient_run(http_client_t *client)
 				}
 				else
 				{
+					client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
+					_httpmessage_reset(client->request);
+					_httpmessage_destroy(client->response);
+					client->response = NULL;
 					dbg("keepalive\n");
 				}
 			}
@@ -917,13 +943,6 @@ static int _httpserver_connect(http_server_t *server)
 	return ret;
 }
 
-static http_server_config_t defaultconfig = { 
-	.addr = NULL,
-	.port = 80,
-	.maxclient = 10,
-	.chunksize = 64,
-};
-
 http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
@@ -934,8 +953,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->config = config;
 	else
 		server->config = &defaultconfig;
-	if (server->config->version == 0)
-		server->config->version = HTTP10;
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -1107,8 +1124,10 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
 	message->headers = headerinfo;
-	if (!strncasecmp(key, "Connection", 10) && !strncasecmp(value, "KeepAlive", 10) )
+	if (!strncasecmp(key, "Connection", 10) && !strncasecmp(value, "keep-alive", 10) )
+	{
 		message->keepalive = 1;
+	}
 }
 
 void httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)

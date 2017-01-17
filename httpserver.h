@@ -130,6 +130,7 @@ typedef struct http_server_config_s
 	int chunksize;
 	/** the version of the HTTP server. */
 	http_message_version_e version;
+	int keepalive;
 } http_server_config_t;
 
 /**

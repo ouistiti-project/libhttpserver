@@ -137,7 +137,7 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 int main(int argc, char * const *argv)
 {
 #ifdef MBEDTLS
-	http_server_config_t *config = &(http_server_config_t){ .port = 443, .addr = NULL, };
+	http_server_config_t *config = &(http_server_config_t){ .port = 443, .addr = NULL, .keepalive = 1, .version = HTTP10};
 #else
 	http_server_config_t *config = NULL;
 #endif
