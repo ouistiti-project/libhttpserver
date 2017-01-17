@@ -297,6 +297,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				else
 				{
 					data->offset++;
+					ret = EREJECT;
 				}
 			}
 			break;
@@ -473,7 +474,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			}
 			break;
 		}
-		if (next == message->state)
+		if (next == message->state && ret == ECONTINUE)
 			ret = EINCOMPLETE;
 		message->state = next;
 	} while (ret == ECONTINUE);
