@@ -29,6 +29,21 @@
 #include <string.h>
 #include <errno.h>
 
+#if !defined(MBEDTLS_CONFIG_FILE)
+#include "mbedtls/config.h"
+#else
+#include MBEDTLS_CONFIG_FILE
+#endif
+
+#if defined(MBEDTLS_PLATFORM_C)
+#include <mbedtls/platform.h>
+#else
+#include <stdio.h>
+#include <stdlib.h>
+#define mbedtls_free       free
+#define mbedtls_calloc    calloc
+#endif
+
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/certs.h>
@@ -75,7 +90,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 	if (!modconfig)
 		return NULL;
 
-	config = calloc(1, sizeof(*config));
+	config = mbedtls_calloc(1, sizeof(*config));
 	mbedtls_x509_crt_init(&config->srvcert);
 	mbedtls_x509_crt_init(&config->cachain);
 
@@ -164,6 +179,7 @@ void mod_mbedtls_destroy(void *mod)
 	mbedtls_ctr_drbg_free(&config->ctr_drbg);
 	mbedtls_entropy_free(&config->entropy);
 	mbedtls_ssl_config_free(&config->conf);
+	mbedtls_free(config);
 }
 
 static int _mod_mbedtls_read(void *ctl, unsigned char *data, int size)

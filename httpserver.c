@@ -76,6 +76,7 @@ extern "C" {
 #endif
 
 
+#include "valloc.h"
 #include "vthread.h"
 #include "httpserver.h"
 
@@ -196,8 +197,8 @@ static int _httpclient_run(http_client_t *client);
 #define CHUNKSIZE 64
 static buffer_t * _buffer_create()
 {
-	buffer_t *buffer = calloc(1, sizeof(*buffer));
-	buffer->data = calloc(1, CHUNKSIZE);
+	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
+	buffer->data = vcalloc(1, CHUNKSIZE);
 	buffer->size = CHUNKSIZE;
 	buffer->offset = buffer->data;
 	return buffer;
@@ -210,7 +211,7 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 		char *data = buffer->data;
 		int chunksize = CHUNKSIZE * (length/CHUNKSIZE +1);
 
-		data = realloc(buffer->data, buffer->size + chunksize);
+		data = vrealloc(buffer->data, buffer->size + chunksize);
 		buffer->size += chunksize;
 		if (data != buffer->data)
 		{
@@ -234,15 +235,15 @@ static void _buffer_reset(buffer_t *buffer)
 
 static void _buffer_destroy(buffer_t *buffer)
 {
-	free(buffer->data);
-	free(buffer);
+	vfree(buffer->data);
+	vfree(buffer);
 }
 
 static http_message_t * _httpmessage_create(http_server_t *server, http_message_t *parent)
 {
 	http_message_t *message;
 
-	message = calloc(1, sizeof(*message));
+	message = vcalloc(1, sizeof(*message));
 	message->content = _buffer_create();
 	if (parent)
 	{
@@ -259,7 +260,7 @@ static void _httpmessage_destroy(http_message_t *message)
 		_buffer_destroy(message->content);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
-	free(message);
+	vfree(message);
 }
 
 static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
@@ -485,7 +486,7 @@ void httpclient_addconnector(http_client_t *client, char *url, http_connector_t 
 {
 	http_connector_list_t *callback;
 
-	callback = calloc(1, sizeof(*callback));
+	callback = vcalloc(1, sizeof(*callback));
 	if (url)
 	{
 		callback->url_length = strlen(url);
@@ -557,7 +558,7 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 
 static http_client_t *_httpclient_create(http_server_t *server)
 {
-	http_client_t *client = calloc(1, sizeof(*client));
+	http_client_t *client = vcalloc(1, sizeof(*client));
 	client->server = server;
 
 	client->recvreq = httpclient_recv;
@@ -593,8 +594,8 @@ static void _httpclient_destroy(http_client_t *client)
 	if (client->request)
 		_httpmessage_destroy(client->request);
 	if (client->session_storage)
-		free(client->session_storage);
-	free(client);
+		vfree(client->session_storage);
+	vfree(client);
 }
 
 static int _httpclient_connect(http_client_t *client)
@@ -888,7 +889,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	http_server_t *server;
 	int status;
 
-	server = calloc(1, sizeof(*server));
+	server = vcalloc(1, sizeof(*server));
 	if (config)
 		server->config = config;
 	else
@@ -902,9 +903,9 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
 		if ( server->sock < 0 )
 		{
-		 warn("Error creating socket");
-		 free(server);
-		 return NULL;
+			warn("Error creating socket");
+			vfree(server);
+			return NULL;
 		}
 
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
@@ -975,7 +976,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	if (status)
 	{
 		warn("Error bind/listen socket");
-		free(server);
+		vfree(server);
 		return NULL;
 	}
 	return server;
@@ -984,7 +985,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg)
 {
 	if (!server->mod)
-		server->mod = calloc(1, sizeof(*server->mod));
+		server->mod = vcalloc(1, sizeof(*server->mod));
 	server->mod->func = mod;
 	server->mod->freectx = unmod;
 	server->mod->arg = arg;
@@ -994,7 +995,7 @@ void httpserver_addconnector(http_server_t *server, char *url, http_connector_t 
 {
 	http_connector_list_t *callback;
 	
-	callback = calloc(1, sizeof(*callback));
+	callback = vcalloc(1, sizeof(*callback));
 	if (url)
 	{
 		callback->url_length = strlen(url);
@@ -1033,8 +1034,8 @@ void httpserver_disconnect(http_server_t *server)
 void httpserver_destroy(http_server_t *server)
 {
 	if (server->mod)
-		free(server->mod);
-	free(server);
+		vfree(server->mod);
+	vfree(server);
 #ifdef WIN32
 	WSACleanup();
 #endif
@@ -1059,7 +1060,7 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value)
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
 	dbentry_t *headerinfo;
-	headerinfo = calloc(1, sizeof(dbentry_t));
+	headerinfo = vcalloc(1, sizeof(dbentry_t));
 	headerinfo->key = key;
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
@@ -1170,7 +1171,7 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 		sessioninfo = sessioninfo->next;
 	if (!sessioninfo)
 	{
-		sessioninfo = calloc(1, sizeof(*sessioninfo));
+		sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 		if (!message->client->session_storage)
 			message->client->session_storage = _buffer_create();
 		sessioninfo->key = 

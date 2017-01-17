@@ -37,6 +37,7 @@
 #endif
 #endif
 
+#include "valloc.h"
 #include "vthread.h"
 
 struct vthread_s
@@ -55,7 +56,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 {
 	int ret = 0;
 	vthread_t vthread;
-	vthread = calloc(1, sizeof(struct vthread_s));
+	vthread = vcalloc(1, sizeof(struct vthread_s));
 #ifdef WIN32
 	/**
 	 * the commented lines was found on internet
@@ -102,7 +103,7 @@ int vthread_join(vthread_t thread, void **value_ptr)
 	if (thread->pthread)
 		ret = pthread_join(thread->pthread, value_ptr);
 #endif
-	free(thread);
+	vfree(thread);
 	return ret;
 }
 
