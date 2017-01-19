@@ -694,8 +694,6 @@ static int _httpclient_run(http_client_t *client)
 						client->state &= ~CLIENT_KEEPALIVE;
 						break;
 					}
-					else
-						size = 0;
 				}
 				else if (size > 0)
 				{
