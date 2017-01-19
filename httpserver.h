@@ -65,6 +65,7 @@ typedef enum
 	RESULT_400,
 	RESULT_404,
 	RESULT_405,
+	RESULT_414,
 } http_message_result_e;
 
 /**

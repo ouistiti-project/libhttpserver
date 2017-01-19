@@ -216,6 +216,7 @@ static const char *_http_message_result[] =
 	" 400 Bad Request",
 	" 404 File Not Found",
 	" 405 Method Not Allowed",
+	" 414 Request URI too long",
 };
 
 static char *_http_message_version[] =
@@ -244,6 +245,10 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 		int chunksize = CHUNKSIZE * (length/CHUNKSIZE +1);
 
 		data = vrealloc(buffer->data, buffer->size + chunksize);
+		if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > 511)
+		{
+			return NULL;
+		}
 		buffer->size += chunksize;
 		if (data != buffer->data)
 		{
@@ -386,7 +391,14 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				
 				if (message->uri == NULL)
 					message->uri = _buffer_create();
-				_buffer_append(message->uri, uri, length);
+				uri = _buffer_append(message->uri, uri, length);
+				if (uri == NULL)
+				{
+					_buffer_destroy(message->uri);
+					message->uri = _buffer_create();
+					message->result = RESULT_414;
+					ret = EREJECT;
+				}
 			}
 			break;
 			case PARSE_VERSION:
