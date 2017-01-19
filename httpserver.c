@@ -179,6 +179,7 @@ struct http_message_s
 		PARSE_END,
 	} state;
 	buffer_t *content;
+	int content_length;
 	buffer_t *uri;
 	http_message_version_e version;
 	buffer_t *headers_storage;
@@ -268,6 +269,7 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 static void _buffer_reset(buffer_t *buffer)
 {
 	buffer->offset = buffer->data;
+	buffer->length = 0;
 }
 
 static void _buffer_destroy(buffer_t *buffer)
@@ -625,7 +627,7 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 	if (response->content != NULL)
 	{
 		char content_length[32];
-		snprintf(content_length, 31, "Content-Length: %d\r\n", (int)strlen(response->content->data));
+		snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	_buffer_append(header, "\r\n", 2);
@@ -819,7 +821,7 @@ static int _httpclient_run(http_client_t *client)
 			case CLIENT_RESPONSECONTENT:
 			{
 				if (response->result == RESULT_200 &&
-					response->content->length > 0 &&
+					response->content_length > 0 &&
 					request->type != MESSAGE_TYPE_HEAD)
 				{
 					int size = CHUNKSIZE - 1;
@@ -830,7 +832,10 @@ static int _httpclient_run(http_client_t *client)
 						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					}
 					else
+					{
+						_buffer_reset(response->content);
 						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
+					}
 				}
 				else
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
@@ -1173,6 +1178,8 @@ void httpmessage_addcontent(http_message_t *message, char *type, char *content, 
 	}
 	if (length == -1)
 		length = strlen(content);
+	if (message->content_length == 0)
+		message->content_length = length;
 	if (content != NULL)
 	{
 		_buffer_append(message->content, content, length);
