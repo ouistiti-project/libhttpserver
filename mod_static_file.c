@@ -123,8 +123,8 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		}
 		private->fileno = fopen(filepath, "rb");
 		httpmessage_private(request, (void *)private);
-//		httpmessage_addcontent(response, "text/html", "\r\n", 2);
-//		return ECONTINUE;
+		httpmessage_addcontent(response, "text/html", NULL, filestat.st_size);
+		return ECONTINUE;
 	}
 	/**
 	 * TODO support of private from another callback
@@ -143,7 +143,7 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 	}
 	size = fread(content, 1, sizeof(content) - 1, private->fileno);
 	content[size] = 0;
-	httpmessage_addcontent(response, "text/html", content, size);
+	httpmessage_addcontent(response, "text/html", content, -1);
 	return ECONTINUE;
 }
 
