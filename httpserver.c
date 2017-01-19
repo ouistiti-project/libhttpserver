@@ -750,7 +750,10 @@ static int _httpclient_run(http_client_t *client)
 							/* callback is null to not recall the function */
 							if (ret == ESUCCESS)
 								client->callback = NULL;
-							client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+							if (response->version == HTTP09)
+								client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+							else
+								client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 						}
 						else
 							client->callback = client->callback->next;
