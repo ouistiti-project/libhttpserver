@@ -530,6 +530,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				if (key != NULL && value != NULL)
 				{
 					_httpmessage_addheader(message, key, value);
+					if (!strncasecmp(key, "Content-Length", 14))
+					{
+						message->content_length = atoi(value);
+					}
 				}
 				key = NULL;
 				value = NULL;
@@ -540,17 +544,36 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			{
 				char *header = data->offset;
 				int length = 0;
-				while (data->offset < (data->data + data->size))
+				if (message->content_length)
 				{
-					if (data->offset >= (data->data + data->length))
+					while (data->offset < (data->data + data->size))
 					{
-						next = PARSE_END;
+						data->offset++;
+						length++;
+						message->content_length--;
+						if (message->content_length <= 0)
+						{
+							next = PARSE_END;
+							break;
+						}
 					}
-					data->offset++;
-					length++;
+				}
+				else
+				{
+					while (data->offset < (data->data + data->size))
+					{
+						if (data->offset >= (data->data + data->length))
+						{
+							next = PARSE_END;
+							break;
+						}
+						data->offset++;
+						length++;
+					}
 				}
 				_buffer_append(message->content, header, length);
 			}
+			break;
 			case PARSE_END:
 			{
 				ret = ESUCCESS;
