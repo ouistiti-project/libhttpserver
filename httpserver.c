@@ -701,7 +701,8 @@ static int _httpclient_run(http_client_t *client)
 				{
 					tempo->length = size;
 					ret = _httpmessage_parserequest(request, tempo);
-					client->response = _httpmessage_create(client->server, client->request);
+					if (client->response == NULL)
+						client->response = _httpmessage_create(client->server, client->request);
 					client->response->client = client;
 				}
 				else /* socket shutdown */
