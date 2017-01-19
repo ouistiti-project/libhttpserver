@@ -127,9 +127,10 @@ typedef struct http_server_mod_s
 #define CLIENT_REQUEST 0x0000
 #define CLIENT_PARSER1 0x0001
 #define CLIENT_PARSER2 0x0002
-#define CLIENT_RESPONSEHEADER 0x0003
-#define CLIENT_RESPONSECONTENT 0x0004
-#define CLIENT_COMPLETE 0x0005
+#define CLIENT_PARSERERROR 0x0003
+#define CLIENT_RESPONSEHEADER 0x0004
+#define CLIENT_RESPONSECONTENT 0x0005
+#define CLIENT_COMPLETE 0x0006
 struct http_client_s
 {
 	int sock;
@@ -214,6 +215,7 @@ static const char *_http_message_result[] =
 	" 200 OK",
 	" 400 Bad Request",
 	" 404 File Not Found",
+	" 405 Method Not Allowed",
 };
 
 static char *_http_message_version[] =
@@ -342,6 +344,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				else
 				{
 					data->offset++;
+					message->result = RESULT_405;
 					ret = EREJECT;
 				}
 			}
@@ -716,8 +719,10 @@ static int _httpclient_run(http_client_t *client)
 				}
 				else if (ret == EREJECT)
 				{
-					response->result = RESULT_400;
-					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+					if (request->result == RESULT_200)
+						request->result = RESULT_400;
+					client->response->result = request->result;
+					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 				}
 			}
 			break;
@@ -727,7 +732,7 @@ static int _httpclient_run(http_client_t *client)
 				if (client->callback == NULL)
 				{
 					response->result = RESULT_404;
-					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else
 				{
@@ -817,6 +822,12 @@ static int _httpclient_run(http_client_t *client)
 				}
 				else
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			break;
+			case CLIENT_PARSERERROR:
+			{
+				httpmessage_addheader(client->response, "Allow", "GET, POST, HEAD");
+				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			break;
 			case CLIENT_COMPLETE:
