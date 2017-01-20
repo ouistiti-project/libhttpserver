@@ -38,7 +38,7 @@ extern "C"
 typedef struct uri_s uri_t;
 struct uri_s
 {
-	const char	*proto;
+	const char	*scheme;
 	const char	*user;
 	const char	*host;
 	const char	*port_str;

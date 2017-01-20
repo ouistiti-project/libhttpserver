@@ -41,7 +41,7 @@ int uri_parse(uri_t *uri, char *string)
 {
 	enum
 	{
-		e_proto,
+		e_scheme,
 		e_protoname,
 		e_user,
 		e_host,
@@ -49,7 +49,7 @@ int uri_parse(uri_t *uri, char *string)
 		e_path,
 		e_query,
 		e_end
-	} state = e_proto;
+	} state = e_scheme;
 	char *it = string;
 	char *end = string + strlen(string);
 
@@ -57,14 +57,14 @@ int uri_parse(uri_t *uri, char *string)
 		return -1;
 
 	memset(uri, 0, sizeof(*uri));
-	uri->proto = it;
+	uri->scheme = it;
 	while (it < end)
 	{
 		if (*it == 0)
 			state = e_end;
 		switch(state)
 		{
-			case e_proto:
+			case e_scheme:
 				if (*it == ':')
 				{
 					*it = 0;
@@ -165,10 +165,10 @@ int uri_parse(uri_t *uri, char *string)
 	{
 		uri->port = atoi(uri->port_str);
 	}
-	if (uri->port == 0 && uri->proto != NULL)
+	if (uri->port == 0 && uri->scheme != NULL)
 	{
 		struct protoent *servptr;
-		servptr = getprotobyname(uri->proto);
+		servptr = getprotobyname(uri->scheme);
 		if (servptr)
 			uri->port = servptr->p_proto;
 	}
@@ -208,8 +208,8 @@ int main(int argc, char **argv)
 	if (argc < 2)
 		return -1;
 	uri_parse(&uri, argv[1]);
-	if (uri.proto)
-		printf("proto %s\n", uri.proto);
+	if (uri.scheme)
+		printf("scheme %s\n", uri.scheme);
 	if (uri.user)
 		printf("user %s\n", uri.user);
 	if (uri.host)
