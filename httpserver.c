@@ -562,7 +562,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 									if (value == NULL && key == NULL)
 									{
 										*data->offset  = '\0';
-										header = _buffer_append(message->headers_storage, header, length + 1);
+										header = _buffer_append(message->content, header, length + 1);
 										key = header - tempo;
 										length = 0;
 										header = data->offset + 1;
@@ -593,8 +593,8 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 											 * store the offset of the key to restitute
 											 * the pointer after the reallocation
 											 */
-											int keylen = message->headers_storage->offset - key;
-											header = _buffer_append(message->headers_storage, header, length + 1);
+											int keylen = message->content->offset - key;
+											header = _buffer_append(message->content, header, length + 1);
 											key = header - keylen;
 											value = header - tempo;
 											tempo = 0;
@@ -622,8 +622,8 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 										 * store the offset of the key to restitute
 										 * the pointer after the reallocation
 										 */
-										int keylen = message->headers_storage->offset - key;
-										header = _buffer_append(message->headers_storage, header, length + 1);
+										int keylen = message->content->offset - key;
+										header = _buffer_append(message->content, header, length + 1);
 										key = header - keylen;
 										value = header - tempo;
 										tempo = 0;
@@ -639,7 +639,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						/* not enougth data to complete the line */
 						if (next == PARSE_CONTENT)
 						{
-							_buffer_append(message->headers_storage, header, length);
+							_buffer_append(message->content, header, length);
 							tempo += length;
 						}
 					}
