@@ -51,6 +51,21 @@ struct uri_s
 int uri_parse(uri_t *dst, char *src);
 const char *uri_query(uri_t *uri, char *key);
 
+typedef struct dbentry_s dbentry_t;
+
+
+dbentry_t *dbentry_create(char separator, char *string, int storage);
+const char *dbentry_value(dbentry_t *entry, char *key);
+void dbentry_free(dbentry_t *entry);
+
+#define post_create(string, storage) dbentry_create('=', string, storage)
+#define post_value dbentry_value
+#define post_free dbentry_free
+#define header_create(string, storage) dbentry_create(':', string, storage)
+#define header_value dbentry_value
+#define header_free dbentry_free
+
+
 #ifdef __cplusplus
 }
 #endif

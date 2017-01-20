@@ -37,6 +37,102 @@
 
 const char *g_localhost = "localhost";
 
+struct dbentry_s
+{
+	char *storage;
+	char *key;
+	char *value;
+	struct dbentry_s *next;
+};
+
+dbentry_t *dbentry_create(char separator, char *string, int storage)
+{
+	dbentry_t *entry;
+	enum
+	{
+		e_key,
+		e_value,
+		e_end
+	} state = e_key;
+	char *it = string;
+	char *end = string + strlen(string);
+
+	if (string == NULL)
+		return NULL;
+
+	entry = calloc(1, sizeof(*entry));
+	if (storage)
+	{
+		entry->storage = calloc(1, (end - it) + 1);
+		memcpy(entry->storage, string, (end - it) + 1);
+	}
+	entry->key = it;
+	while (it < end)
+	{
+		if (*it == 0)
+			state = e_end;
+		if (*it == '\r')
+		{
+			*it = '\0';
+		}
+		if (*it == '\n')
+		{
+			dbentry_t *new = calloc(1, sizeof(*new));
+			new->key = it + 1;
+			new->next = entry;
+			entry = new;
+			*it = 0;
+			state = e_key;
+		}
+		switch(state)
+		{
+			case e_key:
+			{
+				if (*it == separator)
+				{
+					entry->value = it + 1;
+					*it = 0;
+					state = e_value;
+				}
+			}
+			break;
+			case e_value:
+			{
+			}
+			break;
+			case e_end:
+				it = end;
+			break;
+		}
+		it++;
+	}
+	return entry;
+}
+
+const char *dbentry_value(dbentry_t *entry, char *key)
+{
+	while (entry && strcmp(entry->key, key)) entry = entry->next;
+	if (entry)
+		return (const char *)entry->value;
+	return NULL;
+}
+
+void dbentry_free(dbentry_t *entry)
+{
+	while (entry)
+	{
+		dbentry_t *keep = entry->next;
+		if (entry->storage)
+			free(entry->storage);
+		if (entry->key)
+			free(entry->key);
+		if (entry->value)
+			free(entry->value);
+		free(entry);
+		entry = keep;
+	}
+}
+
 int uri_parse(uri_t *uri, char *string)
 {
 	enum
