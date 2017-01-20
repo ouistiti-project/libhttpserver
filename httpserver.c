@@ -461,6 +461,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					message->headers_storage = _buffer_create();
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
+#ifdef HEADER_PARSING
 					switch (*data->offset)
 					{
 						case ':':
@@ -516,6 +517,15 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							length++;
 						}
 					}
+#else
+					if (*data->offset == '\n')
+					{
+						if (length == 0)
+							next = PARSE_CONTENT;
+					}
+					else
+						length++;
+#endif
 					data->offset++;
 				}
 
@@ -527,6 +537,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				}
 			}
 			break;
+#ifdef HEADER_PARSING
 			case PARSE_HEADERNEXT:
 			{
 				if (key != NULL && value != NULL)
@@ -544,12 +555,14 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				next = PARSE_HEADER;
 			}
 			break;
+#endif
 			case PARSE_CONTENT:
 			{
 				char *header = data->offset;
 				int length = 0;
 				if (message->content_length)
 				{
+#ifdef CONTENT_PARSING
 					if (formurlencoded)
 					{
 						while (data->offset < (data->data + data->size) && next == PARSE_CONTENT)
@@ -644,6 +657,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						}
 					}
 					else
+#endif
 					{
 						while (data->offset < (data->data + data->size))
 						{
@@ -675,6 +689,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				}
 			}
 			break;
+#ifdef CONTENT_PARSING
 			case PARSE_CONTENTNEXT:
 			{
 				if (key != NULL && value != NULL)
@@ -687,6 +702,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				next = PARSE_CONTENT;
 			}
 			break;
+#endif
 			case PARSE_END:
 			{
 				ret = ESUCCESS;
