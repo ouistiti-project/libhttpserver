@@ -176,10 +176,12 @@ struct http_message_s
 		PARSE_HEADER,
 		PARSE_HEADERNEXT,
 		PARSE_CONTENT,
+		PARSE_CONTENTNEXT,
 		PARSE_END,
 	} state;
 	buffer_t *content;
 	int content_length;
+	dbentry_t *post;
 	buffer_t *uri;
 	http_message_version_e version;
 	buffer_t *headers_storage;
@@ -199,6 +201,7 @@ struct http_server_s
 };
 
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
+static void _httpmessage_addcontent(http_message_t *message, char *key, char *value);
 static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
@@ -321,6 +324,8 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 	int ret = ECONTINUE;
 	static char *key = NULL;
 	static char *value = NULL;
+	static int tempo = 0;
+	static int formurlencoded = 0;
 	do
 	{
 		int next = message->state;
@@ -330,6 +335,8 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			{
 				key = NULL;
 				value = NULL;
+				formurlencoded = 0;
+				tempo = 0;
 				if (!strncasecmp(data->offset,"GET ",4))
 				{
 					message->type = MESSAGE_TYPE_GET;
@@ -458,20 +465,17 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					{
 						case ':':
 						{
-							*data->offset = '\0';
-							header = _buffer_append(message->headers_storage, header, length + 1);
-							if (key == NULL)
+							if (value == NULL && key == NULL)
 							{
-								key = header;
+								*data->offset  = '\0';
+								header = _buffer_append(message->headers_storage, header, length + 1);
+								key = header - tempo;
 								length = 0;
+								header = data->offset + 1;
+								tempo = 0;
 							}
-							else
-							{
-								int len = strlen(key);
-								key = header - len;
-							}
-							header = data->offset + 1;
 						}
+						break;
 						case ' ':
 						{
 							/* remove first spaces */
@@ -489,18 +493,19 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							if (length > 0)
 							{
 								*data->offset = '\0';
-								header = _buffer_append(message->headers_storage, header, length + 1);
 								if (value == NULL)
 								{
-									value = header;
-									length = 0;
+									/* message->headers_storage may be reallocated
+									 * store the offset of the key to restitute
+									 * the pointer after the reallocation
+									 */
+									int keylen = message->headers_storage->offset - key;
+									header = _buffer_append(message->headers_storage, header, length + 1);
+									key = header - keylen;
+									value = header - tempo;
+									tempo = 0;
+									next = PARSE_HEADERNEXT;
 								}
-								else
-								{
-									int len = strlen(value);
-									value = header - len;
-								}
-								next = PARSE_HEADERNEXT;
 							}
 							else
 								next = PARSE_CONTENT;
@@ -517,11 +522,8 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				/* not enougth data to complete the line */
 				if (next == PARSE_HEADER)
 				{
-					header = _buffer_append(message->headers_storage, header, length);
-					if (key == NULL)
-						key = header;
-					else if (value == NULL)
-						value = header;
+					_buffer_append(message->headers_storage, header, length);
+					tempo += length;
 				}
 			}
 			break;
@@ -530,13 +532,15 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				if (key != NULL && value != NULL)
 				{
 					_httpmessage_addheader(message, key, value);
-					if (!strncasecmp(key, "Content-Length", 14))
+					if (!strncasecmp(key, "Content-Type", 12))
+					if (!strncasecmp(key, "Content-Type", 12) && !strncasecmp(value, "application/x-www-form-urlencoded", 33))
 					{
-						message->content_length = atoi(value);
+						formurlencoded = 1;
 					}
 				}
 				key = NULL;
 				value = NULL;
+				tempo = 0;
 				next = PARSE_HEADER;
 			}
 			break;
@@ -546,16 +550,113 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				int length = 0;
 				if (message->content_length)
 				{
-					while (data->offset < (data->data + data->size))
+					if (formurlencoded)
 					{
-						data->offset++;
-						length++;
-						message->content_length--;
-						if (message->content_length <= 0)
+						while (data->offset < (data->data + data->size) && next == PARSE_CONTENT)
 						{
-							next = PARSE_END;
-							break;
+							message->content_length--;
+							switch (*data->offset)
+							{
+								case '=':
+								{
+									if (value == NULL && key == NULL)
+									{
+										*data->offset  = '\0';
+										header = _buffer_append(message->headers_storage, header, length + 1);
+										key = header - tempo;
+										length = 0;
+										header = data->offset + 1;
+										tempo = 0;
+									}
+								}
+								break;
+								case ' ':
+								{
+									/* remove first spaces */
+									if (header == data->offset)
+										header = data->offset + 1;
+								}
+								break;
+								case '\r':
+								{
+									*data->offset = '\0';
+								}
+								break;
+								case '\n':
+								{
+									if (length > 0)
+									{
+										*data->offset = '\0';
+										if (value == NULL)
+										{
+											/* message->headers_storage may be reallocated
+											 * store the offset of the key to restitute
+											 * the pointer after the reallocation
+											 */
+											int keylen = message->headers_storage->offset - key;
+											header = _buffer_append(message->headers_storage, header, length + 1);
+											key = header - keylen;
+											value = header - tempo;
+											tempo = 0;
+											next = PARSE_CONTENTNEXT;
+										}
+									}
+									else
+										next = PARSE_END;
+								}
+								break;
+								default:
+								{
+									length++;
+								}
+							}
+							data->offset++;
+							if (message->content_length <= 0)
+							{
+								if (key != NULL && length > 0)
+								{
+									*data->offset = '\0';
+									if (value == NULL)
+									{
+										/* message->headers_storage may be reallocated
+										 * store the offset of the key to restitute
+										 * the pointer after the reallocation
+										 */
+										int keylen = message->headers_storage->offset - key;
+										header = _buffer_append(message->headers_storage, header, length + 1);
+										key = header - keylen;
+										value = header - tempo;
+										tempo = 0;
+										next = PARSE_CONTENTNEXT;
+									}
+								}
+								else
+									next == PARSE_END;
+								break;
+							}
 						}
+
+						/* not enougth data to complete the line */
+						if (next == PARSE_CONTENT)
+						{
+							_buffer_append(message->headers_storage, header, length);
+							tempo += length;
+						}
+					}
+					else
+					{
+						while (data->offset < (data->data + data->size))
+						{
+							length++;
+							data->offset++;
+							message->content_length--;
+							if (message->content_length <= 0)
+							{
+								next = PARSE_END;
+								break;
+							}
+						}
+						header = _buffer_append(message->content, header, length);
 					}
 				}
 				else
@@ -570,8 +671,20 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						data->offset++;
 						length++;
 					}
+					_buffer_append(message->content, header, length);
 				}
-				_buffer_append(message->content, header, length);
+			}
+			break;
+			case PARSE_CONTENTNEXT:
+			{
+				if (key != NULL && value != NULL)
+				{
+					_httpmessage_addcontent(message, key, value);
+				}
+				key = NULL;
+				value = NULL;
+				tempo = 0;
+				next = PARSE_CONTENT;
 			}
 			break;
 			case PARSE_END:
@@ -1183,10 +1296,26 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
 	message->headers = headerinfo;
+	dbg("header %s => %s\n", key, value);
 	if (!strncasecmp(key, "Connection", 10) && strcasestr(value, "Keep-Alive") )
 	{
 		message->keepalive = 1;
 	}
+	if (!strncasecmp(key, "Content-Length", 14))
+	{
+		message->content_length = atoi(value);
+	}
+}
+
+static void _httpmessage_addcontent(http_message_t *message, char *key, char *value)
+{
+	dbentry_t *headerinfo;
+	headerinfo = vcalloc(1, sizeof(dbentry_t));
+	headerinfo->key = key;
+	headerinfo->value = value;
+	headerinfo->next = message->post;
+	message->post = headerinfo;
+	dbg("post %s => %s\n", key, value);
 }
 
 void httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
