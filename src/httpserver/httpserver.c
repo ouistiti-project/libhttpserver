@@ -84,15 +84,8 @@ extern "C" {
 
 #include "valloc.h"
 #include "vthread.h"
+#include "dbentry.h"
 #include "httpserver.h"
-
-struct dbentry_s
-{
-	char *key;
-	char *value;
-	struct dbentry_s *next;
-};
-typedef struct dbentry_s dbentry_t;
 
 typedef struct buffer_s
 {

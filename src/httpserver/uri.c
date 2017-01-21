@@ -34,16 +34,9 @@
 #endif
 
 #include "uri.h"
+#include "dbentry.h"
 
 const char *g_localhost = "localhost";
-
-struct dbentry_s
-{
-	char *storage;
-	char *key;
-	char *value;
-	struct dbentry_s *next;
-};
 
 dbentry_t *dbentry_create(char separator, char *string, int storage)
 {
