@@ -178,9 +178,11 @@ lib-dynamic-target:=$(addprefix $(obj)/,$(addsuffix $(dlib-ext:%=.%),$(lib-y)))
 endif
 modules-target:=$(addprefix $(obj)/,$(addsuffix $(dlib-ext:%=.%),$(modules-y)))
 bin-target:=$(addprefix $(obj)/,$(addsuffix $(bin-ext:%=.%),$(bin-y) $(sbin-y)))
-subdir-target:=$(wildcard $(addprefix $(src)/,$(addsuffix /Makefile,$(subdir-y))))
-subdir-target+=$(wildcard $(addprefix $(src)/,$(addsuffix /*$(makefile-ext:%=.%),$(subdir-y))))
-subdir-target+=$(if $(strip $(subdir-target)),,$(wildcard $(addprefix $(src)/,$(subdir-y))))
+subdir-target:=$(wildcard $(addsuffix /Makefile,$(subdir-y)))
+subdir-target+=$(wildcard $(addsuffix /*$(makefile-ext:%=.%),$(subdir-y)))
+subdir-dir:=$(dir $(wildcard $(addsuffix /Makefile,$(subdir-y))))
+subdir-target+=$(wildcard $(filter-out $(subdir-dir:%/=%),$(subdir-y)))
+subdir-target:=$(addprefix $(src)/,$(subdir-target))
 
 targets:=
 targets+=$(lib-dynamic-target)
