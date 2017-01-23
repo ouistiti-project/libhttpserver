@@ -85,6 +85,9 @@ extern "C" {
 #include "valloc.h"
 #include "vthread.h"
 #include "dbentry.h"
+#ifdef USE_LIBURI
+#include "uri.h"
+#endif
 #include "httpserver.h"
 
 typedef struct buffer_s
@@ -546,6 +549,9 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				tempo = 0;
 				next = PARSE_HEADER;
 #else
+#ifdef USE_LIBURI
+				message->headers = header_create(message->headers_storage, 0);
+#endif
 				next = PARSE_CONTENT;
 #endif
 			}
