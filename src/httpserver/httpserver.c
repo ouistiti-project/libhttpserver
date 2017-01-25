@@ -196,6 +196,7 @@ struct http_server_s
 	http_server_mod_t *mod;
 };
 
+static int _httpserver_start(http_server_t *server);
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
 static void _httpmessage_addcontent(http_message_t *message, char *key, char *value);
 static int _httpclient_run(http_client_t *client);
@@ -1134,7 +1135,6 @@ static int _httpserver_connect(http_server_t *server)
 http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
-	int status;
 
 	server = vcalloc(1, sizeof(*server));
 	if (config)
@@ -1145,14 +1145,25 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
+	if (_httpserver_start(server))
+	{
+		free(server);
+		return NULL;
+	}
+	return server;
+}
+
+static int _httpserver_start(http_server_t *server)
+{
+	int status;
+
 	if (server->config->addr == NULL)
 	{
 		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
 		if ( server->sock < 0 )
 		{
 			warn("Error creating socket");
-			vfree(server);
-			return NULL;
+			return -1;
 		}
 
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
@@ -1187,7 +1198,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		status = getaddrinfo(server->config->addr, NULL, &hints, &result);
 		if (status != 0) {
 			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-			return NULL;
+			return -1;
 		}
 
 		for (rp = result; rp != NULL; rp = rp->ai_next)
@@ -1222,11 +1233,10 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	}
 	if (status)
 	{
-		warn("Error bind/listen socket");
-		vfree(server);
-		return NULL;
+		warn("Error bind/listen port %d", server->config->port);
+		return -1;
 	}
-	return server;
+	return 0;
 }
 
 void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg)
