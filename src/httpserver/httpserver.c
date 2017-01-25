@@ -1346,13 +1346,17 @@ static void _httpmessage_addcontent(http_message_t *message, char *key, char *va
 
 void httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
-	if (type == NULL)
+	if (message->state < PARSE_CONTENT)
 	{
-		httpmessage_addheader(message, "Content-Type", "text/plain");
-	}
-	else
-	{
-		httpmessage_addheader(message, "Content-Type", type);
+		if (type == NULL)
+		{
+			httpmessage_addheader(message, "Content-Type", "text/plain");
+		}
+		else
+		{
+			httpmessage_addheader(message, "Content-Type", type);
+		}
+		message->state = PARSE_CONTENT;
 	}
 	if (length == -1)
 		length = strlen(content);
