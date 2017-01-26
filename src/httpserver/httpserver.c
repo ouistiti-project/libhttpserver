@@ -734,6 +734,11 @@ void httpclient_addconnector(http_client_t *client, char *url, http_connector_t 
 	client->callbacks = callback;
 }
 
+void *httpclient_context(http_client_t *client)
+{
+	return client->ctx;
+}
+
 http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
 {
 	http_recv_t previous = client->recvreq;
