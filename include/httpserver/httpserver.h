@@ -263,16 +263,20 @@ char *httpmessage_REQUEST(http_message_t *message, char *key);
  * @param client the connection that is receiving the request
  * @param func the callback
  * @param arg the first parameter of the callback
+ * 
+ * @return return the previous request receiver callback
  */
-void httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg);
+http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg);
 /**
  * @brief add a response sender callback
  *
  * @param client the connection that received the request
  * @param func the callback
  * @param arg the first parameter of the callback
+ * 
+ * @return return the previous response sender callback
  */
-void httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
+http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
 /**
  * @brief read data on the client socket
  * 

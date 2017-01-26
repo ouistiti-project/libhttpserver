@@ -734,16 +734,20 @@ void httpclient_addconnector(http_client_t *client, char *url, http_connector_t 
 	client->callbacks = callback;
 }
 
-void httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
+http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
 {
+	http_recv_t previous = client->recvreq;
 	client->recvreq = func;
 	client->ctx = arg;
+	return previous;
 }
 
-void httpclient_addsender(http_client_t *client, http_send_t func, void *arg)
+http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg)
 {
+	http_send_t previous = client->sendresp;
 	client->sendresp = func;
 	client->ctx = arg;
+	return previous;
 }
 
 int httpclient_recv(void *ctl, char *data, int length)
@@ -872,6 +876,16 @@ static int _httpclient_run(http_client_t *client)
 					if (client->response == NULL)
 						client->response = _httpmessage_create(client->server, client->request);
 					client->response->client = client;
+					if (client->request->state >= PARSE_CONTENT)
+					{
+						client->callback = client->callbacks;
+						while (client->callback != NULL)
+						{
+							client->callback->func(client->callback->arg, client->request, client->response);
+							client->callback = client->callback->next;
+						}
+					}
+					client->callback = client->callbacks;
 				}
 				else /* socket shutdown */
 				{
