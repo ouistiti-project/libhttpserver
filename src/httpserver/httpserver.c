@@ -1331,6 +1331,31 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 			break;
 		}
 	}
+	return value;
+}
+
+char *httpmessage_REQUEST(http_message_t *message, char *key)
+{
+	char *value = "";
+	if (!strcasecmp(key, "uri"))
+	{
+		if (message->uri != NULL)
+			value = message->uri->data;
+	}
+	else if (!strcasecmp(key, "Content-Length"))
+	{
+		if (message->content != NULL)
+		{
+			value = (char *)message->content_length;
+		}
+	}
+	else if (!strcasecmp(key, "content"))
+	{
+		if (message->content != NULL)
+		{
+			value = message->content->data;
+		}
+	}
 	else
 	{
 		dbentry_t *header = message->headers;
@@ -1343,17 +1368,6 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 			}
 			header = header->next;
 		}
-	}
-	return value;
-}
-
-char *httpmessage_REQUEST(http_message_t *message, char *key)
-{
-	char *value = "";
-	if (!strcasecmp(key, "uri"))
-	{
-		if (message->uri != NULL)
-			value = message->uri->data;
 	}
 	return value;
 }
