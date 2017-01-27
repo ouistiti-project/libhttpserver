@@ -538,11 +538,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				if (key != NULL && value != NULL)
 				{
 					_httpmessage_addheader(message, key, value);
-					if (!strncasecmp(key, "Content-Type", 12))
-					if (!strncasecmp(key, "Content-Type", 12) && !strncasecmp(value, "application/x-www-form-urlencoded", 33))
-					{
-						formurlencoded = 1;
-					}
 				}
 				key = NULL;
 				value = NULL;
@@ -560,117 +555,19 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			{
 				char *header = data->offset;
 				int length = 0;
+
 				if (message->content_length)
 				{
-#ifndef CONTENT_NOPARSING
-					if (formurlencoded)
+					while (data->offset < (data->data + data->length))
 					{
-						while (data->offset < (data->data + data->size) && next == PARSE_CONTENT)
+						length++;
+						data->offset++;
+						message->content_length--;
+						if (message->content_length <= 0)
 						{
-							message->content_length--;
-							switch (*data->offset)
-							{
-								case '=':
-								{
-									if (value == NULL && key == NULL)
-									{
-										*data->offset  = '\0';
-										header = _buffer_append(message->content, header, length + 1);
-										key = header - tempo;
-										length = 0;
-										header = data->offset + 1;
-										tempo = 0;
-									}
-								}
-								break;
-								case ' ':
-								{
-									/* remove first spaces */
-									if (header == data->offset)
-										header = data->offset + 1;
-								}
-								break;
-								case '\r':
-								{
-									*data->offset = '\0';
-								}
-								break;
-								case '\n':
-								{
-									if (length > 0)
-									{
-										*data->offset = '\0';
-										if (value == NULL)
-										{
-											/* message->headers_storage may be reallocated
-											 * store the offset of the key to restitute
-											 * the pointer after the reallocation
-											 */
-											int keylen = message->content->offset - key;
-											header = _buffer_append(message->content, header, length + 1);
-											key = header - keylen;
-											value = header - tempo;
-											tempo = 0;
-											next = PARSE_CONTENTNEXT;
-										}
-									}
-									else
-										next = PARSE_END;
-								}
-								break;
-								default:
-								{
-									length++;
-								}
-							}
-							data->offset++;
-							if (message->content_length <= 0)
-							{
-								if (key != NULL && length > 0)
-								{
-									*data->offset = '\0';
-									if (value == NULL)
-									{
-										/* message->headers_storage may be reallocated
-										 * store the offset of the key to restitute
-										 * the pointer after the reallocation
-										 */
-										int keylen = message->content->offset - key;
-										header = _buffer_append(message->content, header, length + 1);
-										key = header - keylen;
-										value = header - tempo;
-										tempo = 0;
-										next = PARSE_CONTENTNEXT;
-									}
-								}
-								else
-									next == PARSE_END;
-								break;
-							}
+							next = PARSE_END;
+							break;
 						}
-
-						/* not enougth data to complete the line */
-						if (next == PARSE_CONTENT)
-						{
-							_buffer_append(message->content, header, length);
-							tempo += length;
-						}
-					}
-					else
-#endif
-					{
-						while (data->offset < (data->data + data->size))
-						{
-							length++;
-							data->offset++;
-							message->content_length--;
-							if (message->content_length <= 0)
-							{
-								next = PARSE_END;
-								break;
-							}
-						}
-						header = _buffer_append(message->content, header, length);
 					}
 				}
 				else
@@ -685,24 +582,9 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						data->offset++;
 						length++;
 					}
-					_buffer_append(message->content, header, length);
 				}
 			}
 			break;
-#ifndef CONTENT_NOPARSING
-			case PARSE_CONTENTNEXT:
-			{
-				if (key != NULL && value != NULL)
-				{
-					_httpmessage_addcontent(message, key, value);
-				}
-				key = NULL;
-				value = NULL;
-				tempo = 0;
-				next = PARSE_CONTENT;
-			}
-			break;
-#endif
 			case PARSE_END:
 			{
 				ret = ESUCCESS;
