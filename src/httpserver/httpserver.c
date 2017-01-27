@@ -118,6 +118,7 @@ typedef struct http_server_mod_s
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
+#define CLIENT_RESPONSEREADY 0x4000
 #define CLIENT_KEEPALIVE 0x8000
 #define CLIENT_MACHINEMASK 0x00FF
 #define CLIENT_REQUEST 0x0000
@@ -886,7 +887,17 @@ static int _httpclient_run(http_client_t *client)
 						client->callback = client->callbacks;
 						while (client->callback != NULL)
 						{
-							client->callback->func(client->callback->arg, client->request, client->response);
+							int tret;
+							tret = client->callback->func(client->callback->arg, client->request, client->response);
+							if (tret == ESUCCESS)
+							{
+								client->state |= CLIENT_RESPONSEREADY;
+								if (client->response->result != RESULT_200)
+								{
+									ret = EREJECT;
+									break;
+								}
+							}
 							client->callback = client->callback->next;
 						}
 					}
@@ -915,6 +926,14 @@ static int _httpclient_run(http_client_t *client)
 			case CLIENT_PARSER1:
 			{
 				char *cburl = NULL;
+				if (client->state & CLIENT_RESPONSEREADY)
+				{
+					if (response->version == HTTP09)
+						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+					else
+						client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+					break;
+				}
 				if (client->callback == NULL)
 				{
 					response->result = RESULT_404;
@@ -939,11 +958,10 @@ static int _httpclient_run(http_client_t *client)
 						{
 							/* callback is null to not recall the function */
 							if (ret == ESUCCESS)
+							{
+								client->state |= CLIENT_RESPONSEREADY;
 								client->callback = NULL;
-							if (response->version == HTTP09)
-								client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
-							else
-								client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+							}
 						}
 						else
 							client->callback = client->callback->next;
