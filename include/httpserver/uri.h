@@ -48,8 +48,11 @@ struct uri_s
 	int		nbqueries;
 };
 
+uri_t *uri_create(char *src);
+void uri_free(uri_t *uri);
 int uri_parse(uri_t *dst, char *src);
 const char *uri_query(uri_t *uri, char *key);
+const char *uri_part(uri_t *uri, char *key);
 
 typedef struct dbentry_s dbentry_t;
 

@@ -126,6 +126,38 @@ void dbentry_free(dbentry_t *entry)
 	}
 }
 
+uri_t *uri_create(char *src)
+{
+	uri_t *entry;
+
+	if (src == NULL)
+		return NULL;
+
+	entry = calloc(1, sizeof(*entry));
+	uri_parse(entry, src);
+	return entry;
+}
+
+void uri_free(uri_t *uri)
+{
+	free(uri);
+}
+
+const char *uri_part(uri_t *uri, char *key)
+{
+	if (strstr(key,"scheme"))
+		return uri->scheme;
+	if (strstr(key,"user"))
+		return uri->user;
+	if (strstr(key,"host"))
+		return uri->host;
+	if (strstr(key,"port"))
+		return uri->port_str;
+	if (strstr(key,"path"))
+		return uri->path;
+	return NULL;
+}
+
 int uri_parse(uri_t *uri, char *string)
 {
 	enum
