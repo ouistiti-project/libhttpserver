@@ -36,8 +36,8 @@
 static mod_static_file_t default_config = 
 {
 	.docroot = "/srv/www/htdocs",
-	.accepted_ext = "html xhtml htm css",
-	.ignored_ext = "php",
+	.accepted_ext = ".html,.xhtml,.htm,.css",
+	.ignored_ext = ".php",
 };
 struct _static_file_connector_s
 {
@@ -65,15 +65,16 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		char *fileext = strrchr(filepath,'.');
 		if (fileext != NULL)
 		{
-			fileext++;
-
 			strncpy(ext_str, config->ignored_ext, 63);
-			ext = strtok(ext_str, " ");
+			ext = strtok(ext_str, ",");
 			while (ext != NULL)
 			{
 				if (!strcmp(ext, fileext))
+				{
+					free(private);
 					return EREJECT;
-				ext = strtok(NULL, " ");
+				}
+				ext = strtok(NULL, ",");
 			}
 		}
 		struct stat filestat;
@@ -81,14 +82,14 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		if (S_ISDIR(filestat.st_mode))
 		{
 			strncpy(ext_str, config->accepted_ext, 63);
-			ext = strtok(ext_str, " ");
+			ext = strtok(ext_str, ",");
 			while (ext != NULL)
 			{
-				snprintf(filepath, 511, "%s%s/index.%s", config->docroot, httpmessage_REQUEST(request, "uri"), ext);
+				snprintf(filepath, 511, "%s%s/index%s", config->docroot, httpmessage_REQUEST(request, "uri"), ext);
 				ret = stat(filepath, &filestat);
 				if (ret == 0)
 					break;
-				ext = strtok(NULL, " ");
+				ext = strtok(NULL, ",");
 			}
 		}
 		/**
@@ -101,9 +102,8 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 			fileext = strrchr(filepath,'.');
 			if (fileext != NULL)
 			{
-				fileext++;
 				strncpy(ext_str, config->accepted_ext, 63);
-				ext = strtok(ext_str, " ");
+				ext = strtok(ext_str, ",");
 				while (ext != NULL)
 				{
 					if (!strcmp(ext, fileext))
@@ -111,7 +111,7 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 						ret = 0;
 						break;
 					}
-					ext = strtok(NULL, " ");
+					ext = strtok(NULL, ",");
 				}
 			}
 		}
