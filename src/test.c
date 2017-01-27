@@ -52,66 +52,6 @@ int test_client = 0;
 #endif
 
 char test_content[] = "<html><head><link rel=\"stylesheet\" href=\"styles.css\"></head><body>coucou<br/></body></html>";
-#if defined(TEST_FILE)
-struct test_config_s
-{
-	char *rootdoc;
-};
-struct test_config_s g_test_config = 
-{
-	.rootdoc = "/srv/www/htdocs",
-};
-struct test_connection_s
-{
-	int type;
-	FILE *fileno;
-};
-struct test_config_s *test_config = &g_test_config;
-int test_func(void *arg, http_message_t *request, http_message_t *response)
-{
-	struct test_config_s *config = (struct test_config_s *)arg;
-	char content[64];
-	int size;
-	struct test_connection_s *private = httpmessage_private(request, NULL);
-	if (!private)
-	{
-		private = calloc(1, sizeof(*private));
-		private->type = 0xAABBCCDD;
-
-		char filepath[512];
-		snprintf(filepath, 511, "%s%s", config->rootdoc, httpmessage_REQUEST(request, "uri"));
-		struct stat filestat;
-		int ret = stat(filepath, &filestat);
-		if (S_ISDIR(filestat.st_mode))
-		{
-			snprintf(filepath, 511, "%s%s/index.html", config->rootdoc, httpmessage_REQUEST(request, "uri"));
-			stat(filepath, &filestat);
-		}
-		if (ret != 0)
-		{
-			return EREJECT;
-		}
-		httpmessage_addheader(response, "Server", "libhttpserver");
-		private->fileno = fopen(filepath, "rb");
-		httpmessage_private(request, (void *)private);
-	}
-	/**
-	 * TODO support of private from another callback
-	 */
-	if (private->type != 0xAABBCCDD)
-		return EREJECT;
-	if (feof(private->fileno))
-	{
-		fclose(private->fileno);
-		private->fileno = NULL;
-		free(private);
-		return ESUCCESS;
-	}
-	size = fread(content, 1, sizeof(content), private->fileno);
-	httpmessage_addcontent(response, "text/html", content, size);
-	return ECONTINUE;
-}
-#else
 struct test_config_s
 {
 	int unsused;
@@ -132,7 +72,7 @@ int test_func(void *arg, http_message_t *request, http_message_t *response)
 #endif
 	return ESUCCESS;
 }
-#endif
+
 
 int main(int argc, char * const *argv)
 {
