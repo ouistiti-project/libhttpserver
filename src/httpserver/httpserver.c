@@ -505,7 +505,12 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 								}
 							}
 							else
+							{
+								data->length -= (data->offset - data->data);
+								memcpy(data->data, data->offset + 1, data->length);
+								data->offset = data->data;
 								next = PARSE_CONTENT;
+							}
 						}
 						break;
 						default:
@@ -547,6 +552,9 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 #ifdef USE_LIBURI
 				message->headers = header_create(message->headers_storage, 0);
 #endif
+				data->length -= (data->offset - data->data);
+				memcpy(data->data, data->offset + 1, data->length);
+				data->offset = data->data;
 				next = PARSE_CONTENT;
 #endif
 			}
