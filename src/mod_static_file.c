@@ -131,7 +131,9 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 	 */
 	if (private->type != 0xAABBCCDD)
 	{
-		free(private);
+		/* private owner is another mod,
+		 * don't free private here
+		 */
 		return EREJECT;
 	}
 	if (feof(private->fileno))
@@ -143,7 +145,7 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 	}
 	size = fread(content, 1, sizeof(content) - 1, private->fileno);
 	content[size] = 0;
-	httpmessage_addcontent(response, "text/html", content, -1);
+	httpmessage_addcontent(response, NULL, content, -1);
 	return ECONTINUE;
 }
 
