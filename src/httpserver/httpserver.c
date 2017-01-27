@@ -178,7 +178,6 @@ struct http_message_s
 	} state;
 	buffer_t *content;
 	int content_length;
-	dbentry_t *post;
 	buffer_t *uri;
 	http_message_version_e version;
 	buffer_t *headers_storage;
@@ -199,7 +198,6 @@ struct http_server_s
 
 static int _httpserver_start(http_server_t *server);
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
-static void _httpmessage_addcontent(http_message_t *message, char *key, char *value);
 static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
@@ -1368,17 +1366,6 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	{
 		message->content_length = atoi(value);
 	}
-}
-
-static void _httpmessage_addcontent(http_message_t *message, char *key, char *value)
-{
-	dbentry_t *headerinfo;
-	headerinfo = vcalloc(1, sizeof(dbentry_t));
-	headerinfo->key = key;
-	headerinfo->value = value;
-	headerinfo->next = message->post;
-	message->post = headerinfo;
-	dbg("post %s => %s\n", key, value);
 }
 
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
