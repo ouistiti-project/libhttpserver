@@ -39,9 +39,11 @@ static mod_static_file_t default_config =
 	.accepted_ext = ".html,.xhtml,.htm,.css",
 	.ignored_ext = ".php",
 };
+#define CONNECTOR_TYPE 0xAABBCCDD
 struct _static_file_connector_s
 {
 	int type;
+	void *previous;
 	FILE *fileno;
 };
 
@@ -54,11 +56,29 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 	int size;
 	struct _static_file_connector_s *private = httpmessage_private(request, NULL);
 
-	if (!private)
+	do
 	{
-		private = calloc(1, sizeof(*private));
-		private->type = 0xAABBCCDD;
+		if (!private)
+		{
+			private = calloc(1, sizeof(*private));
+			private->type = CONNECTOR_TYPE;
+			httpmessage_private(message, (void *)private);
+		}
+		else if (private->type != CONNECTOR_TYPE)
+		{
+			if (private->previous)
+			{
+				private = private->previous;
+				continue;
+			}
+			private->previous = calloc(1, sizeof(*private));
+			private->type = CONNECTOR_TYPE;
+			private = private->previous;
+		}
+	} while(0);
 
+	if (private->fileno = NULL)
+	{
 		char filepath[512];
 		snprintf(filepath, 511, "%s%s", config->docroot, httpmessage_REQUEST(request, "uri"));
 
@@ -125,16 +145,6 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		httpmessage_private(request, (void *)private);
 		httpmessage_addcontent(response, "text/html", NULL, filestat.st_size);
 		return ECONTINUE;
-	}
-	/**
-	 * TODO support of private from another callback
-	 */
-	if (private->type != 0xAABBCCDD)
-	{
-		/* private owner is another mod,
-		 * don't free private here
-		 */
-		return EREJECT;
 	}
 	if (feof(private->fileno))
 	{
