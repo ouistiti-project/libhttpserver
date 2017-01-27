@@ -212,8 +212,10 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value);
  * @param type the mime type of the content, NULL will set to "text/plain"
  * @param content the data of the content
  * @param length the length of the bitstream of the content
+ * 
+ * @return the storage pointer of the content
  */
-void httpmessage_addcontent(http_message_t *message, char *type, char *content, int length);
+char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length);
 
 /**
  * @brief set the Keep-Alive connection

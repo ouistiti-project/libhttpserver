@@ -1363,7 +1363,7 @@ static void _httpmessage_addcontent(http_message_t *message, char *key, char *va
 	dbg("post %s => %s\n", key, value);
 }
 
-void httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
+char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
 	if (message->state < PARSE_CONTENT)
 	{
@@ -1385,6 +1385,7 @@ void httpmessage_addcontent(http_message_t *message, char *type, char *content, 
 	{
 		_buffer_append(message->content, content, length);
 	}
+	return message->content->data;
 }
 
 int httpmessage_keepalive(http_message_t *message)
