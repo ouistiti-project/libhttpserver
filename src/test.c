@@ -50,28 +50,27 @@ int test_client = 0;
 #include "mod_static_file.h"
 #endif
 
-char test_content[] = "<html><head><link rel=\"stylesheet\" href=\"styles.css\"></head><body>coucou<br/></body></html>";
+//char test_content[] = "<html><head><link rel=\"stylesheet\" href=\"styles.css\"></head><body>coucou<br/></body></html>";
+char emptystring[] = "";
 struct test_config_s
 {
-	int unsused;
-};
-struct test_config_s *test_config = NULL;
+	char *content;
+} test_config;
+struct test_config_s *ptest_config = &test_config;
 int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
+	struct test_config_s *ptest_config = arg;
 	char * test = strstr(httpmessage_REQUEST(request, "uri"), "test");
 	if (test == NULL)
 		return EREJECT;
-	printf("test\n");
-	httpmessage_addheader(response, "Server", "libhttpserver");
 #ifdef TEST_STREAMING
 	httpmessage_addcontent(response, "text/html", NULL, 0);
 	test_client = httpmessage_keepalive(response);
 #else
-	httpmessage_addcontent(response, "text/html", test_content, strlen(test_content));
+	httpmessage_addcontent(response, "text/html", ptest_config->content, strlen(ptest_config->content));
 #endif
 	return ESUCCESS;
 }
-
 
 int main(int argc, char * const *argv)
 {
@@ -88,10 +87,16 @@ int main(int argc, char * const *argv)
 		user = getpwnam("apache");
 #endif
 	setbuf(stdout, NULL);
+	if (argc < 2)
+		test_config.content = emptystring;
+	else
+	{
+		test_config.content = argv[1];
+	}
 	http_server_t *server = httpserver_create(config);
 	if (server)
 	{
-		httpserver_addconnector(server, NULL, test_func, test_config);
+		httpserver_addconnector(server, NULL, test_func, ptest_config);
 #ifdef MBEDTLS
 		mod_mbedtls_t mbedtlsconfig = 
 		{
