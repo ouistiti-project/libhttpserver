@@ -25,7 +25,6 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifdef HTTPSERVER
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,10 +114,12 @@ int main(int argc, char * const *argv)
 		}
 #endif
 		httpserver_connect(server);
+#ifdef TEST_STREAMING
 		char data[1550];
 		memset(data, 0xA5, sizeof(data));
 		char clock[4] = {'-','\\','|','/'};
 		int i = 0;
+#endif
 		while (1)
 		{
 #ifndef WIN32
@@ -147,4 +148,3 @@ int main(int argc, char * const *argv)
 	}
 	return 0;
 }
-#endif
