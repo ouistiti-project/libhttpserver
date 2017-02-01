@@ -37,6 +37,7 @@
 #include "dbentry.h"
 
 const char *g_localhost = "localhost";
+const char *g_defaultscheme = "http";
 
 dbentry_t *dbentry_create(char separator, char *string, int storage)
 {
@@ -134,12 +135,19 @@ uri_t *uri_create(char *src)
 		return NULL;
 
 	entry = calloc(1, sizeof(*entry));
-	uri_parse(entry, src);
+	if (entry == NULL)
+		return NULL;
+	entry->storage = calloc(1, strlen(src) + 1);
+	if (entry->storage == NULL)
+		return NULL;
+	strcpy(entry->storage, src);
+	uri_parse(entry, entry->storage);
 	return entry;
 }
 
 void uri_free(uri_t *uri)
 {
+	free(uri->storage);
 	free(uri);
 }
 
@@ -191,6 +199,20 @@ int uri_parse(uri_t *uri, char *string)
 					*it = 0;
 					state = e_protoname;
 					break;
+				}
+				if (*it == '/')
+				{
+					uri->scheme = g_defaultscheme;
+					if (*(it+1) == '/')
+					{
+						uri->host = it + 2;
+						state = e_host;
+					}
+					else
+					{
+						uri->path = it;
+						state = e_path;
+					}
 				}
 			break;
 			case e_protoname:
