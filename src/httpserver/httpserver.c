@@ -664,7 +664,6 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, response->content_length);
 		_buffer_append(header, content_length, strlen(content_length));
 	}
-	_buffer_append(header, "\r\n", 2);
 	return ESUCCESS;
 }
 
@@ -1258,6 +1257,9 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		{
 			httpmessage_addheader(message, (char *)str_contenttype, type);
 		}
+		/* end the header part */
+		if (message->version > HTTP09)
+			_buffer_append(message->content, "\r\n", 2);
 		message->state = PARSE_CONTENT;
 	}
 	if (content != NULL)
