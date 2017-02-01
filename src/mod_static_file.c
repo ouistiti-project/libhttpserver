@@ -62,7 +62,6 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		{
 			private = calloc(1, sizeof(*private));
 			private->type = CONNECTOR_TYPE;
-			httpmessage_private(message, (void *)private);
 		}
 		else if (private->type != CONNECTOR_TYPE)
 		{
@@ -77,7 +76,10 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		}
 	} while(0);
 
-	if (private->fileno = NULL)
+	if (private->fileno == (void *)-1)
+		return EREJECT;
+
+	if (private->fileno == NULL)
 	{
 		char filepath[512];
 		snprintf(filepath, 511, "%s%s", config->docroot, httpmessage_REQUEST(request, "uri"));
@@ -92,6 +94,7 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 				if (!strcmp(ext, fileext))
 				{
 					free(private);
+					private->fileno = (void *)-1;
 					return EREJECT;
 				}
 				ext = strtok(NULL, ",");
@@ -139,6 +142,7 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		{
 			printf("file: %s not found\n", filepath);
 			free(private);
+			private->fileno = (void *)-1;
 			return EREJECT;
 		}
 		private->fileno = fopen(filepath, "rb");
