@@ -226,6 +226,7 @@ static const char str_contenttype[] = "Content-Type";
 static const char str_contentlength[] = "Content-Length";
 /********************************************************************/
 #define CHUNKSIZE 64
+#define BUFFERMAX 2048
 static buffer_t * _buffer_create()
 {
 	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
@@ -243,8 +244,9 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 		int chunksize = CHUNKSIZE * (length/CHUNKSIZE +1);
 
 		data = vrealloc(buffer->data, buffer->size + chunksize);
-		if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > 511)
+		if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > BUFFERMAX)
 		{
+			warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
 			return NULL;
 		}
 		buffer->size += chunksize;
