@@ -319,7 +319,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 	static char *key = NULL;
 	static char *value = NULL;
 	static int tempo = 0;
-	static int formurlencoded = 0;
+
 	do
 	{
 		int next = message->state;
@@ -329,7 +329,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			{
 				key = NULL;
 				value = NULL;
-				formurlencoded = 0;
 				tempo = 0;
 				if (!strncasecmp(data->offset,"GET ",4))
 				{
@@ -556,14 +555,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_CONTENT:
 			{
-				char *header = data->offset;
-				int length = 0;
-
-				if (message->content_length)
+				if (message->content_length > 0)
 				{
 					while (data->offset < (data->data + data->length))
 					{
-						length++;
 						data->offset++;
 						message->content_length--;
 						if (message->content_length <= 0)
@@ -575,16 +570,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				}
 				else
 				{
-					while (data->offset < (data->data + data->size))
-					{
-						if (data->offset >= (data->data + data->length))
-						{
-							next = PARSE_END;
-							break;
-						}
-						data->offset++;
-						length++;
-					}
+					next = PARSE_END;
 				}
 			}
 			break;
