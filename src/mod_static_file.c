@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 
 #include "httpserver.h"
+#include "uri.h"
 #include "mod_static_file.h"
 
 static mod_static_file_t default_config = 
@@ -82,7 +83,12 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 	if (private->fileno == NULL)
 	{
 		char filepath[512];
-		snprintf(filepath, 511, "%s%s", config->docroot, httpmessage_REQUEST(request, "uri"));
+		uri_t *uri = NULL;
+		char *str = httpmessage_REQUEST(request,"uri");
+
+		uri = uri_create(str);
+		snprintf(filepath, 511, "%s/%s", config->docroot, uri_part(uri, "path"));
+		uri_free(uri);
 
 		char *fileext = strrchr(filepath,'.');
 		if (fileext != NULL)
