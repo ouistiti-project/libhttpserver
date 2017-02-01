@@ -221,6 +221,9 @@ static char *_http_message_version[] =
 	"HTTP/1.1",
 	"HTTP/2",
 };
+static const char str_connection[] = "Connection";
+static const char str_contenttype[] = "Content-Type";
+static const char str_contentlength[] = "Content-Length";
 /********************************************************************/
 #define CHUNKSIZE 64
 static buffer_t * _buffer_create()
@@ -667,10 +670,10 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		_buffer_append(header, "\r\n", 2);
 		headers = headers->next;
 	}
-	if (response->content != NULL)
+	if (response->content != NULL && response->content_length > 0)
 	{
 		char content_length[32];
-		snprintf(content_length, 31, "Content-Length: %d\r\n", response->content_length);
+		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, response->content_length);
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	_buffer_append(header, "\r\n", 2);
@@ -733,6 +736,7 @@ static int _httpclient_run(http_client_t *client)
 {
 	http_message_t *request = client->request;
 	http_message_t *response = client->response;
+
 		switch (client->state & CLIENT_MACHINEMASK)
 		{
 			case CLIENT_REQUEST:
@@ -1245,11 +1249,11 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	headerinfo->next = message->headers;
 	message->headers = headerinfo;
 	dbg("header %s => %s\n", key, value);
-	if (!strncasecmp(key, "Connection", 10) && strcasestr(value, "Keep-Alive") )
+	if (!strncasecmp(key, str_connection, 10) && strcasestr(value, "Keep-Alive") )
 	{
 		message->keepalive = 1;
 	}
-	if (!strncasecmp(key, "Content-Length", 14))
+	if (!strncasecmp(key, str_contentlength, 14))
 	{
 		message->content_length = atoi(value);
 	}
@@ -1261,11 +1265,11 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 	{
 		if (type == NULL)
 		{
-			httpmessage_addheader(message, "Content-Type", "text/plain");
+			httpmessage_addheader(message, (char *)str_contenttype, "text/plain");
 		}
 		else
 		{
-			httpmessage_addheader(message, "Content-Type", type);
+			httpmessage_addheader(message, (char *)str_contenttype, type);
 		}
 		message->state = PARSE_CONTENT;
 	}
@@ -1328,18 +1332,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 			break;
 		}
 	}
-	return value;
-}
-
-char *httpmessage_REQUEST(http_message_t *message, char *key)
-{
-	char *value = "";
-	if (!strcasecmp(key, "uri"))
-	{
-		if (message->uri != NULL)
-			value = message->uri->data;
-	}
-	else if (!strcasecmp(key, "Content-Length"))
+	else if (!strcasecmp(key, str_contentlength))
 	{
 		if (message->content != NULL)
 		{
