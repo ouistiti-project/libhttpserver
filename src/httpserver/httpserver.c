@@ -881,7 +881,6 @@ static int _httpclient_run(http_client_t *client)
 			case CLIENT_RESPONSECONTENT:
 			{
 				if (response->result == RESULT_200 &&
-					response->content_length > 0 &&
 					request->type != MESSAGE_TYPE_HEAD)
 				{
 					int size = CHUNKSIZE - 1;
@@ -1261,14 +1260,14 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		}
 		message->state = PARSE_CONTENT;
 	}
-	if (length == -1)
-		length = strlen(content);
-	if (message->content_length == 0)
-		message->content_length = length;
 	if (content != NULL)
 	{
+		if (length == -1)
+			length = strlen(content);
 		_buffer_append(message->content, content, length);
 	}
+	if (message->content_length == 0)
+		message->content_length = length;
 	return message->content->data;
 }
 
