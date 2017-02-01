@@ -802,7 +802,15 @@ static int _httpclient_run(http_client_t *client)
 				_buffer_destroy(tempo);
 				if (ret == ESUCCESS)
 				{
-					client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+					if (!(client->state & CLIENT_RESPONSEREADY) &&
+						(request->type == MESSAGE_TYPE_PUT ||
+						request->type == MESSAGE_TYPE_DELETE))
+					{
+						request->result = RESULT_405;
+						client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+					}
+					else
+						client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else if (ret == EREJECT)
 				{
