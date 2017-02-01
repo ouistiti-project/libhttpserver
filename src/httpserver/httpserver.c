@@ -675,11 +675,6 @@ static http_client_t *_httpclient_create(http_server_t *server)
 	client->sendresp = httpclient_send;
 	client->ctx = client;
 	client->freectx = NULL;
-	if (server->mod && server->mod->func)
-	{
-		client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
-		client->freectx = server->mod->freectx;
-	}
 
 	http_connector_list_t *callback = server->callbacks;
 	while (callback != NULL)
@@ -1004,7 +999,11 @@ static int _httpserver_connect(http_server_t *server)
 				// Create new client socket to communicate
 				client->addr_size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
-
+				if (server->mod && server->mod->func)
+				{
+					client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
+					client->freectx = server->mod->freectx;
+				}
 				client->next = server->clients;
 				server->clients = client;
 
