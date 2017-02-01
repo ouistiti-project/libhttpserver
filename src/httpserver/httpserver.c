@@ -779,6 +779,7 @@ static int _httpclient_run(http_client_t *client)
 				{
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
+					_buffer_destroy(tempo);
 					break;
 				}
 				_buffer_destroy(tempo);
