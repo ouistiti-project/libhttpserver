@@ -210,8 +210,15 @@ static const char *_http_message_result[] =
 	" 200 OK",
 	" 400 Bad Request",
 	" 404 File Not Found",
+#ifndef HTTP_STATUS_PARTIAL
+	" 301 Moved Permanently",
+	" 304 Not Modified",
+	" 401 Unauthorized",
 	" 405 Method Not Allowed",
 	" 414 Request URI too long",
+	" 505 HTTP Version Not Supported",
+	" 511 Network Authentication Required",
+#endif
 };
 
 static char *_http_message_version[] =

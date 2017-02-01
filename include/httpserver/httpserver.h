@@ -64,8 +64,15 @@ typedef enum
 	RESULT_200,
 	RESULT_400,
 	RESULT_404,
+#ifndef HTTP_STATUS_PARTIAL
+	RESULT_301,
+	RESULT_304,
+	RESULT_401,
 	RESULT_405,
 	RESULT_414,
+	RESULT_505,
+	RESULT_511,
+#endif
 } http_message_result_e;
 
 /**
