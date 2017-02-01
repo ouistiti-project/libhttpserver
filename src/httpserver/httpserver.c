@@ -504,7 +504,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							else
 							{
 								data->length -= (data->offset - data->data);
-								memcpy(data->data, data->offset + 1, data->length);
+								memcpy(data->data, data->offset + 1, data->length - 1);
 								data->offset = data->data;
 								next = PARSE_CONTENT;
 							}
