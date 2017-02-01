@@ -120,9 +120,9 @@ typedef struct http_server_mod_s
 #define CLIENT_REQUEST 0x0000
 #define CLIENT_PARSER1 0x0001
 #define CLIENT_PARSER2 0x0002
-#define CLIENT_PARSERERROR 0x0003
-#define CLIENT_RESPONSEHEADER 0x0004
-#define CLIENT_RESPONSECONTENT 0x0005
+#define CLIENT_RESPONSEHEADER 0x0003
+#define CLIENT_RESPONSECONTENT 0x0004
+#define CLIENT_PARSERERROR 0x0005
 #define CLIENT_COMPLETE 0x0006
 struct http_client_s
 {
@@ -169,7 +169,6 @@ struct http_message_s
 		PARSE_HEADER,
 		PARSE_HEADERNEXT,
 		PARSE_CONTENT,
-		PARSE_CONTENTNEXT,
 		PARSE_END,
 	} state;
 	buffer_t *content;
@@ -761,7 +760,9 @@ static int _httpclient_run(http_client_t *client)
 					tempo->length = size;
 					ret = _httpmessage_parserequest(request, tempo);
 					if (client->response == NULL)
+					{
 						client->response = _httpmessage_create(client->server, client->request);
+					}
 					client->response->client = client;
 					if (client->request->state >= PARSE_CONTENT)
 					{
@@ -962,6 +963,7 @@ static int _httpserver_connect(http_server_t *server)
 		FD_SET(server->sock, &rfds);
 		maxfd = server->sock;
 		http_client_t *client = server->clients;
+
 		while (client != NULL)
 		{
 			if (client->state & CLIENT_STOPPED)
