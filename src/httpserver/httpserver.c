@@ -160,6 +160,8 @@ struct http_message_s
 		MESSAGE_TYPE_GET,
 		MESSAGE_TYPE_POST,
 		MESSAGE_TYPE_HEAD,
+		MESSAGE_TYPE_PUT,
+		MESSAGE_TYPE_DELETE,
 	} type;
 	enum
 	{
@@ -355,6 +357,18 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				{
 					message->type = MESSAGE_TYPE_HEAD;
 					data->offset += 5;
+					next = PARSE_URI;
+				}
+				else if (!strncasecmp(data->offset,"PUT ",4))
+				{
+					message->type = MESSAGE_TYPE_PUT;
+					data->offset += 4;
+					next = PARSE_URI;
+				}
+				else if (!strncasecmp(data->offset,"DELETE ",7))
+				{
+					message->type = MESSAGE_TYPE_DELETE;
+					data->offset += 7;
 					next = PARSE_URI;
 				}
 				else
@@ -1345,6 +1359,12 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 			break;
 			case MESSAGE_TYPE_HEAD:
 				value = "HEAD";
+			break;
+			case MESSAGE_TYPE_PUT:
+				value = "PUT";
+			break;
+			case MESSAGE_TYPE_DELETE:
+				value = "DELETE";
 			break;
 			default:
 			break;
