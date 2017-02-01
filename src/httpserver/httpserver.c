@@ -1290,19 +1290,23 @@ int httpmessage_keepalive(http_message_t *message)
 	return message->client->sock;
 }
 
+static char default_value[8] = {0};
 char *httpmessage_SERVER(http_message_t *message, char *key)
 {
-	char *value = "";
+	char *value = default_value;
 	char host[NI_MAXHOST], service[NI_MAXSERV];
 
-	if (!strcasecmp(key, "uri"))
+	if (!strcasecmp(key, "name"))
 	{
-		if (message->uri != NULL)
-			value = message->uri->data;
+		strcpy(value, "libhttpserver");
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = _http_message_version[message->version];
+		value = _http_message_version[message->client->server->config->version];
+	}
+	else if (!strcasecmp(key, "port"))
+	{
+		snprintf(value, 5, "%d", message->client->server->config->port);
 	}
 	else if (!strncasecmp(key, "remote_", 7))
 	{
@@ -1314,6 +1318,17 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 			value = host;
 		if (!strcasecmp(key + 7, "service"))
 			value = host;
+	}
+	return value;
+}
+
+char *httpmessage_REQUEST(http_message_t *message, char *key)
+{
+	char *value = "";
+	if (!strcasecmp(key, "uri"))
+	{
+		if (message->uri != NULL)
+			value = message->uri->data;
 	}
 	else if (!strcasecmp(key, "method"))
 	{
