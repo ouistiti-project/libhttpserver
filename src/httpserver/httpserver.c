@@ -96,8 +96,7 @@ typedef struct buffer_s
 
 struct http_connector_list_s
 {
-	char *url;
-	int url_length;
+	char *vhost;
 	http_connector_t func;
 	void *arg;
 	struct http_connector_list_s *next;
@@ -612,16 +611,16 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 	return ret;
 }
 
-void httpclient_addconnector(http_client_t *client, char *url, http_connector_t func, void *funcarg)
+void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg)
 {
 	http_connector_list_t *callback;
 
 	callback = vcalloc(1, sizeof(*callback));
-	if (url)
+	if (vhost)
 	{
-		callback->url_length = strlen(url);
-		callback->url = malloc(callback->url_length + 1);
-		strcpy(callback->url, url);
+		int length = strlen(vhost);
+		callback->vhost = malloc(length + 1);
+		strcpy(callback->vhost, vhost);
 	}
 	callback->func = func;
 	callback->arg = funcarg;
@@ -703,7 +702,7 @@ static http_client_t *_httpclient_create(http_server_t *server)
 	http_connector_list_t *callback = server->callbacks;
 	while (callback != NULL)
 	{
-		httpclient_addconnector(client, callback->url, callback->func, callback->arg);
+		httpclient_addconnector(client, callback->vhost, callback->func, callback->arg);
 		callback = callback->next;
 	}
 	client->callback = client->callbacks;
@@ -825,7 +824,7 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_PARSER1:
 			{
-				char *cburl = NULL;
+				char *vhost = NULL;
 				if (client->state & CLIENT_RESPONSEREADY)
 				{
 					if (response->version == HTTP09)
@@ -841,16 +840,14 @@ static int _httpclient_run(http_client_t *client)
 				}
 				else
 				{
-					cburl = client->callback->url;
-					if (cburl != NULL)
+					vhost = client->callback->vhost;
+					if (vhost != NULL)
 					{
-						char *path = request->uri->data;
-						if (cburl[0] != '/' && path[0] == '/')
-							path++;
-						if (!strncasecmp(cburl, path, client->callback->url_length))
-							cburl = NULL;
+						char *host = httpmessage_REQUEST(request, "host");
+						if (!strcasecmp(vhost, host))
+							vhost = NULL;
 					}
-					if (cburl == NULL && client->callback->func)
+					if (vhost == NULL && client->callback->func)
 					{
 						int ret = EINCOMPLETE;
 						ret = client->callback->func(client->callback->arg, request, response);
@@ -1196,16 +1193,16 @@ void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t 
 	server->mod->arg = arg;
 }
 
-void httpserver_addconnector(http_server_t *server, char *url, http_connector_t func, void *funcarg)
+void httpserver_addconnector(http_server_t *server, char *vhost, http_connector_t func, void *funcarg)
 {
 	http_connector_list_t *callback;
 	
 	callback = vcalloc(1, sizeof(*callback));
-	if (url)
+	if (vhost)
 	{
-		callback->url_length = strlen(url);
-		callback->url = malloc(callback->url_length + 1);
-		strcpy(callback->url, url);
+		int length = strlen(vhost);
+		callback->vhost = malloc(length + 1);
+		strcpy(callback->vhost, vhost);
 	}
 	callback->func = func;
 	callback->arg = funcarg;
