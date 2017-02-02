@@ -359,6 +359,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					data->offset += 5;
 					next = PARSE_URI;
 				}
+#ifndef HTTP_METHOD_PARTIAL
 				else if (!strncasecmp(data->offset,"PUT ",4))
 				{
 					message->type = MESSAGE_TYPE_PUT;
@@ -371,6 +372,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					data->offset += 7;
 					next = PARSE_URI;
 				}
+#endif
 				else
 				{
 					data->offset++;
@@ -1368,12 +1370,14 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 			case MESSAGE_TYPE_HEAD:
 				value = "HEAD";
 			break;
+#ifndef HTTP_METHOD_PARTIAL
 			case MESSAGE_TYPE_PUT:
 				value = "PUT";
 			break;
 			case MESSAGE_TYPE_DELETE:
 				value = "DELETE";
 			break;
+#endif
 			default:
 			break;
 		}
