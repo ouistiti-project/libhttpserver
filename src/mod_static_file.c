@@ -110,11 +110,14 @@ static int static_file_connector(void *arg, http_message_t *request, http_messag
 		int ret = stat(filepath, &filestat);
 		if (S_ISDIR(filestat.st_mode))
 		{
+			int filepathlength = strlen(filepath);
+			char *basename = filepath + filepathlength;
+
 			strncpy(ext_str, config->accepted_ext, 63);
 			ext = strtok(ext_str, ",");
 			while (ext != NULL)
 			{
-				snprintf(filepath, 511, "%s%s/index%s", config->docroot, httpmessage_REQUEST(request, "uri"), ext);
+				snprintf(basename, 511 - filepathlength, "/index%s", ext);
 				ret = stat(filepath, &filestat);
 				if (ret == 0)
 					break;
