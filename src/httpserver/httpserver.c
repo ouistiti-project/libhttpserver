@@ -736,6 +736,59 @@ static int _httpclient_connect(http_client_t *client)
 	return 0;
 }
 
+static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	int ret = ESUCCESS;
+	char *vhost = NULL;
+	http_connector_list_t *previous;
+	http_connector_list_t *iterator;
+
+	iterator = client->callbacks;
+	previous = iterator;
+	while (iterator != NULL)
+	{
+		vhost = iterator->vhost;
+		if (vhost != NULL)
+		{
+			char *host = httpmessage_REQUEST(request, "host");
+			if (!strcasecmp(vhost, host))
+				vhost = NULL;
+		}
+
+		if (vhost == NULL)
+		{
+			ret = iterator->func(iterator->arg, client->request, client->response);
+			if (ret == EREJECT)
+			{
+				if (iterator == client->callbacks)
+				{
+					client->callbacks = iterator->next;
+					previous = iterator;
+				}
+				else
+					previous->next = iterator->next;
+			}
+			else 
+			{
+				if (ret == ESUCCESS)
+				{
+					client->state |= CLIENT_RESPONSEREADY;
+					if (client->response->result != RESULT_200)
+					{
+						ret = EREJECT;
+					}
+				}
+				else 
+					previous = iterator;
+				client->callback = iterator;
+				break;
+			}
+		}
+		iterator = iterator->next;
+	}
+	return ret;
+}
+
 static int _httpclient_run(http_client_t *client)
 {
 	http_message_t *request = client->request;
@@ -772,24 +825,9 @@ static int _httpclient_run(http_client_t *client)
 						client->response = _httpmessage_create(client->server, client->request);
 					}
 					client->response->client = client;
-					if (client->request->state >= PARSE_CONTENT)
+					if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
 					{
-						client->callback = client->callbacks;
-						while (client->callback != NULL)
-						{
-							int tret;
-							tret = client->callback->func(client->callback->arg, client->request, client->response);
-							if (tret == ESUCCESS)
-							{
-								client->state |= CLIENT_RESPONSEREADY;
-								if (client->response->result != RESULT_200)
-								{
-									ret = EREJECT;
-									break;
-								}
-							}
-							client->callback = client->callback->next;
-						}
+						ret = _httpclient_checkconnector(client, client->request, client->response);
 					}
 					client->callback = client->callbacks;
 				}
@@ -801,77 +839,54 @@ static int _httpclient_run(http_client_t *client)
 					break;
 				}
 				_buffer_destroy(tempo);
-				if (ret == ESUCCESS)
+				switch (ret)
 				{
-					if (!(client->state & CLIENT_RESPONSEREADY) &&
-						(request->type == MESSAGE_TYPE_PUT ||
-						request->type == MESSAGE_TYPE_DELETE))
+					case ESUCCESS:
 					{
-						request->result = RESULT_405;
+						if (!(client->state & CLIENT_RESPONSEREADY) &&
+							(request->type == MESSAGE_TYPE_PUT ||
+							request->type == MESSAGE_TYPE_DELETE))
+						{
+							request->result = RESULT_405;
+							client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+						}
+						else
+							client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+					}
+					break;
+					case EREJECT:
+					{
+						if (request->result == RESULT_200)
+							request->result = RESULT_400;
+						client->response->result = request->result;
 						client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 					}
-					else
-						client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				else if (ret == EREJECT)
-				{
-					if (request->result == RESULT_200)
-						request->result = RESULT_400;
-					client->response->result = request->result;
-					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+					break;
+					case ECONTINUE:
+					case EINCOMPLETE:
+					{
+						if (client->request->state == PARSE_END)
+							client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+					}
+					break;
 				}
 			}
 			break;
 			case CLIENT_PARSER1:
 			{
-				char *vhost = NULL;
-				if (client->state & CLIENT_RESPONSEREADY)
+				int ret;
+				ret = _httpclient_checkconnector(client, client->request, client->response);
+				if (ret == EREJECT)
+				{
+					response->result = RESULT_404;
+					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				else if (ret != EINCOMPLETE)
 				{
 					if (response->version == HTTP09)
 						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 					else
 						client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-					break;
-				}
-				if (client->callback == NULL)
-				{
-					response->result = RESULT_404;
-					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				else
-				{
-					vhost = client->callback->vhost;
-					if (vhost != NULL)
-					{
-						char *host = httpmessage_REQUEST(request, "host");
-						if (!strcasecmp(vhost, host))
-							vhost = NULL;
-					}
-					if (vhost == NULL && client->callback->func)
-					{
-						int ret = EINCOMPLETE;
-						ret = client->callback->func(client->callback->arg, request, response);
-						if (ret != EREJECT)
-						{
-							/* callback is null to not recall the function */
-							if (ret == ESUCCESS)
-							{
-								client->state |= CLIENT_RESPONSEREADY;
-								client->callback = NULL;
-							}
-							if ( ret != EINCOMPLETE)
-							{
-								if (response->version == HTTP09)
-									client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
-								else
-									client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-							}
-						}
-						else
-							client->callback = client->callback->next;
-					}
-					else
-						client->callback = client->callback->next;
 				}
 				if (response->keepalive)
 				{
@@ -884,7 +899,7 @@ static int _httpclient_run(http_client_t *client)
 				int ret = EINCOMPLETE;
 				if (client->callback && client->callback->func)
 					ret = client->callback->func(client->callback->arg, request, response);
-				if (ret == ECONTINUE)
+				if (ret != ESUCCESS)
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				else
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
