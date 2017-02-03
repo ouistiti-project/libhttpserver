@@ -1305,10 +1305,11 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 {
 	char *value = default_value;
 	char host[NI_MAXHOST], service[NI_MAXSERV];
+	memset(default_value, 0, sizeof(default_value));
 
 	if (!strcasecmp(key, "name"))
 	{
-		strcpy(value, "libhttpserver");
+		strncpy(value, "libhttpserver", sizeof(default_value));
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
@@ -1316,29 +1317,49 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, "port"))
 	{
-		snprintf(value, 5, "%d", message->client->server->config->port);
+		//snprintf(value, 5, "%d", message->client->server->config->port);
+		struct sockaddr_in sin;
+		socklen_t len = sizeof(sin);
+		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		{
+			getnameinfo((struct sockaddr *) &sin, len,
+				0, 0,
+				service, NI_MAXSERV, NI_NUMERICSERV);
+			value = service;
+		}
 	}
-	else if (!strncasecmp(key, "remote_", 7))
+	else if (!strcasecmp(key, "addr"))
 	{
-		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
-			host, NI_MAXHOST,
-			service, NI_MAXSERV, NI_NUMERICSERV);
-
-		if (!strcasecmp(key + 7, "host"))
+		struct sockaddr_in sin;
+		socklen_t len = sizeof(sin);
+		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		{
+			getnameinfo((struct sockaddr *) &sin, len,
+				host, NI_MAXHOST,
+				0, 0, NI_NUMERICHOST);
 			value = host;
-		if (!strcasecmp(key + 7, "service"))
-			value = host;
+		}
 	}
 	return value;
 }
 
 char *httpmessage_REQUEST(http_message_t *message, char *key)
 {
-	char *value = "";
+	char *value = default_value;
+	char host[NI_MAXHOST], service[NI_MAXSERV];
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
 			value = message->uri->data;
+	}
+	else if (!strcasecmp(key, "query"))
+	{
+		if (message->query != NULL)
+			value = message->query;
+	}
+	else if (!strcasecmp(key, "scheme"))
+	{
+		strcpy(value, "http");
 	}
 	else if (!strcasecmp(key, "method"))
 	{
@@ -1378,6 +1399,23 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 		{
 			value = message->content->data;
 		}
+	}
+	else if (!strncasecmp(key, "remote_addr", 11))
+	{
+		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
+			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
+		value = host;
+	}
+	else if (!strncasecmp(key, "remote_", 7))
+	{
+		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
+			host, NI_MAXHOST,
+			service, NI_MAXSERV, NI_NUMERICSERV);
+
+		if (!strcasecmp(key + 7, "host"))
+			value = host;
+		if (!strcasecmp(key + 7, "port"))
+			value = service;
 	}
 	else
 	{
