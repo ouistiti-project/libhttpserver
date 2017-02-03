@@ -175,6 +175,7 @@ struct http_message_s
 	buffer_t *content;
 	int content_length;
 	buffer_t *uri;
+	char *query;
 	http_message_version_e version;
 	buffer_t *headers_storage;
 	dbentry_t *headers;
@@ -384,12 +385,16 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			{
 				char *uri = data->offset;
 				int length = 0;
+				if (message->uri == NULL)
+					message->uri = _buffer_create();
 				while (data->offset < (data->data + data->size) && next == PARSE_URI)
 				{
 					switch (*data->offset)
 					{
 						case ' ':
 						{
+							uri = _buffer_append(message->uri, uri, length + 1);
+							message->query = uri;
 							next = PARSE_VERSION;
 						}
 						break;
@@ -397,8 +402,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						{
 							next = PARSE_HEADER;
 							*data->offset = '\0';
-							if (*data->offset == '\n')
+							if (*(data->offset + 1) == '\n')
 								data->offset++;
+							uri = _buffer_append(message->uri, uri, length + 1);
+							message->query = uri;
 						}
 						break;
 						case '\n':
@@ -415,15 +422,28 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					data->offset++;
 				}
 				
-				if (message->uri == NULL)
-					message->uri = _buffer_create();
-				uri = _buffer_append(message->uri, uri, length);
+				if (next == PARSE_URI)
+				{
+					uri = _buffer_append(message->uri, uri, length);
+				}
 				if (uri == NULL)
 				{
 					_buffer_destroy(message->uri);
 					message->uri = _buffer_create();
 					message->result = RESULT_414;
 					ret = EREJECT;
+				}
+				if (next != PARSE_URI)
+				{
+					int i;
+					for (i = 0; i < message->uri->length; i++)
+					{
+						if (message->uri->data[i] == '?')
+						{
+							message->query = message->uri->data + i + 1;
+							break;
+						}
+					}
 				}
 			}
 			break;
