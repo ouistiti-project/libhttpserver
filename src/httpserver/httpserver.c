@@ -164,6 +164,7 @@ struct http_message_s
 	int keepalive;
 	http_client_t *client;
 	http_message_t *response;
+	http_connector_list_t *connector;
 	enum
 	{
 		MESSAGE_TYPE_GET,
@@ -828,11 +829,11 @@ static int _httpclient_run(http_client_t *client)
 				{
 					tempo->length = size;
 					ret = _httpmessage_parserequest(client->request, tempo);
+
 					if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
 					{
 						ret = _httpclient_checkconnector(client, client->request, client->request->response);
 					}
-					client->callback = client->callbacks;
 				}
 				else /* socket shutdown */
 				{
@@ -877,6 +878,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				http_message_queue_t *new = calloc(1, sizeof(*new));
 				new->message = client->request;
+				new->message->connector = client->callback;
 				client->request = NULL;
 
 				new->message->response->keepalive = new->message->keepalive;
@@ -898,8 +900,8 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_PARSER1:
 			{
-				int ret;
-				ret = _httpclient_checkconnector(client, request, request->response);
+				int ret = 0;
+				ret = request->connector->func(request->connector->arg, request, request->response);
 				if (ret == EREJECT)
 				{
 					request->response->result = RESULT_404;
@@ -922,7 +924,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				int ret = EINCOMPLETE;
 				if (client->callback && client->callback->func)
-					ret = client->callback->func(client->callback->arg, request, request->response);
+					ret = request->connector->func(request->connector->arg, request, request->response);
 				if (ret != ESUCCESS)
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				else
