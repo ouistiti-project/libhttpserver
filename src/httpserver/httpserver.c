@@ -977,6 +977,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+				client->state &= ~CLIENT_KEEPALIVE;
 			}
 			break;
 			case CLIENT_COMPLETE:
