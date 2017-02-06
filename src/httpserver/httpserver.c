@@ -998,10 +998,13 @@ static int _httpclient_run(http_client_t *client)
 				else
 				{
 					client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
-					dbg("keepalive\n");
+					dbg("keepalive");
 				}
-				_httpmessage_destroy(request);
-				client->request_queue = client->request_queue->next;
+				if (request)
+				{
+					_httpmessage_destroy(request);
+					client->request_queue = client->request_queue->next;
+				}
 			}
 			break;
 		}
