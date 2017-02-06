@@ -327,6 +327,19 @@ int httpclient_recv(void *ctl, char *data, int length);
  */
 int httpclient_send(void *ctl, char *data, int length);
 
+/**
+ * @brief finish a connection on the client socket
+ * 
+ * @param ctl		the client data (see http_getctx_t)
+ * @param close		1 to close immediatly the connection
+ *                  0 to way the end of the treatment of the request
+ * 
+ * This function allows the connector to stop the connection,
+ * and/or to disable the keep-alive flag.
+ * 
+ * @return the number of bytes sent on the socket
+ */
+void httpclient_finish(http_client_t *client, int close);
 #ifdef __cplusplus
 }
 #endif

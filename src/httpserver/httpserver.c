@@ -790,6 +790,13 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	return ret;
 }
 
+void httpclient_finish(http_client_t *client, int close)
+{
+	client->state &= ~CLIENT_KEEPALIVE;
+	if (close)
+		client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+}
+
 static int _httpclient_run(http_client_t *client)
 {
 	http_message_t *request = NULL;
