@@ -678,7 +678,13 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		_buffer_append(header, "\r\n", 2);
 		headers = headers->next;
 	}
-	if (response->content != NULL && response->content_length > 0)
+	if (response->keepalive > 0)
+	{
+		char keepalive[32];
+		snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
+		_buffer_append(header, keepalive, strlen(keepalive));
+	}
+	if (response->content_length > 0)
 	{
 		char content_length[32];
 		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, response->content_length);
@@ -873,6 +879,7 @@ static int _httpclient_run(http_client_t *client)
 				new->message = client->request;
 				client->request = NULL;
 
+				new->message->response->keepalive = new->message->keepalive;
 				http_message_queue_t *iterator = client->request_queue;
 				if (iterator == NULL)
 				{
