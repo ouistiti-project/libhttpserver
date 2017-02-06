@@ -76,7 +76,7 @@ extern "C" {
 #endif
 
 #ifdef DEBUG
-# define dbg(...)	fprintf(stderr, __VA_ARGS__)
+# define dbg(format, ...)	fprintf(stderr, format"\n", ##__VA_ARGS__)
 #else
 # define dbg(...)
 #endif
@@ -724,6 +724,7 @@ static int _httpclient_connect(http_client_t *client)
 	{
 		_httpclient_run(client);
 	} while(!(client->state & CLIENT_STOPPED));
+	dbg("client %p close", client);
 	return 0;
 }
 
@@ -1064,6 +1065,7 @@ static int _httpserver_connect(http_server_t *server)
 				// Create new client socket to communicate
 				client->addr_size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
+				dbg("new connection %p", client);
 				if (server->mod && server->mod->func)
 				{
 					client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
@@ -1303,7 +1305,7 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
 	message->headers = headerinfo;
-	dbg("header %s => %s\n", key, value);
+	dbg("header %s => %s", key, value);
 	if (!strncasecmp(key, str_connection, 10) && strcasestr(value, "Keep-Alive") )
 	{
 		message->keepalive = 1;
