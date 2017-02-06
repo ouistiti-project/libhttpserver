@@ -571,6 +571,8 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				memcpy(data->data, data->offset + 1, data->length);
 				data->offset = data->data;
 				next = PARSE_CONTENT;
+				if (message->response == NULL)
+					message->response = _httpmessage_create(message->client, message);
 			}
 			break;
 			case PARSE_CONTENT:
@@ -791,9 +793,7 @@ static int _httpclient_run(http_client_t *client)
 		{
 			case CLIENT_NEW:
 			{
-				http_message_t *response;
 				client->request = _httpmessage_create(client, NULL);
-				response = _httpmessage_create(client, client->request);
 
 				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
 			}
