@@ -389,6 +389,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					{
 						case ' ':
 						{
+							*data->offset = '\0';
 							uri = _buffer_append(message->uri, uri, length + 1);
 							message->query = uri;
 							next = PARSE_VERSION;
