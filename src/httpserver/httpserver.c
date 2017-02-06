@@ -110,6 +110,13 @@ typedef struct http_server_mod_s
 	http_freectx_t freectx;
 } http_server_mod_t;
 
+struct http_message_queue_s
+{
+	http_message_t *message;
+	struct http_message_queue_s *next;
+};
+typedef struct http_message_queue_s http_message_queue_t;
+
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
@@ -118,12 +125,13 @@ typedef struct http_server_mod_s
 #define CLIENT_MACHINEMASK 0x00FF
 #define CLIENT_NEW 0x0000
 #define CLIENT_REQUEST 0x0001
-#define CLIENT_PARSER1 0x0002
-#define CLIENT_PARSER2 0x0003
-#define CLIENT_RESPONSEHEADER 0x0004
-#define CLIENT_RESPONSECONTENT 0x0005
-#define CLIENT_PARSERERROR 0x0006
-#define CLIENT_COMPLETE 0x0007
+#define CLIENT_PUSHREQUEST 0x0002
+#define CLIENT_PARSER1 0x0003
+#define CLIENT_PARSER2 0x0004
+#define CLIENT_RESPONSEHEADER 0x0005
+#define CLIENT_RESPONSECONTENT 0x0006
+#define CLIENT_PARSERERROR 0x0007
+#define CLIENT_COMPLETE 0x0008
 struct http_client_s
 {
 	int sock;
@@ -136,6 +144,7 @@ struct http_client_s
 	http_connector_list_t *callbacks;
 	http_connector_list_t *callback;
 	http_message_t *request;
+	http_message_queue_t *request_queue;
 	void *ctx;
 	dbentry_t *session;
 	buffer_t *session_storage;
@@ -773,13 +782,15 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 
 static int _httpclient_run(http_client_t *client)
 {
-	http_message_t *request = client->request;
-	http_message_t *response = client->request->response;
+	http_message_t *request = NULL;
+	if (client->request_queue)
+		request = client->request_queue->message;
 
 		switch (client->state & CLIENT_MACHINEMASK)
 		{
 			case CLIENT_NEW:
 			{
+				http_message_t *response;
 				client->request = _httpmessage_create(client, NULL);
 				response = _httpmessage_create(client, client->request);
 
@@ -809,7 +820,7 @@ static int _httpclient_run(http_client_t *client)
 				else if (size > 0)
 				{
 					tempo->length = size;
-					ret = _httpmessage_parserequest(request, tempo);
+					ret = _httpmessage_parserequest(client->request, tempo);
 					if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
 					{
 						ret = _httpclient_checkconnector(client, client->request, client->request->response);
@@ -833,10 +844,8 @@ static int _httpclient_run(http_client_t *client)
 							client->request->type == MESSAGE_TYPE_DELETE))
 						{
 							client->request->result = RESULT_405;
-							client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 						}
-						else
-							client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+						client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
 					}
 					break;
 					case EREJECT:
@@ -844,36 +853,58 @@ static int _httpclient_run(http_client_t *client)
 						if (client->request->result == RESULT_200)
 							client->request->result = RESULT_400;
 						client->request->response->result = client->request->result;
-						client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+						client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
 					}
 					break;
 					case ECONTINUE:
 					case EINCOMPLETE:
 					{
 						if (client->request->state == PARSE_END)
-							client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+							client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
 					}
 					break;
 				}
 			}
 			break;
+			case CLIENT_PUSHREQUEST:
+			{
+				http_message_queue_t *new = calloc(1, sizeof(*new));
+				new->message = client->request;
+				client->request = NULL;
+
+				http_message_queue_t *iterator = client->request_queue;
+				if (iterator == NULL)
+				{
+					client->request_queue = new;
+				}
+				else
+				{
+					while (iterator->next != NULL) iterator = iterator->next;
+					iterator->next = new;
+				}
+				if (new->message->result != RESULT_200)
+					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+				else
+					client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			break;
 			case CLIENT_PARSER1:
 			{
 				int ret;
-				ret = _httpclient_checkconnector(client, request, response);
+				ret = _httpclient_checkconnector(client, request, request->response);
 				if (ret == EREJECT)
 				{
-					response->result = RESULT_404;
+					request->response->result = RESULT_404;
 					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else if (ret != EINCOMPLETE)
 				{
-					if (response->version == HTTP09)
+					if (request->response->version == HTTP09)
 						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 					else
 						client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				if (response->keepalive)
+				if (request->response->keepalive)
 				{
 					client->state |= CLIENT_KEEPALIVE;
 				}
@@ -883,7 +914,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				int ret = EINCOMPLETE;
 				if (client->callback && client->callback->func)
-					ret = client->callback->func(client->callback->arg, request, response);
+					ret = client->callback->func(client->callback->arg, request, request->response);
 				if (ret != ESUCCESS)
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				else
@@ -894,7 +925,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				int size = 0;
 				buffer_t *header = _buffer_create();
-				_httpmessage_buildheader(client, response, header);
+				_httpmessage_buildheader(client, request->response, header);
 
 				/**
 				 * here, it is the call to the sendresp callback from the
@@ -914,11 +945,11 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_RESPONSECONTENT:
 			{
-				if (response->result == RESULT_200 &&
+				if (request->response->result == RESULT_200 &&
 					request->type != MESSAGE_TYPE_HEAD)
 				{
 					int size = CHUNKSIZE - 1;
-					size = client->sendresp(client->ctx, response->content->data, response->content->length);
+					size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
 					if (size < 0)
 					{
 						client->state &= ~CLIENT_KEEPALIVE;
@@ -926,7 +957,7 @@ static int _httpclient_run(http_client_t *client)
 					}
 					else
 					{
-						_buffer_reset(response->content);
+						_buffer_reset(request->response->content);
 						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 					}
 				}
@@ -936,7 +967,7 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_PARSERERROR:
 			{
-				httpmessage_addheader(client->request->response, "Allow", "GET, POST, HEAD");
+				httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			break;
@@ -959,9 +990,10 @@ static int _httpclient_run(http_client_t *client)
 				else
 				{
 					client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
-					_httpmessage_destroy(client->request);
 					dbg("keepalive\n");
 				}
+				_httpmessage_destroy(request);
+				client->request_queue = client->request_queue->next;
 			}
 			break;
 		}
