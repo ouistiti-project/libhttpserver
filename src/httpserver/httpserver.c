@@ -1320,7 +1320,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 
 	if (!strcasecmp(key, "name"))
 	{
-		strncpy(value, "libhttpserver", sizeof(default_value));
+		value = message->client->server->config->hostname;
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{

@@ -130,6 +130,8 @@ typedef int (*http_send_t)(void *ctx, char *data, int length);
 
 typedef struct http_server_config_s
 {
+	/** @param name of the server */
+	char *hostname;
 	/** @param address the IP address of the network bridge to use, NULL to use ANY network bridge */
 	char *addr;
 	/** @param port the TCP/IP prot to bind the server */
