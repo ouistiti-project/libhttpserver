@@ -171,6 +171,8 @@ struct http_message_s
 		PARSE_HEADERNEXT,
 		PARSE_CONTENT,
 		PARSE_END,
+		PARSE_MASK = 0x00FF,
+		PARSE_CONTINUE = 0x0100,
 	} state;
 	buffer_t *content;
 	int content_length;
@@ -330,8 +332,8 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 
 	do
 	{
-		int next = message->state;
-		switch (message->state)
+		int next = message->state  & PARSE_MASK;
+		switch (next)
 		{
 			case PARSE_INIT:
 			{
@@ -495,13 +497,16 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					if (*data->offset == '\r')
 					{
 						*data->offset = '\0';
-						if (length == 0)
+						if (length == 0 && !(message->state & PARSE_CONTINUE))
+						{
 							next = PARSE_HEADERNEXT;
+						}
 						else
 						{
 							_buffer_append(message->headers_storage, header, length + 1);
 							header = data->offset + 1;
 							length = 0;
+							message->state &= ~PARSE_CONTINUE;
 						}
 					}
 					else  if (*data->offset == '\n')
@@ -517,6 +522,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				if (next == PARSE_HEADER)
 				{
 					_buffer_append(message->headers_storage, header, length);
+					message->state |= PARSE_CONTINUE;
 				}
 			}
 			break;
@@ -575,9 +581,9 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			}
 			break;
 		}
-		if (next == message->state && ret == ECONTINUE)
+		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 			ret = EINCOMPLETE;
-		message->state = next;
+		message->state = (message->state & ~PARSE_MASK) | next;
 	} while (ret == ECONTINUE);
 	return ret;
 }
