@@ -116,13 +116,14 @@ typedef struct http_server_mod_s
 #define CLIENT_RESPONSEREADY 0x4000
 #define CLIENT_KEEPALIVE 0x8000
 #define CLIENT_MACHINEMASK 0x00FF
-#define CLIENT_REQUEST 0x0000
-#define CLIENT_PARSER1 0x0001
-#define CLIENT_PARSER2 0x0002
-#define CLIENT_RESPONSEHEADER 0x0003
-#define CLIENT_RESPONSECONTENT 0x0004
-#define CLIENT_PARSERERROR 0x0005
-#define CLIENT_COMPLETE 0x0006
+#define CLIENT_NEW 0x0000
+#define CLIENT_REQUEST 0x0001
+#define CLIENT_PARSER1 0x0002
+#define CLIENT_PARSER2 0x0003
+#define CLIENT_RESPONSEHEADER 0x0004
+#define CLIENT_RESPONSECONTENT 0x0005
+#define CLIENT_PARSERERROR 0x0006
+#define CLIENT_COMPLETE 0x0007
 struct http_client_s
 {
 	int sock;
@@ -135,7 +136,6 @@ struct http_client_s
 	http_connector_list_t *callbacks;
 	http_connector_list_t *callback;
 	http_message_t *request;
-	http_message_t *response;
 	void *ctx;
 	dbentry_t *session;
 	buffer_t *session_storage;
@@ -154,6 +154,7 @@ struct http_message_s
 	http_message_result_e result;
 	int keepalive;
 	http_client_t *client;
+	http_message_t *response;
 	enum
 	{
 		MESSAGE_TYPE_GET,
@@ -288,19 +289,25 @@ static void _buffer_destroy(buffer_t *buffer)
 	vfree(buffer);
 }
 
-static http_message_t * _httpmessage_create(http_server_t *server, http_message_t *parent)
+static http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent)
 {
 	http_message_t *message;
 
 	message = vcalloc(1, sizeof(*message));
-	message->content = _buffer_create();
-	if (parent)
+	if (message)
 	{
-		message->type = parent->type;
-		message->client = parent->client;
-		message->version = parent->version;
-		if (server->config->keepalive)
-			message->keepalive = parent->keepalive;
+		message->content = _buffer_create();
+		message->client = client;
+		if (parent)
+		{
+			parent->response = message;
+
+			message->type = parent->type;
+			message->client = parent->client;
+			message->version = parent->version;
+			if (client->server->config->keepalive)
+				message->keepalive = parent->keepalive;
+		}
 	}
 	return message;
 }
@@ -317,6 +324,8 @@ static void _httpmessage_reset(http_message_t *message)
 
 static void _httpmessage_destroy(http_message_t *message)
 {
+	if (message->response)
+		_httpmessage_destroy(message->response);
 	if (message->uri)
 		_buffer_destroy(message->uri);
 	if (message->content)
@@ -685,16 +694,11 @@ static http_client_t *_httpclient_create(http_server_t *server)
 	}
 	client->callback = client->callbacks;
 
-	client->request = _httpmessage_create(client->server, NULL);
-	client->request->client = client;
-
 	return client;
 }
 
 static void _httpclient_destroy(http_client_t *client)
 {
-	if (client->response)
-		_httpmessage_destroy(client->response);
 	if (client->request)
 		_httpmessage_destroy(client->request);
 	if (client->session_storage)
@@ -735,7 +739,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 
 		if (vhost == NULL)
 		{
-			ret = iterator->func(iterator->arg, client->request, client->response);
+			ret = iterator->func(iterator->arg, request, response);
 			if (ret == EREJECT)
 			{
 				if (iterator == client->callbacks)
@@ -751,7 +755,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 				if (ret == ESUCCESS)
 				{
 					client->state |= CLIENT_RESPONSEREADY;
-					if (client->response->result != RESULT_200)
+					if (response->result != RESULT_200)
 					{
 						ret = EREJECT;
 					}
@@ -770,10 +774,18 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 static int _httpclient_run(http_client_t *client)
 {
 	http_message_t *request = client->request;
-	http_message_t *response = client->response;
+	http_message_t *response = client->request->response;
 
 		switch (client->state & CLIENT_MACHINEMASK)
 		{
+			case CLIENT_NEW:
+			{
+				client->request = _httpmessage_create(client, NULL);
+				response = _httpmessage_create(client, client->request);
+
+				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			break;
 			case CLIENT_REQUEST:
 			{
 				int ret = EINCOMPLETE;
@@ -798,14 +810,9 @@ static int _httpclient_run(http_client_t *client)
 				{
 					tempo->length = size;
 					ret = _httpmessage_parserequest(request, tempo);
-					if (client->response == NULL)
-					{
-						client->response = _httpmessage_create(client->server, client->request);
-					}
-					client->response->client = client;
 					if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
 					{
-						ret = _httpclient_checkconnector(client, client->request, client->response);
+						ret = _httpclient_checkconnector(client, client->request, client->request->response);
 					}
 					client->callback = client->callbacks;
 				}
@@ -822,10 +829,10 @@ static int _httpclient_run(http_client_t *client)
 					case ESUCCESS:
 					{
 						if (!(client->state & CLIENT_RESPONSEREADY) &&
-							(request->type == MESSAGE_TYPE_PUT ||
-							request->type == MESSAGE_TYPE_DELETE))
+							(client->request->type == MESSAGE_TYPE_PUT ||
+							client->request->type == MESSAGE_TYPE_DELETE))
 						{
-							request->result = RESULT_405;
+							client->request->result = RESULT_405;
 							client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 						}
 						else
@@ -834,9 +841,9 @@ static int _httpclient_run(http_client_t *client)
 					break;
 					case EREJECT:
 					{
-						if (request->result == RESULT_200)
-							request->result = RESULT_400;
-						client->response->result = request->result;
+						if (client->request->result == RESULT_200)
+							client->request->result = RESULT_400;
+						client->request->response->result = client->request->result;
 						client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 					}
 					break;
@@ -853,7 +860,7 @@ static int _httpclient_run(http_client_t *client)
 			case CLIENT_PARSER1:
 			{
 				int ret;
-				ret = _httpclient_checkconnector(client, client->request, client->response);
+				ret = _httpclient_checkconnector(client, request, response);
 				if (ret == EREJECT)
 				{
 					response->result = RESULT_404;
@@ -929,7 +936,7 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_PARSERERROR:
 			{
-				httpmessage_addheader(client->response, "Allow", "GET, POST, HEAD");
+				httpmessage_addheader(client->request->response, "Allow", "GET, POST, HEAD");
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			break;
@@ -951,10 +958,8 @@ static int _httpclient_run(http_client_t *client)
 				}
 				else
 				{
-					client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
-					_httpmessage_reset(client->request);
-					_httpmessage_destroy(client->response);
-					client->response = NULL;
+					client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
+					_httpmessage_destroy(client->request);
 					dbg("keepalive\n");
 				}
 			}
