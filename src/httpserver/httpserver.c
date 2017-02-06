@@ -1032,6 +1032,10 @@ static int _httpserver_connect(http_server_t *server)
 					client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
 					client->freectx = server->mod->freectx;
 				}
+				int flags;
+				flags = fcntl(client->sock,F_GETFD);
+				fcntl(client->sock,F_SETFD, flags | SOCK_NONBLOCK);
+
 				client->next = server->clients;
 				server->clients = client;
 
