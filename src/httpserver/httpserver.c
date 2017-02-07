@@ -741,11 +741,9 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 {
 	int ret = ESUCCESS;
 	char *vhost = NULL;
-	http_connector_list_t *previous;
 	http_connector_list_t *iterator;
 
 	iterator = client->callbacks;
-	previous = iterator;
 	while (iterator != NULL)
 	{
 		vhost = iterator->vhost;
@@ -759,17 +757,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 		if (vhost == NULL)
 		{
 			ret = iterator->func(iterator->arg, request, response);
-			if (ret == EREJECT)
-			{
-				if (iterator == client->callbacks)
-				{
-					client->callbacks = iterator->next;
-					previous = iterator;
-				}
-				else
-					previous->next = iterator->next;
-			}
-			else 
+			if (ret != EREJECT)
 			{
 				if (ret == ESUCCESS)
 				{
@@ -779,8 +767,6 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 						ret = EREJECT;
 					}
 				}
-				else 
-					previous = iterator;
 				client->callback = iterator;
 				break;
 			}
