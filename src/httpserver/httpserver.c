@@ -783,6 +783,95 @@ void httpclient_finish(http_client_t *client, int close)
 		client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 }
 
+static int _httpclient_request(http_client_t *client)
+{
+	int ret = EINCOMPLETE;
+	int size = CHUNKSIZE - 1;
+	buffer_t *tempo = _buffer_create();
+	if (client->request == NULL)
+		client->request = _httpmessage_create(client, NULL);
+
+	/**
+	 * here, it is the call to the recvreq callback from the
+	 * server configuration.
+	 * see http_server_config_t and httpserver_create
+	 */
+	size = client->recvreq(client->ctx, tempo->data, tempo->size);
+	if (size < 0)
+	{
+		if (errno != EAGAIN)
+		{
+			_buffer_destroy(tempo);
+			return EREJECT;
+		}
+	}
+	else if (size > 0)
+	{
+		tempo->length = size;
+		ret = _httpmessage_parserequest(client->request, tempo);
+
+		if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
+		{
+			ret = _httpclient_checkconnector(client, client->request, client->request->response);
+		}
+	}
+	else /* socket shutdown */
+	{
+		_buffer_destroy(tempo);
+		return EREJECT;
+	}
+	_buffer_destroy(tempo);
+	switch (ret)
+	{
+		case ESUCCESS:
+		{
+			if (!(client->state & CLIENT_RESPONSEREADY) &&
+				(client->request->type == MESSAGE_TYPE_PUT ||
+				client->request->type == MESSAGE_TYPE_DELETE))
+			{
+				client->request->result = RESULT_405;
+			}
+		}
+		break;
+		case EREJECT:
+		{
+			if (client->request->result == RESULT_200)
+				client->request->result = RESULT_400;
+			client->request->response->result = client->request->result;
+			ret = ESUCCESS;
+		}
+		break;
+		case ECONTINUE:
+		case EINCOMPLETE:
+		{
+			if (client->request->state == PARSE_END)
+				ret = ESUCCESS;
+		}
+		break;
+	}
+	return ret;
+}
+
+static int _httpclient_pushrequest(http_client_t *client, http_message_t *request)
+{
+	http_message_queue_t *new = calloc(1, sizeof(*new));
+	new->message = request;
+	new->message->connector = client->callback;
+
+	new->message->response->keepalive = new->message->keepalive;
+	http_message_queue_t *iterator = client->request_queue;
+	if (iterator == NULL)
+	{
+		client->request_queue = new;
+	}
+	else
+	{
+		while (iterator->next != NULL) iterator = iterator->next;
+		iterator->next = new;
+	}
+	return (new->message->result != RESULT_200)? EREJECT:ESUCCESS;
+}
+
 static int _httpclient_run(http_client_t *client)
 {
 	http_message_t *request = NULL;
@@ -793,99 +882,25 @@ static int _httpclient_run(http_client_t *client)
 		{
 			case CLIENT_NEW:
 			{
-				client->request = _httpmessage_create(client, NULL);
-
 				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			break;
 			case CLIENT_REQUEST:
 			{
-				int ret = EINCOMPLETE;
-				int size = CHUNKSIZE - 1;
-				buffer_t *tempo = _buffer_create();
-				/**
-				 * here, it is the call to the recvreq callback from the
-				 * server configuration.
-				 * see http_server_config_t and httpserver_create
-				 */
-				size = client->recvreq(client->ctx, tempo->data, tempo->size);
-				if (size < 0)
-				{
-					if (errno != EAGAIN)
-					{
-						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-						client->state &= ~CLIENT_KEEPALIVE;
-						break;
-					}
-				}
-				else if (size > 0)
-				{
-					tempo->length = size;
-					ret = _httpmessage_parserequest(client->request, tempo);
-
-					if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
-					{
-						ret = _httpclient_checkconnector(client, client->request, client->request->response);
-					}
-				}
-				else /* socket shutdown */
-				{
+				int ret = _httpclient_request(client);
+				if (ret == ESUCCESS)
+					client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
+				else if (ret == EREJECT)
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
-					_buffer_destroy(tempo);
-					break;
-				}
-				_buffer_destroy(tempo);
-				switch (ret)
-				{
-					case ESUCCESS:
-					{
-						if (!(client->state & CLIENT_RESPONSEREADY) &&
-							(client->request->type == MESSAGE_TYPE_PUT ||
-							client->request->type == MESSAGE_TYPE_DELETE))
-						{
-							client->request->result = RESULT_405;
-						}
-						client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
-					}
-					break;
-					case EREJECT:
-					{
-						if (client->request->result == RESULT_200)
-							client->request->result = RESULT_400;
-						client->request->response->result = client->request->result;
-						client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
-					}
-					break;
-					case ECONTINUE:
-					case EINCOMPLETE:
-					{
-						if (client->request->state == PARSE_END)
-							client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
-					}
-					break;
-				}
 			}
 			break;
 			case CLIENT_PUSHREQUEST:
 			{
-				http_message_queue_t *new = calloc(1, sizeof(*new));
-				new->message = client->request;
-				new->message->connector = client->callback;
+				int ret;
+				ret = _httpclient_pushrequest(client, client->request);
 				client->request = NULL;
-
-				new->message->response->keepalive = new->message->keepalive;
-				http_message_queue_t *iterator = client->request_queue;
-				if (iterator == NULL)
-				{
-					client->request_queue = new;
-				}
-				else
-				{
-					while (iterator->next != NULL) iterator = iterator->next;
-					iterator->next = new;
-				}
-				if (new->message->result != RESULT_200)
+				if (ret == EREJECT)
 					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 				else
 					client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
