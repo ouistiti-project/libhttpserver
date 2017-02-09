@@ -899,11 +899,19 @@ static int _httpclient_run(http_client_t *client)
 			{
 				int ret;
 				ret = _httpclient_pushrequest(client, client->request);
-				client->request = NULL;
 				if (ret == EREJECT)
 					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
-				else
+				else if (client->request->response->content == NULL)
 					client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+				else if (client->request->version == HTTP09)
+					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+				else
+					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+				if (client->request->response->keepalive)
+				{
+					client->state |= CLIENT_KEEPALIVE;
+				}
+				client->request = NULL;
 			}
 			break;
 			case CLIENT_PARSER1:
