@@ -920,8 +920,9 @@ static int _httpclient_run(http_client_t *client)
 				ret = request->connector->func(request->connector->arg, request, request->response);
 				if (ret == EREJECT)
 				{
-					request->response->result = RESULT_404;
 					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+					/** delete func to stop request after the error response **/
+					request->connector->func = NULL;
 				}
 				else if (ret != EINCOMPLETE)
 				{
@@ -938,11 +939,20 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_PARSER2:
 			{
-				int ret = EINCOMPLETE;
-				if (client->callback && client->callback->func)
+				int ret = EREJECT;
+				if (request->connector->func)
 					ret = request->connector->func(request->connector->arg, request, request->response);
-				if (ret != ESUCCESS)
+				if (ret == EREJECT)
+				{
+					/** delete func to stop request after the error response **/
+					request->connector->func = NULL;
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				else if (ret != ESUCCESS)
+				{
+
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+				}
 				else
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
@@ -971,14 +981,17 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_RESPONSECONTENT:
 			{
-				if (request->response->result == RESULT_200 &&
-					request->type != MESSAGE_TYPE_HEAD)
+				if (request->type != MESSAGE_TYPE_HEAD)
 				{
 					int size = CHUNKSIZE - 1;
 					size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
 					if (size < 0)
 					{
 						client->state &= ~CLIENT_KEEPALIVE;
+						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					}
+					else if (size == 0 && (request->response->content->length > 0))
+					{
 						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					}
 					else
@@ -993,15 +1006,24 @@ static int _httpclient_run(http_client_t *client)
 			break;
 			case CLIENT_PARSERERROR:
 			{
+				if (request->response->result == RESULT_200)
+					request->response->result = RESULT_404;
 				httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
+				const char *value = _http_message_result[request->response->result];
+				httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-				client->state &= ~CLIENT_KEEPALIVE;
+				//client->state &= ~CLIENT_KEEPALIVE;
 			}
 			break;
 			case CLIENT_COMPLETE:
 			{
 				setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-				if (!(client->state & CLIENT_KEEPALIVE))
+				if (client->server->config->keepalive && (client->state & CLIENT_KEEPALIVE))
+				{
+					client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
+					dbg("keepalive");
+				}
+				else
 				{
 					client->state |= CLIENT_STOPPED;
 					if (client->freectx)
@@ -1013,11 +1035,6 @@ static int _httpclient_run(http_client_t *client)
 					closesocket(client->sock);
 			#endif
 					client->sock = -1;
-				}
-				else
-				{
-					client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
-					dbg("keepalive");
 				}
 				if (request)
 				{
