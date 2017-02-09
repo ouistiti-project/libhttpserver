@@ -242,6 +242,7 @@ static char *_http_message_version[] =
 	"HTTP/1.1",
 	"HTTP/2",
 };
+char httpserver_software[] = "libhttpserver";
 static const char str_connection[] = "Connection";
 static const char str_contenttype[] = "Content-Type";
 static const char str_contentlength[] = "Content-Length";
@@ -1381,6 +1382,10 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	if (!strcasecmp(key, "name"))
 	{
 		value = message->client->server->config->hostname;
+	}
+	else if (!strcasecmp(key, "software"))
+	{
+		value = httpserver_software;
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
