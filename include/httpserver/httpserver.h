@@ -137,7 +137,7 @@ typedef struct http_server_config_s
 	/** @param port the TCP/IP prot to bind the server */
 	int port;
 	/** @param maxclients the maximum number of clients accepted by the server. */
-	int maxclient;
+	int maxclients;
 	int chunksize;
 	/** the version of the HTTP server. */
 	http_message_version_e version;

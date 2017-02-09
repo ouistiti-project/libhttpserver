@@ -214,7 +214,7 @@ static int _httpclient_run(http_client_t *client);
 static http_server_config_t defaultconfig = {
 	.addr = NULL,
 	.port = 80,
-	.maxclient = 10,
+	.maxclients = 10,
 	.chunksize = 64,
 	.keepalive = 1,
 	.version = HTTP10,
@@ -1231,7 +1231,7 @@ static int _httpserver_start(http_server_t *server)
 
 	if (!status)
 	{
-		status = listen(server->sock, server->config->maxclient);
+		status = listen(server->sock, server->config->maxclients);
 	}
 	if (status)
 	{
