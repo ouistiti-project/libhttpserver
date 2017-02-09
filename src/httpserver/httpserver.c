@@ -306,7 +306,6 @@ static http_message_t * _httpmessage_create(http_client_t *client, http_message_
 	message = vcalloc(1, sizeof(*message));
 	if (message)
 	{
-		message->content = _buffer_create();
 		message->client = client;
 		if (parent)
 		{
@@ -1340,6 +1339,9 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
+	if (message->content == NULL)
+		message->content = _buffer_create();
+
 	if (message->state < PARSE_CONTENT)
 	{
 		if (type == NULL)
