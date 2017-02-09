@@ -39,8 +39,6 @@
 #include <errno.h>
 
 #ifndef WIN32
-# include <err.h>
-
 # include <sys/socket.h>
 # include <sys/ioctl.h>
 # include <sys/un.h>
@@ -51,7 +49,6 @@
 # include <netdb.h>
 
 #else
-# define warn(...) fprintf(stderr, __VA_ARGS__)
 
 # include <winsock2.h>
 # include <ws2tcpip.h>
@@ -75,8 +72,10 @@ extern "C" {
 
 #endif
 
+#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #ifdef DEBUG
-# define dbg(format, ...)	fprintf(stderr, format"\n", ##__VA_ARGS__)
+#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #else
 # define dbg(...)
 #endif
@@ -460,6 +459,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							break;
 						}
 					}
+					dbg("new request for %s", message->uri->data);
 				}
 			}
 			break;
