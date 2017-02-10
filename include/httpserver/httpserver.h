@@ -44,6 +44,7 @@ extern "C"
 #define ECONTINUE -2
 #define ESPACE -3
 #define EREJECT -4
+#define ETIMEOUT -5
 
 typedef struct http_message_s http_message_t;
 typedef struct http_server_s http_server_t;
@@ -141,6 +142,7 @@ typedef struct http_server_config_s
 	int chunksize;
 	/** the version of the HTTP server. */
 	http_message_version_e version;
+	/** the keepalive timeout **/
 	int keepalive;
 } http_server_config_t;
 

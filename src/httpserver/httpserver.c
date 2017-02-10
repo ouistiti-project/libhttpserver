@@ -891,8 +891,34 @@ static int _httpclient_run(http_client_t *client)
 				if (ret == ESUCCESS)
 					client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
 				else if (ret == EREJECT)
+				{
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
+				}
+	#ifdef VTHREAD
+				else
+				{
+					int sret;
+					struct timeval *ptimeout = NULL;
+					struct timeval timeout;
+					fd_set rfds;
+					if (client->server->config->keepalive)
+					{
+						timeout.tv_sec = client->server->config->keepalive;
+						timeout.tv_usec = 0;
+						ptimeout = &timeout;
+					}
+					FD_ZERO(&rfds);
+					FD_SET(client->sock, &rfds);
+					sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
+					if (sret == 0)
+					{
+						/* timeout */
+						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+						client->state &= ~CLIENT_KEEPALIVE;
+					}
+				}
+	#endif
 			}
 			break;
 			case CLIENT_PUSHREQUEST:
