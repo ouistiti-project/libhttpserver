@@ -754,7 +754,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 				vhost = NULL;
 		}
 
-		if (vhost == NULL)
+		if (vhost == NULL && iterator->func)
 		{
 			ret = iterator->func(iterator->arg, request, response);
 			if (ret != EREJECT)
