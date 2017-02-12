@@ -878,198 +878,198 @@ static int _httpclient_run(http_client_t *client)
 	if (client->request_queue)
 		request = client->request_queue->message;
 
-		switch (client->state & CLIENT_MACHINEMASK)
+	switch (client->state & CLIENT_MACHINEMASK)
+	{
+		case CLIENT_NEW:
 		{
-			case CLIENT_NEW:
+			client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		break;
+		case CLIENT_REQUEST:
+		{
+			int ret = _httpclient_request(client);
+			if (ret == ESUCCESS)
+				client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
+			else if (ret == EREJECT)
 			{
-				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
+				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				client->state &= ~CLIENT_KEEPALIVE;
 			}
-			break;
-			case CLIENT_REQUEST:
+#ifdef VTHREAD
+			else
 			{
-				int ret = _httpclient_request(client);
-				if (ret == ESUCCESS)
-					client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
-				else if (ret == EREJECT)
+				int sret;
+				struct timeval *ptimeout = NULL;
+				struct timeval timeout;
+				fd_set rfds;
+				if (client->server->config->keepalive)
 				{
+					timeout.tv_sec = client->server->config->keepalive;
+					timeout.tv_usec = 0;
+					ptimeout = &timeout;
+				}
+				FD_ZERO(&rfds);
+				FD_SET(client->sock, &rfds);
+				sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
+				if (sret == 0)
+				{
+					/* timeout */
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
 				}
-	#ifdef VTHREAD
-				else
-				{
-					int sret;
-					struct timeval *ptimeout = NULL;
-					struct timeval timeout;
-					fd_set rfds;
-					if (client->server->config->keepalive)
-					{
-						timeout.tv_sec = client->server->config->keepalive;
-						timeout.tv_usec = 0;
-						ptimeout = &timeout;
-					}
-					FD_ZERO(&rfds);
-					FD_SET(client->sock, &rfds);
-					sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
-					if (sret == 0)
-					{
-						/* timeout */
-						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-						client->state &= ~CLIENT_KEEPALIVE;
-					}
-				}
-	#endif
 			}
-			break;
-			case CLIENT_PUSHREQUEST:
+#endif
+		}
+		break;
+		case CLIENT_PUSHREQUEST:
+		{
+			int ret;
+			ret = _httpclient_pushrequest(client, client->request);
+			if (ret == EREJECT)
+				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+			else if (client->request->response->content == NULL)
+				client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
+			else if (client->request->version == HTTP09)
+				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			else
+				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+			if (client->request->response->keepalive)
 			{
-				int ret;
-				ret = _httpclient_pushrequest(client, client->request);
-				if (ret == EREJECT)
-					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
-				else if (client->request->response->content == NULL)
-					client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
-				else if (client->request->version == HTTP09)
+				client->state |= CLIENT_KEEPALIVE;
+			}
+			client->request = NULL;
+		}
+		break;
+		case CLIENT_PARSER1:
+		{
+			int ret = 0;
+			ret = request->connector->func(request->connector->arg, request, request->response);
+			if (ret == EREJECT)
+			{
+				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
+				/** delete func to stop request after the error response **/
+				request->connector->func = NULL;
+			}
+			else if (ret != EINCOMPLETE)
+			{
+				if (request->response->version == HTTP09)
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				else
 					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-				if (client->request->response->keepalive)
-				{
-					client->state |= CLIENT_KEEPALIVE;
-				}
-				client->request = NULL;
 			}
-			break;
-			case CLIENT_PARSER1:
+			if (request->response->keepalive)
 			{
-				int ret = 0;
+				client->state |= CLIENT_KEEPALIVE;
+			}
+		}
+		break;
+		case CLIENT_PARSER2:
+		{
+			int ret = EREJECT;
+			if (request->connector->func)
 				ret = request->connector->func(request->connector->arg, request, request->response);
-				if (ret == EREJECT)
-				{
-					client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
-					/** delete func to stop request after the error response **/
-					request->connector->func = NULL;
-				}
-				else if (ret != EINCOMPLETE)
-				{
-					if (request->response->version == HTTP09)
-						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
-					else
-						client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				if (request->response->keepalive)
-				{
-					client->state |= CLIENT_KEEPALIVE;
-				}
-			}
-			break;
-			case CLIENT_PARSER2:
+			if (ret == EREJECT)
 			{
-				int ret = EREJECT;
-				if (request->connector->func)
-					ret = request->connector->func(request->connector->arg, request, request->response);
-				if (ret == EREJECT)
-				{
-					/** delete func to stop request after the error response **/
-					request->connector->func = NULL;
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				else if (ret != ESUCCESS)
-				{
-
-					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				else
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				/** delete func to stop request after the error response **/
+				request->connector->func = NULL;
+				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			break;
-			case CLIENT_RESPONSEHEADER:
+			else if (ret != ESUCCESS)
 			{
-				int size = 0;
-				buffer_t *header = _buffer_create();
-				_httpmessage_buildheader(client, request->response, header);
 
-				/**
-				 * here, it is the call to the sendresp callback from the
-				 * server configuration.
-				 * see http_server_config_t and httpserver_create
-				 */
-				size = client->sendresp(client->ctx, header->data, header->length);
+				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			else
+				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		break;
+		case CLIENT_RESPONSEHEADER:
+		{
+			int size = 0;
+			buffer_t *header = _buffer_create();
+			_httpmessage_buildheader(client, request->response, header);
+
+			/**
+			 * here, it is the call to the sendresp callback from the
+			 * server configuration.
+			 * see http_server_config_t and httpserver_create
+			 */
+			size = client->sendresp(client->ctx, header->data, header->length);
+			if (size < 0)
+			{
+				client->state &= ~CLIENT_KEEPALIVE;
+				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			else
+				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			_buffer_destroy(header);
+		}
+		break;
+		case CLIENT_RESPONSECONTENT:
+		{
+			if (request->type != MESSAGE_TYPE_HEAD)
+			{
+				int size = CHUNKSIZE - 1;
+				size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
 				if (size < 0)
 				{
 					client->state &= ~CLIENT_KEEPALIVE;
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				else
-					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
-				_buffer_destroy(header);
-			}
-			break;
-			case CLIENT_RESPONSECONTENT:
-			{
-				if (request->type != MESSAGE_TYPE_HEAD)
+				else if (size == 0 && (request->response->content->length > 0))
 				{
-					int size = CHUNKSIZE - 1;
-					size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
-					if (size < 0)
-					{
-						client->state &= ~CLIENT_KEEPALIVE;
-						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-					}
-					else if (size == 0 && (request->response->content->length > 0))
-					{
-						client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-					}
-					else
-					{
-						_buffer_reset(request->response->content);
-						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
-					}
-				}
-				else
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-			}
-			break;
-			case CLIENT_PARSERERROR:
-			{
-				if (request->response->result == RESULT_200)
-					request->response->result = RESULT_404;
-				httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
-				const char *value = _http_message_result[request->response->result];
-				httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
-				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-				//client->state &= ~CLIENT_KEEPALIVE;
-			}
-			break;
-			case CLIENT_COMPLETE:
-			{
-				setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-				if (client->server->config->keepalive && (client->state & CLIENT_KEEPALIVE))
-				{
-					client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
-					dbg("keepalive");
 				}
 				else
 				{
-					client->state |= CLIENT_STOPPED;
-					if (client->freectx)
-						client->freectx(client->ctx);
-					shutdown(client->sock, SHUT_RDWR);
-			#ifndef WIN32
-					close(client->sock);
-			#else
-					closesocket(client->sock);
-			#endif
-					client->sock = -1;
-				}
-				if (request)
-				{
-					_httpmessage_destroy(request);
-					client->request_queue = client->request_queue->next;
+					_buffer_reset(request->response->content);
+					client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 				}
 			}
-			break;
+			else
+				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 		}
+		break;
+		case CLIENT_PARSERERROR:
+		{
+			if (request->response->result == RESULT_200)
+				request->response->result = RESULT_404;
+			httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
+			const char *value = _http_message_result[request->response->result];
+			httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
+			client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+			//client->state &= ~CLIENT_KEEPALIVE;
+		}
+		break;
+		case CLIENT_COMPLETE:
+		{
+			setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
+			if (client->server->config->keepalive && (client->state & CLIENT_KEEPALIVE))
+			{
+				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
+				dbg("keepalive");
+			}
+			else
+			{
+				client->state |= CLIENT_STOPPED;
+				if (client->freectx)
+					client->freectx(client->ctx);
+				shutdown(client->sock, SHUT_RDWR);
+		#ifndef WIN32
+				close(client->sock);
+		#else
+				closesocket(client->sock);
+		#endif
+				client->sock = -1;
+			}
+			if (request)
+			{
+				_httpmessage_destroy(request);
+				client->request_queue = client->request_queue->next;
+			}
+		}
+		break;
+	}
 	return 0;
 }
 
