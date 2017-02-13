@@ -102,12 +102,14 @@ struct http_connector_list_s
 };
 typedef struct http_connector_list_s http_connector_list_t;
 
-typedef struct http_server_mod_s
+typedef struct http_server_mod_s http_server_mod_t;
+struct http_server_mod_s
 {
 	void *arg;
 	http_getctx_t func;
 	http_freectx_t freectx;
-} http_server_mod_t;
+	http_server_mod_t *next;
+};
 
 struct http_message_queue_s
 {
@@ -1138,14 +1140,19 @@ static int _httpserver_connect(http_server_t *server)
 				client->addr_size = sizeof(client->addr);
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
 				dbg("new connection %p", client);
-				if (server->mod && server->mod->func)
+				http_server_mod_t *mod = server->mod;
+				while (mod)
 				{
-					client->ctx = server->mod->func(server->mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
-					client->freectx = server->mod->freectx;
+					if (mod->func)
+					{
+						client->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
+						client->freectx = mod->freectx;
+					}
+					mod = mod->next;
 				}
 				int flags;
-				flags = fcntl(client->sock,F_GETFD);
-				fcntl(client->sock,F_SETFD, flags | SOCK_NONBLOCK);
+				flags = fcntl(client->sock,F_GETFL, 0);
+				fcntl(client->sock,F_SETFL, flags | O_NONBLOCK);
 
 				client->next = server->clients;
 				server->clients = client;
@@ -1292,13 +1299,14 @@ static int _httpserver_start(http_server_t *server)
 	return 0;
 }
 
-void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg)
+void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg)
 {
-	if (!server->mod)
-		server->mod = vcalloc(1, sizeof(*server->mod));
-	server->mod->func = mod;
-	server->mod->freectx = unmod;
-	server->mod->arg = arg;
+	http_server_mod_t *mod = vcalloc(1, sizeof(*mod));
+	mod->func = modf;
+	mod->freectx = unmodf;
+	mod->arg = arg;
+	mod->next = server->mod;
+	server->mod = mod;
 }
 
 void httpserver_addconnector(http_server_t *server, char *vhost, http_connector_t func, void *funcarg)
