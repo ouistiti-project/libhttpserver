@@ -58,6 +58,8 @@ typedef enum
 	HTTP11,
 	HTTP20,
 	HTTPVERSIONS,
+	HTTPVERSION_MASK = 0x00FF,
+	HTTP_PIPELINE = 0x0100,
 } http_message_version_e;
 
 typedef enum

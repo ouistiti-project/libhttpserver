@@ -679,8 +679,8 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 {
 	dbentry_t *headers = response->headers;
 	http_message_version_e version = response->version;
-	if (response->version > client->server->config->version)
-		version = client->server->config->version;
+	if (response->version > (client->server->config->version & HTTPVERSION_MASK))
+		version = (client->server->config->version & HTTPVERSION_MASK);
 	_buffer_append(header, _http_message_version[version], strlen(_http_message_version[version]));
 	_buffer_append(header, (char *)_http_message_result[response->result], strlen(_http_message_result[response->result]));
 	_buffer_append(header, "\r\n", 2);
@@ -890,6 +890,15 @@ static int _httpclient_run(http_client_t *client)
 	if (client->request_queue)
 		request = client->request_queue->message;
 
+	int request_ret = ECONTINUE;
+	if ((client->server->config->version >= (HTTP11 | HTTP_PIPELINE)) || 
+		((client->state & CLIENT_MACHINEMASK) == CLIENT_REQUEST))
+	{
+		request_ret = _httpclient_request(client);
+		if (request_ret == ESUCCESS)
+			_httpclient_pushrequest(client, client->request);
+	}
+
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
 		case CLIENT_NEW:
@@ -899,10 +908,11 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_REQUEST:
 		{
-			int ret = _httpclient_request(client);
-			if (ret == ESUCCESS)
+			if (request_ret == ESUCCESS)
+			{
 				client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
-			else if (ret == EREJECT)
+			}
+			else if (request_ret == EREJECT)
 			{
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 				client->state &= ~CLIENT_KEEPALIVE;
@@ -922,7 +932,8 @@ static int _httpclient_run(http_client_t *client)
 				}
 				FD_ZERO(&rfds);
 				FD_SET(client->sock, &rfds);
-				sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
+				/** allow read and write, because the mod may need write data during the connection (HTTPS) **/
+				sret = select(client->sock + 1, &rfds, &rfds, NULL, ptimeout);
 				if (sret == 0)
 				{
 					/* timeout */
@@ -935,9 +946,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_PUSHREQUEST:
 		{
-			int ret;
-			ret = _httpclient_pushrequest(client, client->request);
-			if (ret == EREJECT)
+			if (client->request->response->result != RESULT_200)
 				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 			else if (client->request->response->content == NULL)
 				client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
@@ -1478,7 +1487,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = _http_message_version[message->client->server->config->version];
+		value = _http_message_version[(message->client->server->config->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "port"))
 	{
