@@ -118,6 +118,13 @@ struct http_message_queue_s
 };
 typedef struct http_message_queue_s http_message_queue_t;
 
+typedef struct http_client_modctx_s http_client_modctx_t;
+struct http_client_modctx_s
+{
+	void *ctx;
+	http_client_modctx_t *next;
+};
+
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
@@ -137,16 +144,20 @@ struct http_client_s
 {
 	int sock;
 	int state;
-	http_server_t *server;
-	vthread_t thread;
-	http_freectx_t freectx;
-	http_recv_t recvreq;
-	http_send_t sendresp;
+	http_server_t *server; /* the server which create the client */
+	vthread_t thread; /* The thread of socket management during the live of the connection */
+
+	http_recv_t recvreq; /* callback to receive data on the socket */
+	http_send_t sendresp; /* callback to send data on the socket */
+	void *ctx; /* ctx of recvreq and sendresp functions */
+
 	http_connector_list_t *callbacks;
 	http_connector_list_t *callback;
 	http_message_t *request;
 	http_message_queue_t *request_queue;
-	void *ctx;
+
+	http_client_modctx_t *modctx; /* list of pointers returned by getctx of each mod */
+
 	dbentry_t *session;
 	buffer_t *session_storage;
 #ifndef WIN32
@@ -704,7 +715,6 @@ static http_client_t *_httpclient_create(http_server_t *server)
 	client->recvreq = httpclient_recv;
 	client->sendresp = httpclient_send;
 	client->ctx = client;
-	client->freectx = NULL;
 
 	http_connector_list_t *callback = server->callbacks;
 	while (callback != NULL)
@@ -1054,8 +1064,17 @@ static int _httpclient_run(http_client_t *client)
 			else
 			{
 				client->state |= CLIENT_STOPPED;
-				if (client->freectx)
-					client->freectx(client->ctx);
+				http_server_mod_t *mod = client->server->mod;
+				http_client_modctx_t *modctx = client->modctx;
+				while (mod)
+				{
+					if (mod->freectx)
+					{
+						mod->freectx(modctx->ctx);
+					}
+					mod = mod->next;
+					modctx = modctx->next;
+				}
 				shutdown(client->sock, SHUT_RDWR);
 		#ifndef WIN32
 				close(client->sock);
@@ -1141,14 +1160,23 @@ static int _httpserver_connect(http_server_t *server)
 				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
 				dbg("new connection %p", client);
 				http_server_mod_t *mod = server->mod;
+				http_client_modctx_t *currentctx = NULL;
 				while (mod)
 				{
+					http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
+
 					if (mod->func)
 					{
-						client->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
-						client->freectx = mod->freectx;
+						modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
 					}
 					mod = mod->next;
+					if (client->modctx == NULL)
+						client->modctx = modctx;
+					else
+					{
+						currentctx->next = modctx;
+					}
+					currentctx = modctx;
 				}
 				int flags;
 				flags = fcntl(client->sock,F_GETFL, 0);
