@@ -954,7 +954,7 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-			if (client->request->response->keepalive)
+			if (client->request->response->keepalive && request->response->version > HTTP09)
 			{
 				client->state |= CLIENT_KEEPALIVE;
 			}
@@ -978,7 +978,7 @@ static int _httpclient_run(http_client_t *client)
 				else
 					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			if (request->response->keepalive)
+			if (request->response->keepalive && request->response->version > HTTP09)
 			{
 				client->state |= CLIENT_KEEPALIVE;
 			}
