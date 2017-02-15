@@ -1014,7 +1014,9 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_RESPONSECONTENT:
 		{
-			if (request->type != MESSAGE_TYPE_HEAD)
+			if (request->type != MESSAGE_TYPE_HEAD &&
+				request->response->content &&
+				request->response->content->length > 0)
 			{
 				int size = CHUNKSIZE - 1;
 				size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
@@ -1044,7 +1046,10 @@ static int _httpclient_run(http_client_t *client)
 			httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
 			const char *value = _http_message_result[request->response->result];
 			httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
-			client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+			if (request->response->version == HTTP09)
+				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			else
+				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
 			//client->state &= ~CLIENT_KEEPALIVE;
 		}
 		break;
