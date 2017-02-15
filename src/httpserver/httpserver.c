@@ -834,9 +834,12 @@ static int _httpclient_request(http_client_t *client)
 		break;
 		case EREJECT:
 		{
-			if (client->request->result == RESULT_200)
-				client->request->result = RESULT_400;
-			client->request->response->result = client->request->result;
+			if (client->request->response->result == RESULT_200)
+			{
+				if (client->request->result == RESULT_200)
+					client->request->result = RESULT_400;
+				client->request->response->result = client->request->result;
+			}
 			ret = ESUCCESS;
 		}
 		break;
@@ -883,7 +886,9 @@ static int _httpclient_run(http_client_t *client)
 	{
 		request_ret = _httpclient_request(client);
 		if (request_ret == ESUCCESS)
+		{
 			_httpclient_pushrequest(client, client->request);
+		}
 	}
 
 	switch (client->state & CLIENT_MACHINEMASK)
