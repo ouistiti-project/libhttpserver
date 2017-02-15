@@ -219,6 +219,7 @@ struct http_server_s
 };
 
 static int _httpserver_start(http_server_t *server);
+static void _httpmessage_fillheaderdb(http_message_t *message);
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
 static int _httpclient_run(http_client_t *client);
 
@@ -525,6 +526,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				int length = 0;
 				if (message->headers_storage == NULL)
 					message->headers_storage = _buffer_create();
+				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
 					if (*data->offset == '\r')
@@ -561,26 +563,9 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_HEADERNEXT:
 			{
-				int i;
-				buffer_t *storage = message->headers_storage;
-				char *key = storage->data;
-				char *value = NULL;
-				for (i = 0; i < storage->length; i++)
-				{
-					if (storage->data[i] == ':' && value == NULL)
-					{
-						storage->data[i] = '\0';
-						value = storage->data + i + 1;
-						while (*value == ' ')
-							value++;
-					}
-					else if (storage->data[i] == '\0')
-					{
-						_httpmessage_addheader(message, key, value);
-						key = storage->data + i + 1;
-						value = NULL;
-					}
-				}
+				/* create key/value entry for each "<key>:<value>\0" string */
+				_httpmessage_fillheaderdb(message);
+				/* reset the buffer to begin the content at the begining of the buffer */
 				data->length -= (data->offset - data->data);
 				memcpy(data->data, data->offset + 1, data->length);
 				data->offset = data->data;
@@ -677,6 +662,7 @@ int httpclient_send(void *ctl, char *data, int length)
 
 static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
 {
+	_httpmessage_fillheaderdb(response);
 	dbentry_t *headers = response->headers;
 	http_message_version_e version = response->version;
 	if (response->version > (client->server->config->version & HTTPVERSION_MASK))
@@ -1396,6 +1382,9 @@ void httpserver_destroy(http_server_t *server)
 #endif
 }
 
+/*************************************************************
+ * httpmessage public functions
+ */
 void *httpmessage_private(http_message_t *message, void *data)
 {
 	if (data != NULL)
@@ -1405,13 +1394,45 @@ void *httpmessage_private(http_message_t *message, void *data)
 	return message->private;
 }
 
+http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result)
+{
+	if (result > 0)
+		message->result = result;
+	return message->result;
+	
+}
+
+static void _httpmessage_fillheaderdb(http_message_t *message)
+{
+	int i;
+	buffer_t *storage = message->headers_storage;
+	char *key = storage->data;
+	char *value = NULL;
+	for (i = 0; i < storage->length; i++)
+	{
+		if (storage->data[i] == ':' && value == NULL)
+		{
+			storage->data[i] = '\0';
+			value = storage->data + i + 1;
+			while (*value == ' ')
+				value++;
+		}
+		else if (storage->data[i] == '\0')
+		{
+			_httpmessage_addheader(message, key, value);
+			key = storage->data + i + 1;
+			value = NULL;
+		}
+	}
+}
+
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
 	if (message->headers_storage == NULL)
 		message->headers_storage = _buffer_create();
-	key = _buffer_append(message->headers_storage, key, strlen(key) + 1);
+	key = _buffer_append(message->headers_storage, key, strlen(key));
+	_buffer_append(message->headers_storage, ":", 1);
 	value = _buffer_append(message->headers_storage, value, strlen(value) + 1);
-	_httpmessage_addheader(message, key, value);
 }
 
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
