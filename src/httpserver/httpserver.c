@@ -547,6 +547,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					else  if (*data->offset == '\n')
 					{
 						header = data->offset + 1;
+						length = 0;
 					}
 					else
 						length++;
@@ -554,7 +555,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				}
 
 				/* not enougth data to complete the line */
-				if (next == PARSE_HEADER)
+				if (next == PARSE_HEADER && length > 0)
 				{
 					_buffer_append(message->headers_storage, header, length);
 					message->state |= PARSE_CONTINUE;
