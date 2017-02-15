@@ -209,6 +209,19 @@ void httpserver_destroy(http_server_t *server);
  * @return the same pointer as stored
  */
 void *httpmessage_private(http_message_t *message, void *data);
+
+/**
+ * @brief change the result of the message
+ *
+ * @param message the response message to update
+ * @param result value to add
+ * 
+ * @return current result of the message.
+ * 
+ * If result is 0, the function only returns the current result of the message.
+ */
+http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result);
+
 /**
  * @brief add a header to the response message
  *

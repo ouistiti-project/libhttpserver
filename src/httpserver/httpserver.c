@@ -1399,6 +1399,13 @@ void *httpmessage_private(http_message_t *message, void *data)
 	return message->private;
 }
 
+http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result)
+{
+	if (result > 0)
+		message->result = result;
+	return message->result;
+}
+
 static void _httpmessage_fillheaderdb(http_message_t *message)
 {
 	int i;
