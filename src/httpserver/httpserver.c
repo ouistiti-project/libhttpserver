@@ -889,7 +889,7 @@ static int _httpclient_run(http_client_t *client)
 
 	int request_ret = ECONTINUE;
 	if ((client->server->config->version >= (HTTP11 | HTTP_PIPELINE)) || 
-		((client->state & CLIENT_MACHINEMASK) == CLIENT_REQUEST))
+		((client->state & CLIENT_MACHINEMASK) < CLIENT_PUSHREQUEST))
 	{
 		request_ret = _httpclient_request(client);
 		if (request_ret == ESUCCESS)
@@ -902,6 +902,29 @@ static int _httpclient_run(http_client_t *client)
 	{
 		case CLIENT_NEW:
 		{
+			client->state &= ~CLIENT_RESPONSEREADY;
+#ifdef VTHREAD
+			int sret;
+			struct timeval *ptimeout = NULL;
+			struct timeval timeout;
+			fd_set rfds;
+			if (client->server->config->keepalive)
+			{
+				timeout.tv_sec = client->server->config->keepalive;
+				timeout.tv_usec = 0;
+				ptimeout = &timeout;
+			}
+			FD_ZERO(&rfds);
+			FD_SET(client->sock, &rfds);
+			sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
+			if (sret < 1)
+			{
+				/* timeout */
+				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				client->state &= ~CLIENT_KEEPALIVE;
+			}
+			else
+#endif
 			client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
 		}
 		break;
@@ -933,7 +956,7 @@ static int _httpclient_run(http_client_t *client)
 				FD_SET(client->sock, &rfds);
 				/** allow read and write, because the mod may need write data during the connection (HTTPS) **/
 				sret = select(client->sock + 1, &rfds, &rfds, NULL, ptimeout);
-				if (sret == 0)
+				if (sret < 1)
 				{
 					/* timeout */
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
