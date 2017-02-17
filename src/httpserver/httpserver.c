@@ -1431,6 +1431,8 @@ static void _httpmessage_fillheaderdb(http_message_t *message)
 {
 	int i;
 	buffer_t *storage = message->headers_storage;
+	if (storage == NULL)
+		return;
 	char *key = storage->data;
 	char *value = NULL;
 	for (i = 0; i < storage->length; i++)
