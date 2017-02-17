@@ -571,12 +571,12 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				_httpmessage_fillheaderdb(message);
 				/* reset the buffer to begin the content at the begining of the buffer */
 				data->length -= (data->offset - data->data);
-				while ((*(data->offset + 1) == 0) && data->length > 0)
+				while ((*(data->offset) == 0) && data->length > 0)
 				{
 					data->offset++;
 					data->length--;
 				}
-				memcpy(data->data, data->offset + 1, data->length);
+				memcpy(data->data, data->offset, data->length);
 				data->offset = data->data;
 				next = PARSE_CONTENT;
 			}
