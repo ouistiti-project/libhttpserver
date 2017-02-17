@@ -257,6 +257,21 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 int httpmessage_keepalive(http_message_t *message);
 
 /**
+ * @brief create response for data stream
+ *
+ * @param message the response message to update
+ * @param data the stream to parse
+ * @param size the length of the data
+ *
+ * @return ECONTINUE on the need of more data
+ *         ESUCCESS when a response with content is ready
+ *
+ * After ESUCCESS, it is possible to add more data into the content
+ * with this same function.
+ */
+int httpmessage_parsecgi(http_message_t *message, char *data, int size);
+
+/**
  * @brief get value for different attributs of the connection
  *
  * the standard attributs received are:

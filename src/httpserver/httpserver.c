@@ -664,7 +664,8 @@ int httpclient_send(void *ctl, char *data, int length)
 
 static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
 {
-	_httpmessage_fillheaderdb(response);
+	if (response->headers == NULL)
+		_httpmessage_fillheaderdb(response);
 	dbentry_t *headers = response->headers;
 	http_message_version_e version = response->version;
 	if (response->version > (client->server->config->version & HTTPVERSION_MASK))
@@ -1404,6 +1405,19 @@ void *httpmessage_private(http_message_t *message, void *data)
 		message->private = data;
 	}
 	return message->private;
+}
+
+int httpmessage_parsecgi(http_message_t *message, char *data, int size)
+{
+	buffer_t tempo;
+	tempo.data = data;
+	tempo.offset = data;
+	tempo.length = size;
+	tempo.size = size;
+	if (message->state == PARSE_INIT)
+		message->state = PARSE_HEADER;
+	int ret = _httpmessage_parserequest(message, &tempo);
+	return ret;
 }
 
 http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result)
