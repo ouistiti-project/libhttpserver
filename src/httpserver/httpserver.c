@@ -531,7 +531,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
-					if (*data->offset == '\r')
+					if (*data->offset == '\n')
 					{
 						*data->offset = '\0';
 						if (length == 0 && !(message->state & PARSE_CONTINUE))
@@ -540,6 +540,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						}
 						else
 						{
+							header[length] = 0;
 							_buffer_append(message->headers_storage, header, length + 1);
 							header = data->offset + 1;
 							length = 0;
@@ -551,7 +552,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						header = data->offset + 1;
 						length = 0;
 					}
-					else
+					else if (*data->offset != '\r')
 						length++;
 					data->offset++;
 				}
@@ -570,31 +571,33 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				_httpmessage_fillheaderdb(message);
 				/* reset the buffer to begin the content at the begining of the buffer */
 				data->length -= (data->offset - data->data);
+				while ((*(data->offset + 1) == 0) && data->length > 0)
+				{
+					data->offset++;
+					data->length--;
+				}
 				memcpy(data->data, data->offset + 1, data->length);
 				data->offset = data->data;
 				next = PARSE_CONTENT;
-				if (message->response == NULL)
-					message->response = _httpmessage_create(message->client, message);
 			}
 			break;
 			case PARSE_CONTENT:
 			{
-				if (message->content_length > 0)
+				if (message->content_length == 0)
 				{
-					while (data->offset < (data->data + data->length))
-					{
-						data->offset++;
-						message->content_length--;
-						if (message->content_length <= 0)
-						{
-							next = PARSE_END;
-							break;
-						}
-					}
+					next = PARSE_END;
 				}
 				else
 				{
-					next = PARSE_END;
+					int length = data->length -(data->offset - data->data);
+					//httpmessage_addcontent(message, NULL, data->offset, length);
+
+					if (message->content_length > 0)
+					{
+						message->content_length -= length;
+						if (message->content_length <= 0)
+							next = PARSE_END;
+					}
 				}
 			}
 			break;
