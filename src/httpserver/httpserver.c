@@ -241,6 +241,7 @@ static const char *_http_message_result[] =
 	" 405 Method Not Allowed",
 #ifndef HTTP_STATUS_PARTIAL
 	" 301 Moved Permanently",
+	" 302 Found",
 	" 304 Not Modified",
 	" 401 Unauthorized",
 	" 414 Request URI too long",
