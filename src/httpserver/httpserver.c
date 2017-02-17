@@ -162,6 +162,8 @@ struct http_client_s
 	buffer_t *session_storage;
 #ifndef WIN32
 	struct sockaddr_un addr;
+#elif defined IPV6
+	struct sockaddr_in6 addr;
 #else
 	struct sockaddr_in addr;
 #endif
@@ -1255,7 +1257,11 @@ static int _httpserver_start(http_server_t *server)
 
 	if (server->config->addr == NULL)
 	{
+#ifdef IPV6
+		server->sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_IP);
+#else
 		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
+#endif
 		if ( server->sock < 0 )
 		{
 			warn("Error creating socket");
@@ -1270,11 +1276,18 @@ static int _httpserver_start(http_server_t *server)
 #endif
 
 		int socklen = sizeof(struct sockaddr_in);
+#ifdef IPV6
+		struct sockaddr_in6saddr;
+		saddr.sin6_family = AF_INET6;
+		saddr.sin6_port = htons(server->config->port);
+		saddr.sin6_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
+#else
 		struct sockaddr_in saddr;
 
 		saddr.sin_family = AF_INET;
 		saddr.sin_port = htons(server->config->port);
 		saddr.sin_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
+#endif
 		status = bind(server->sock, (struct sockaddr *)&saddr, socklen);
 	}
 	else
@@ -1283,7 +1296,11 @@ static int _httpserver_start(http_server_t *server)
 		struct addrinfo *result, *rp;
 
 		memset(&hints, 0, sizeof(struct addrinfo));
+#ifdef IPV6
+		hints.ai_family = AF_INET6;    /* Allow IPv4 or IPv6 */
+#eelse
 		hints.ai_family = AF_INET;    /* Allow IPv4 or IPv6 */
+#endif
 		hints.ai_socktype = SOCK_STREAM; /* Stream socket */
 		hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
 		hints.ai_protocol = 0;          /* Any protocol */
