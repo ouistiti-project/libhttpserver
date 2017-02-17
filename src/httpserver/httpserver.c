@@ -1535,6 +1535,52 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	{
 		message->content_length = atoi(value);
 	}
+	if (!strncasecmp(key, "Status", 6))
+	{
+		int result;
+		sscanf(value,"%d",&result);
+		switch (result)
+		{
+			case 200:
+				result = RESULT_200;
+			break;
+			case 400:
+				result = RESULT_400;
+			break;
+			case 404:
+				result = RESULT_404;
+			break;
+			case 405:
+				result = RESULT_405;
+			break;
+#ifndef HTTP_STATUS_PARTIAL
+			case 301:
+				result = RESULT_301;
+			break;
+			case 302:
+				result = RESULT_302;
+			break;
+			case 304:
+				result = RESULT_304;
+			break;
+			case 401:
+				result = RESULT_401;
+			break;
+			case 414:
+				result = RESULT_414;
+			break;
+			case 505:
+				result = RESULT_505;
+			break;
+			case 511:
+				result = RESULT_511;
+			break;
+#endif
+			default:
+				result = RESULT_400;
+		}
+		httpmessage_result(message, result);
+	}
 }
 
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
