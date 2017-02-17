@@ -817,6 +817,8 @@ static int _httpclient_request(http_client_t *client)
 
 		if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
 		{
+			if (client->request->response == NULL)
+				client->request->response = _httpmessage_create(client, client->request);
 			ret = _httpclient_checkconnector(client, client->request, client->request->response);
 		}
 	}
