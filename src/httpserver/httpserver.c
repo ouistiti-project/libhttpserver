@@ -1032,13 +1032,19 @@ static int _httpclient_run(http_client_t *client)
 			int size = 0;
 			buffer_t *header = _buffer_create();
 			_httpmessage_buildheader(client, request->response, header);
-
-			/**
-			 * here, it is the call to the sendresp callback from the
-			 * server configuration.
-			 * see http_server_config_t and httpserver_create
-			 */
-			size = client->sendresp(client->ctx, header->data, header->length);
+			while (header->length > 0)
+			{
+				/**
+				 * here, it is the call to the sendresp callback from the
+				 * server configuration.
+				 * see http_server_config_t and httpserver_create
+				 */
+				size = client->sendresp(client->ctx, header->data, header->length);
+				if (size < 0)
+					break;
+				header->offset += size;
+				header->length -= size;
+			}
 			if (size < 0)
 			{
 				client->state &= ~CLIENT_KEEPALIVE;
