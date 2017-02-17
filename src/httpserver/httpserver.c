@@ -1712,9 +1712,10 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, str_contentlength))
 	{
-		if (message->content != NULL)
+		if (message->content != NULL && message->content_length > 0)
 		{
-			value = (char *)message->content_length;
+			snprintf(host, NI_MAXHOST, "%d", message->content_length);
+			value = host;
 		}
 	}
 	else if (!strcasecmp(key, "content"))
