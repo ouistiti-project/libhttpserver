@@ -128,6 +128,7 @@ struct http_client_modctx_s
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
+#define CLIENT_ERROR 0x2000
 #define CLIENT_RESPONSEREADY 0x4000
 #define CLIENT_KEEPALIVE 0x8000
 #define CLIENT_MACHINEMASK 0x00FF
@@ -331,8 +332,6 @@ static http_message_t * _httpmessage_create(http_client_t *client, http_message_
 			message->type = parent->type;
 			message->client = parent->client;
 			message->version = parent->version;
-			if (client->server->config->keepalive)
-				message->keepalive = parent->keepalive;
 		}
 	}
 	return message;
@@ -864,7 +863,6 @@ static int _httpclient_pushrequest(http_client_t *client, http_message_t *reques
 	new->message = request;
 	new->message->connector = client->callback;
 
-	new->message->response->keepalive = new->message->keepalive;
 	http_message_queue_t *iterator = client->request_queue;
 	if (iterator == NULL)
 	{
@@ -950,7 +948,11 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-			if (client->request->response->keepalive && request->response->version > HTTP09)
+			if (client->request->keepalive)
+			{
+				client->state |= CLIENT_KEEPALIVE;
+			}
+			if (client->request->response->keepalive)
 			{
 				client->state |= CLIENT_KEEPALIVE;
 			}
@@ -973,10 +975,6 @@ static int _httpclient_run(http_client_t *client)
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				else
 					client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-			}
-			if (request->response->keepalive && request->response->version > HTTP09)
-			{
-				client->state |= CLIENT_KEEPALIVE;
 			}
 		}
 		break;
@@ -1015,15 +1013,19 @@ static int _httpclient_run(http_client_t *client)
 			if (size < 0)
 			{
 				client->state &= ~CLIENT_KEEPALIVE;
+				client->state |= CLIENT_ERROR;
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			else
+			else if (client->state & CLIENT_RESPONSEREADY)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			else
+				client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 			_buffer_destroy(header);
 		}
 		break;
 		case CLIENT_RESPONSECONTENT:
 		{
+			if (request->response->content)
 			if (request->type != MESSAGE_TYPE_HEAD &&
 				request->response->content &&
 				request->response->content->length > 0)
@@ -1033,16 +1035,22 @@ static int _httpclient_run(http_client_t *client)
 				if (size < 0)
 				{
 					client->state &= ~CLIENT_KEEPALIVE;
+					client->state |= CLIENT_ERROR;
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else if (size == 0 && (request->response->content->length > 0))
 				{
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				else
+				else if (size == request->response->content->length)
 				{
 					_buffer_reset(request->response->content);
 					client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				else
+				{
+					request->response->content->length -= size;
+					request->response->content->offset += size;
 				}
 			}
 			else
@@ -1060,13 +1068,16 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-			//client->state &= ~CLIENT_KEEPALIVE;
+			client->state |= CLIENT_RESPONSEREADY;
 		}
 		break;
 		case CLIENT_COMPLETE:
 		{
 			setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
-			if (client->server->config->keepalive && (client->state & CLIENT_KEEPALIVE))
+			if (client->server->config->keepalive &&
+				(client->state & CLIENT_KEEPALIVE) &&
+				request->response->version > HTTP09 &&
+				((client->state & ~CLIENT_ERROR) == client->state))
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive");
