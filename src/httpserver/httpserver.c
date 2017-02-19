@@ -547,7 +547,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							message->state &= ~PARSE_CONTINUE;
 						}
 					}
-					else  if (*data->offset == '\n')
+					else  if (*data->offset == '%')
 					{
 						header = data->offset + 1;
 						length = 0;
