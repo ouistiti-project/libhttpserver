@@ -101,7 +101,10 @@ int vthread_join(vthread_t thread, void **value_ptr)
 */
 #elif defined(HAVE_PTHREAD)
 	if (thread->pthread)
+	{
+		pthread_cancel(thread->pthread);
 		ret = pthread_join(thread->pthread, value_ptr);
+	}
 #endif
 	vfree(thread);
 	return ret;
