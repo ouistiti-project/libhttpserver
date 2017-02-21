@@ -583,7 +583,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					data->offset++;
 					data->length--;
 				}
-				memcpy(data->data, data->offset, data->length);
+				if (data->length > 0)
+					memcpy(data->data, data->offset, data->length);
+				else
+					*data->data = '\0';
 				data->offset = data->data;
 				next = PARSE_CONTENT;
 			}
