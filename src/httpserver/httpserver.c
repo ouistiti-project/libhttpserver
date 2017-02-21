@@ -707,7 +707,7 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, response->content_length);
 		_buffer_append(header, content_length, strlen(content_length));
 	}
-	_buffer_reset(header);
+	header->offset = header->data;
 	return ESUCCESS;
 }
 
