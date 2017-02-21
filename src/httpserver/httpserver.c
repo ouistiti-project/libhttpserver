@@ -1000,13 +1000,14 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_PARSER1:
 		{
-			int ret = 0;
-			ret = request->connector->func(request->connector->arg, request, request->response);
+			int ret = EREJECT;
+			if (request->connector)
+				ret = request->connector->func(request->connector->arg, request, request->response);
 			if (ret == EREJECT)
 			{
 				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 				/** delete func to stop request after the error response **/
-				request->connector->func = NULL;
+				request->connector = NULL;
 			}
 			else if (ret != EINCOMPLETE)
 			{
@@ -1020,12 +1021,12 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_PARSER2:
 		{
 			int ret = EREJECT;
-			if (request->connector->func)
+			if (request->connector && request->connector->func)
 				ret = request->connector->func(request->connector->arg, request, request->response);
 			if (ret == EREJECT)
 			{
 				/** delete func to stop request after the error response **/
-				request->connector->func = NULL;
+				request->connector = NULL;
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			else if (ret != ESUCCESS)
