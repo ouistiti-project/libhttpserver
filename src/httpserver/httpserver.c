@@ -357,6 +357,13 @@ static void _httpmessage_destroy(http_message_t *message)
 		_buffer_destroy(message->content);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
+	dbentry_t *header = message->headers;
+	while (header)
+	{
+		dbentry_t *next = header->next;
+		free(header);
+		header = next;
+	}
 	vfree(message);
 }
 
