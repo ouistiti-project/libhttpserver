@@ -300,6 +300,19 @@ char *httpmessage_SERVER(http_message_t *message, char *key);
  */
 char *httpmessage_REQUEST(http_message_t *message, char *key);
 
+/**
+ * @brief get value for the session used by the request
+ *
+ * the value are stored by mod with the same function.
+ *
+ * @param message the request message received
+ * @param key the name of the attribut
+ * @param value the value to set with the key or NULL
+ *
+ * @return the value of the attribut or a empty string
+ */
+char *httpmessage_SESSION(http_message_t *message, char *key, char *value);
+
 /**********************************************************************/
 /**
  * @brief return the receiver and sender context
