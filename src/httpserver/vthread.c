@@ -122,14 +122,16 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 		threadsArray[i] = threads[i]->handle;
 	}
 	WaitForMultipleObjects(nbthreads, threadsArray, TRUE, INFINITE);
-#else
+#elif defined(HAVE_PTHREAD)
 	int i;
 	for (i = 0; i < nbthreads; i++) 
 	{
 		void *value_ptr;
 		vthread_t thread = threads[i];
-		if (thread)
-			vthread_join(thread, &value_ptr);
+		if (thread && thread->pthread)
+		{
+			pthread_join(thread->pthread, value_ptr);
+		}
 	}
 #endif
 }
