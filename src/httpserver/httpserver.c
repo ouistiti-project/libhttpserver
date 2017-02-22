@@ -1788,14 +1788,6 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 			break;
 		}
 	}
-	else if (!strcasecmp(key, str_contentlength))
-	{
-		if (message->content != NULL && message->content_length > 0)
-		{
-			snprintf(host, NI_MAXHOST, "%d", message->content_length);
-			value = host;
-		}
-	}
 	else if (!strcasecmp(key, "content"))
 	{
 		if (message->content != NULL)
