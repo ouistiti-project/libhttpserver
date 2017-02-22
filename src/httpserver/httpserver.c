@@ -601,9 +601,21 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				}
 				else
 				{
+					/**
+					 * The content of the request is the buffer past to the socket.
+					 * Then it is always a partial content. And the content has
+					 * to be treat part by part.
+					 * Is possible to use the buffer with the function
+					 *  httpmessage_content
+					 */
 					int length = data->length -(data->offset - data->data);
-					//httpmessage_addcontent(message, NULL, data->offset, length);
+					message->content = data;
 
+					/**
+					 * At the end of the parsing the content_length of request 
+					 * is zero. But it is false, the true value is
+					 * Sum(content->length);
+					 */
 					if (message->content_length > 0)
 					{
 						message->content_length -= length;
@@ -837,12 +849,23 @@ static int _httpclient_request(http_client_t *client)
 		tempo->length = size;
 		ret = _httpmessage_parserequest(client->request, tempo);
 
-		if (ret == ESUCCESS && client->request->state >= PARSE_CONTENT)
+		/**
+		 * The request is partially read.
+		 * The connector can start to read the request when the header is ready.
+		 * A problem is the size of the header. It is impossible to start
+		 * the treatment before the end of the header, and it needs to
+		 * store the header informations. It takes some place in  memory,
+		 * depending of the server. It may be dangerous, a hacker can send
+		 * a request with a very big header.
+		 * TODO: check the maximum size of the header.
+		 */
+		if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
 		{
 			if (client->request->response == NULL)
 				client->request->response = _httpmessage_create(client, client->request);
 			ret = _httpclient_checkconnector(client, client->request, client->request->response);
 		}
+		client->request->content = NULL;
 	}
 	else /* socket shutdown */
 	{
@@ -876,7 +899,7 @@ static int _httpclient_request(http_client_t *client)
 		case ECONTINUE:
 		case EINCOMPLETE:
 		{
-			if (client->request->state == PARSE_END)
+			if ((client->request->state & PARSE_MASK) == PARSE_END)
 				ret = ESUCCESS;
 		}
 		break;
@@ -1507,6 +1530,17 @@ void *httpmessage_private(http_message_t *message, void *data)
 		message->private = data;
 	}
 	return message->private;
+}
+
+int httpmessage_content(http_message_t *message, char **data, int *size)
+{
+	*size = 0;
+	if (message->content)
+	{
+		*data = message->content->data;
+		*size = message->content->length;
+	}
+	return message->content_length + *size;
 }
 
 int httpmessage_parsecgi(http_message_t *message, char *data, int size)

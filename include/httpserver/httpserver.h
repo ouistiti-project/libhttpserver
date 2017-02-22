@@ -245,6 +245,17 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value);
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length);
 
 /**
+ * @brief returns the content of the request message
+ *
+ * @param message the request message
+ * @param content the data of the content
+ * @param length the length of the bitstream of the content
+ * 
+ * @return the length of the content not already read
+ */
+int httpmessage_content(http_message_t *message, char **content, int *length);
+
+/**
  * @brief set the Keep-Alive connection
  *
  * the server will keep the client connection opened
