@@ -1794,7 +1794,7 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 	}
 	if (value != NULL)
 	{
-		if (strlen(value) <= strlen(sessioninfo->value))
+		if (sessioninfo->value && (strlen(value) <= strlen(sessioninfo->value)))
 			strcpy(sessioninfo->value, value);
 		else
 			sessioninfo->value = 
