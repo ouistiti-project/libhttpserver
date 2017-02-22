@@ -1461,8 +1461,22 @@ void httpserver_disconnect(http_server_t *server)
 
 void httpserver_destroy(http_server_t *server)
 {
-	if (server->mod)
-		vfree(server->mod);
+	http_connector_list_t *callback = server->callbacks;
+	while (callback)
+	{
+		http_connector_list_t  *next = callback->next;
+		if (callback->vhost)
+			vfree(callback->vhost);
+		vfree(callback);
+		callback = next;
+	}
+	http_server_mod_t *mod = server->mod;
+	while (mod)
+	{
+		http_server_mod_t  *next = mod->next;
+		vfree(mod);
+		mod = next;
+	}
 	vfree(server);
 #ifdef WIN32
 	WSACleanup();
