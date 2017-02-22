@@ -580,7 +580,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				_httpmessage_fillheaderdb(message);
 				/* reset the buffer to begin the content at the begining of the buffer */
 				data->length -= (data->offset - data->data);
-				while ((*(data->offset) == 0) && data->length > 0)
+				while (data->length > 0 && (*(data->offset) == 0))
 				{
 					data->offset++;
 					data->length--;
