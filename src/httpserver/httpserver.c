@@ -85,6 +85,8 @@ extern "C" {
 #include "dbentry.h"
 #include "httpserver.h"
 
+typedef struct http_message_queue_s http_message_queue_t;
+
 typedef struct buffer_s
 {
 	char *data;
@@ -110,13 +112,6 @@ struct http_server_mod_s
 	http_freectx_t freectx;
 	http_server_mod_t *next;
 };
-
-struct http_message_queue_s
-{
-	http_message_t *message;
-	struct http_message_queue_s *next;
-};
-typedef struct http_message_queue_s http_message_queue_t;
 
 typedef struct http_client_modctx_s http_client_modctx_t;
 struct http_client_modctx_s
@@ -174,6 +169,13 @@ struct http_client_s
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
+
+/* TODO request_queue may disappear and leave only message */
+struct http_message_queue_s
+{
+	http_message_t *message;
+	struct http_message_queue_s *next;
+};
 
 struct http_message_s
 {
