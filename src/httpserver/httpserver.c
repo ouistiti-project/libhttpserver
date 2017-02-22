@@ -122,6 +122,7 @@ typedef struct http_client_modctx_s http_client_modctx_t;
 struct http_client_modctx_s
 {
 	void *ctx;
+	http_freectx_t freectx;
 	http_client_modctx_t *next;
 };
 
@@ -1130,26 +1131,27 @@ static int _httpclient_run(http_client_t *client)
 			setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 			if (client->server->config->keepalive &&
 				(client->state & CLIENT_KEEPALIVE) &&
-				request->response->version > HTTP09 &&
+				request && request->response->version > HTTP09 &&
 				((client->state & ~CLIENT_ERROR) == client->state))
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
-				dbg("keepalive");
+				dbg("keepalive %p", client);
 			}
 			else
 			{
 				client->state |= CLIENT_STOPPED;
-				http_server_mod_t *mod = client->server->mod;
 				http_client_modctx_t *modctx = client->modctx;
-				while (mod)
+				while (modctx)
 				{
-					if (mod->freectx)
+					http_client_modctx_t *next = modctx->next;
+					if (modctx->freectx)
 					{
-						mod->freectx(modctx->ctx);
+						modctx->freectx(modctx->ctx);
 					}
-					mod = mod->next;
-					modctx = modctx->next;
+					free(modctx);
+					modctx = next;
 				}
+				client->modctx = NULL;
 				shutdown(client->sock, SHUT_RDWR);
 		#ifndef WIN32
 				close(client->sock);
@@ -1244,6 +1246,7 @@ static int _httpserver_connect(http_server_t *server)
 					{
 						modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
 					}
+					modctx->freectx = mod->freectx;
 					mod = mod->next;
 					if (client->modctx == NULL)
 						client->modctx = modctx;
