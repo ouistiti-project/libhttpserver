@@ -1160,10 +1160,13 @@ static int _httpclient_run(http_client_t *client)
 		#endif
 				client->sock = -1;
 			}
-			if (request)
+			if (client->request_queue)
 			{
-				_httpmessage_destroy(request);
-				client->request_queue = client->request_queue->next;
+				http_message_queue_t *next = client->request_queue->next;
+				if (client->request_queue->message)
+					_httpmessage_destroy(client->request_queue->message);
+				free(client->request_queue);
+				client->request_queue = next;
 			}
 		}
 		break;
