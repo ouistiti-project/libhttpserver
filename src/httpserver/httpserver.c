@@ -128,6 +128,7 @@ struct http_client_modctx_s
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
+#define CLIENT_NONBLOCK 0x1000
 #define CLIENT_ERROR 0x2000
 #define CLIENT_RESPONSEREADY 0x4000
 #define CLIENT_KEEPALIVE 0x8000
@@ -635,6 +636,7 @@ void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_
 		callback->vhost = malloc(length + 1);
 		strcpy(callback->vhost, vhost);
 	}
+
 	callback->func = func;
 	callback->arg = funcarg;
 	callback->next = client->callbacks;
@@ -792,6 +794,14 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	return ret;
 }
 
+void httpclient_nonblock(http_client_t *client, int state)
+{
+	if (state)
+		client->state |= CLIENT_NONBLOCK;
+	else
+		client->state &= ~CLIENT_NONBLOCK;
+}
+
 void httpclient_finish(http_client_t *client, int close)
 {
 	client->state &= ~CLIENT_KEEPALIVE;
@@ -878,7 +888,6 @@ static int _httpclient_pushrequest(http_client_t *client, http_message_t *reques
 	http_message_queue_t *new = calloc(1, sizeof(*new));
 	new->message = request;
 	new->message->connector = client->callback;
-
 	http_message_queue_t *iterator = client->request_queue;
 	if (iterator == NULL)
 	{
@@ -951,7 +960,7 @@ static int _httpclient_run(http_client_t *client)
 				client->state &= ~CLIENT_KEEPALIVE;
 			}
 #ifdef VTHREAD
-			else
+			else if ((client->state & CLIENT_NONBLOCK) == 0)
 			{
 				int sret;
 				struct timeval *ptimeout = NULL;
@@ -965,8 +974,7 @@ static int _httpclient_run(http_client_t *client)
 				}
 				FD_ZERO(&rfds);
 				FD_SET(client->sock, &rfds);
-				/** allow read and write, because the mod may need write data during the connection (HTTPS) **/
-				sret = select(client->sock + 1, &rfds, &rfds, NULL, ptimeout);
+				sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
 				if (sret < 1)
 				{
 					/* timeout */
