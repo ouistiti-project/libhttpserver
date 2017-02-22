@@ -1061,12 +1061,13 @@ static int _httpclient_run(http_client_t *client)
 				request->connector = NULL;
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			else if (ret != ESUCCESS)
+			else if (ret == ECONTINUE &&
+					request->response->content->length > 0)
 			{
 
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			else
+			else if (ret == ESUCCESS)
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 		}
 		break;
@@ -1088,6 +1089,7 @@ static int _httpclient_run(http_client_t *client)
 				header->offset += size;
 				header->length -= size;
 			}
+			client->sendresp(client->ctx, "\r\n", 2);
 			if (size < 0)
 			{
 				client->state &= ~CLIENT_KEEPALIVE;
@@ -1103,7 +1105,6 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_RESPONSECONTENT:
 		{
-			if (request->response->content)
 			if (request->type != MESSAGE_TYPE_HEAD &&
 				request->response->content &&
 				request->response->content->length > 0)
@@ -1678,9 +1679,6 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		{
 			httpmessage_addheader(message, (char *)str_contenttype, type);
 		}
-		/* end the header part */
-		if (message->version > HTTP09)
-			_buffer_append(message->content, "\r\n", 2);
 		message->state = PARSE_CONTENT;
 	}
 	if (content != NULL)

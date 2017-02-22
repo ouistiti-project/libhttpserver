@@ -90,6 +90,12 @@ typedef enum
  * 
  * The callback can set the header of the response and returns with ECONTINUE.
  * At least one callback has to return ESUCCESS otherwise the http response will be "404 Not found".
+ * connector returns
+ *  ESUCCESS for content ready and fully sent.
+ *  EREJECT for request not treat by the connector.
+ *  ECONTINUE for content available and more in future (exception if the
+ *   content is empty, the connector needs to be called again).
+ *  EINCOMPLETE for content not ready and need to be called again.
  */
 typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message_t *response);
 
