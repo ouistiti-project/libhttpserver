@@ -93,6 +93,7 @@ typedef struct buffer_s
 	char *offset;
 	int size;
 	int length;
+	int maxchunks;
 } buffer_t;
 
 struct http_connector_list_s
@@ -269,13 +270,27 @@ static const char str_connection[] = "Connection";
 static const char str_contenttype[] = "Content-Type";
 static const char str_contentlength[] = "Content-Length";
 /********************************************************************/
-#define CHUNKSIZE 64
 #define BUFFERMAX 2048
-static buffer_t * _buffer_create()
+static int ChunkSize = 0;
+static buffer_t * _buffer_create(int nbchunks, int chunksize)
 {
 	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
-	buffer->data = vcalloc(1, CHUNKSIZE);
-	buffer->size = CHUNKSIZE;
+	/**
+	 * nbchunks is unused here, because is it possible to realloc.
+	 * Embeded version may use the nbchunk with special vcalloc.
+	 * The idea is to create a pool of chunks into the stack.
+	 */
+	buffer->data = vcalloc(1, chunksize);
+	/**
+	 * the chunksize hqs to be constant during the life of the application.
+	 * Two ways are available:
+	 *  - to store the chunksize into each buffer (takes a lot of place).
+	 *  - to store into a global variable (looks bad).
+	 */
+	if (ChunkSize == 0)
+		ChunkSize = chunksize;
+	buffer->maxchunks = nbchunks;
+	buffer->size = chunksize;
 	buffer->offset = buffer->data;
 	return buffer;
 }
@@ -285,21 +300,28 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 	if (buffer->data + buffer->size <= buffer->offset + length + 1)
 	{
 		char *data = buffer->data;
-		int chunksize = CHUNKSIZE * (length/CHUNKSIZE +1);
-
-		data = vrealloc(buffer->data, buffer->size + chunksize);
-		if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > BUFFERMAX)
+		int nbchunks = length / ChunkSize + 1;
+		if (buffer->maxchunks - nbchunks < 0)
+			nbchunks = buffer->maxchunks;
+		int chunksize = ChunkSize * nbchunks;
+		if (nbchunks > 0)
 		{
-			warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
-			return NULL;
+			buffer->maxchunks -= nbchunks;
+			data = vrealloc(buffer->data, buffer->size + chunksize);
+			if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > BUFFERMAX)
+			{
+				warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
+				return NULL;
+			}
+			buffer->size += chunksize;
+			if (data != buffer->data)
+			{
+				char *offset = buffer->offset;
+				buffer->offset = data + (offset - buffer->data);
+				buffer->data = data;
+			}
 		}
-		buffer->size += chunksize;
-		if (data != buffer->data)
-		{
-			char *offset = buffer->offset;
-			buffer->offset = data + (offset - buffer->data);
-			buffer->data = data;
-		}
+		length = (length > chunksize)? chunksize: length;
 	}
 	char *offset = buffer->offset;
 	memcpy(buffer->offset, data, length);
@@ -427,7 +449,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				char *uri = data->offset;
 				int length = 0;
 				if (message->uri == NULL)
-					message->uri = _buffer_create();
+					message->uri = _buffer_create(2, message->client->server->config->chunksize);
 				while (data->offset < (data->data + data->size) && next == PARSE_URI)
 				{
 					switch (*data->offset)
@@ -471,7 +493,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				if (uri == NULL)
 				{
 					_buffer_destroy(message->uri);
-					message->uri = _buffer_create();
+					message->uri = _buffer_create(1, message->client->server->config->chunksize);
 					message->result = RESULT_414;
 					ret = EREJECT;
 				}
@@ -538,7 +560,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				char *header = data->offset;
 				int length = 0;
 				if (message->headers_storage == NULL)
-					message->headers_storage = _buffer_create();
+					message->headers_storage = _buffer_create(4, message->client->server->config->chunksize);
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
@@ -827,8 +849,8 @@ void httpclient_finish(http_client_t *client, int close)
 static int _httpclient_request(http_client_t *client)
 {
 	int ret = EINCOMPLETE;
-	int size = CHUNKSIZE - 1;
-	buffer_t *tempo = _buffer_create();
+	int size = 0;
+	buffer_t *tempo = _buffer_create(1, client->server->config->chunksize);
 	if (client->request == NULL)
 		client->request = _httpmessage_create(client, NULL);
 
@@ -1076,7 +1098,7 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_RESPONSEHEADER:
 		{
 			int size = 0;
-			buffer_t *header = _buffer_create();
+			buffer_t *header = _buffer_create(4, client->server->config->chunksize);
 			_httpmessage_buildheader(client, request->response, header);
 			while (header->length > 0)
 			{
@@ -1111,7 +1133,7 @@ static int _httpclient_run(http_client_t *client)
 				request->response->content &&
 				request->response->content->length > 0)
 			{
-				int size = CHUNKSIZE - 1;
+				int size = 0;
 				size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
 				if (size < 0)
 				{
@@ -1595,7 +1617,7 @@ static void _httpmessage_fillheaderdb(http_message_t *message)
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
 	if (message->headers_storage == NULL)
-		message->headers_storage = _buffer_create();
+		message->headers_storage = _buffer_create(4, message->client->server->config->chunksize);
 	key = _buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
 	value = _buffer_append(message->headers_storage, value, strlen(value) + 1);
@@ -1669,7 +1691,7 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
 	if (message->content == NULL)
-		message->content = _buffer_create();
+		message->content = _buffer_create(10, message->client->server->config->chunksize);
 
 	if (message->state < PARSE_CONTENT)
 	{
@@ -1840,7 +1862,7 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 	{
 		sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 		if (!message->client->session_storage)
-			message->client->session_storage = _buffer_create();
+			message->client->session_storage = _buffer_create(2, message->client->server->config->chunksize);
 		sessioninfo->key = 
 			_buffer_append(message->client->session_storage, key, strlen(key) + 1);
 		sessioninfo->next = message->client->session;
