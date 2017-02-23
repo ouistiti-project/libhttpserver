@@ -278,7 +278,7 @@ int httpmessage_keepalive(http_message_t *message);
  *
  * @param message the response message to update
  * @param data the stream to parse
- * @param size the length of the data
+ * @param size the length of the data and return the new length if changed
  *
  * @return ECONTINUE on the need of more data
  *         ESUCCESS when a response with content is ready
@@ -286,7 +286,7 @@ int httpmessage_keepalive(http_message_t *message);
  * After ESUCCESS, it is possible to add more data into the content
  * with this same function.
  */
-int httpmessage_parsecgi(http_message_t *message, char *data, int size);
+int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
 
 /**
  * @brief get value for different attributs of the connection
