@@ -85,8 +85,6 @@ extern "C" {
 #include "dbentry.h"
 #include "httpserver.h"
 
-typedef struct http_message_queue_s http_message_queue_t;
-
 typedef struct buffer_s
 {
 	char *data;
@@ -153,7 +151,7 @@ struct http_client_s
 	http_connector_list_t *callbacks;
 	http_connector_list_t *callback;
 	http_message_t *request;
-	http_message_queue_t *request_queue;
+	http_message_t *request_queue;
 
 	http_client_modctx_t *modctx; /* list of pointers returned by getctx of each mod */
 
@@ -170,13 +168,6 @@ struct http_client_s
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
-
-/* TODO request_queue may disappear and leave only message */
-struct http_message_queue_s
-{
-	http_message_t *message;
-	struct http_message_queue_s *next;
-};
 
 struct http_message_s
 {
@@ -213,6 +204,7 @@ struct http_message_s
 	buffer_t *headers_storage;
 	dbentry_t *headers;
 	void *private;
+	http_message_t *next;
 };
 
 struct http_server_s
@@ -933,27 +925,25 @@ static int _httpclient_request(http_client_t *client)
 
 static int _httpclient_pushrequest(http_client_t *client, http_message_t *request)
 {
-	http_message_queue_t *new = calloc(1, sizeof(*new));
-	new->message = request;
-	new->message->connector = client->callback;
-	http_message_queue_t *iterator = client->request_queue;
+	request->connector = client->callback;
+	http_message_t *iterator = client->request_queue;
 	if (iterator == NULL)
 	{
-		client->request_queue = new;
+		client->request_queue = request;
 	}
 	else
 	{
 		while (iterator->next != NULL) iterator = iterator->next;
-		iterator->next = new;
+		iterator->next = request;
 	}
-	return (new->message->result != RESULT_200)? EREJECT:ESUCCESS;
+	return (request->result != RESULT_200)? EREJECT:ESUCCESS;
 }
 
 static int _httpclient_run(http_client_t *client)
 {
 	http_message_t *request = NULL;
 	if (client->request_queue)
-		request = client->request_queue->message;
+		request = client->request_queue;
 
 	int request_ret = ECONTINUE;
 	if ((client->server->config->version >= (HTTP11 | HTTP_PIPELINE)) || 
@@ -1210,10 +1200,8 @@ static int _httpclient_run(http_client_t *client)
 			}
 			if (client->request_queue)
 			{
-				http_message_queue_t *next = client->request_queue->next;
-				if (client->request_queue->message)
-					_httpmessage_destroy(client->request_queue->message);
-				free(client->request_queue);
+				http_message_t *next = client->request_queue->next;
+				_httpmessage_destroy(client->request_queue);
 				client->request_queue = next;
 			}
 		}
