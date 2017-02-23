@@ -254,7 +254,16 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	if (ctx->state & RECV_COMPLETE)
-		return ESUCCESS;
+	{
+		/**
+		 * if returns 0, the function means socket closed
+		 * if we need to wait the next request (KeepAlive) the return has to be a
+		 * read on NONBLOCK socket without data : return -1 and errno = EAGAIN
+		 */
+		ctx->state &= ~RECV_COMPLETE;
+		errno = EAGAIN;
+		return EINCOMPLETE;
+	}
 
 	do
 	{
