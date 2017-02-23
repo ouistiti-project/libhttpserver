@@ -1721,10 +1721,10 @@ int httpmessage_keepalive(http_message_t *message)
 }
 
 static char default_value[8] = {0};
+static char host[NI_MAXHOST], service[NI_MAXSERV];
 char *httpmessage_SERVER(http_message_t *message, char *key)
 {
 	char *value = default_value;
-	char host[NI_MAXHOST], service[NI_MAXSERV];
 	memset(default_value, 0, sizeof(default_value));
 
 	if (!strcasecmp(key, "name"))
@@ -1770,7 +1770,6 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 char *httpmessage_REQUEST(http_message_t *message, char *key)
 {
 	char *value = default_value;
-	char host[NI_MAXHOST], service[NI_MAXSERV];
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
