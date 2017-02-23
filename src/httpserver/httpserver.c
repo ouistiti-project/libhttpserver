@@ -764,6 +764,15 @@ static http_client_t *_httpclient_create(http_server_t *server)
 
 static void _httpclient_destroy(http_client_t *client)
 {
+	http_connector_list_t *callback = client->callbacks;
+	while (callback != NULL)
+	{
+		http_connector_list_t *next = callback->next;
+		if (callback->vhost)
+			free(callback->vhost);
+		free(callback);
+		callback = next;
+	}
 	if (client->request)
 		_httpmessage_destroy(client->request);
 	if (client->session_storage)
