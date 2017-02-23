@@ -391,18 +391,6 @@ int httpclient_recv(void *ctl, char *data, int length);
 int httpclient_send(void *ctl, char *data, int length);
 
 /**
- * @brief unblock the connection during the request reception
- * 
- * @param ctl		the client data (see http_getctx_t)
- * @param close		0 to block the connection
- *                  1 to unblock
- * 
- * This function allows to send data inside the http_recv_t callback.
- * This is usefull for SSl handshake.
- */
-void httpclient_nonblock(http_client_t *client, int block);
-
-/**
  * @brief finish a connection on the client socket
  * 
  * @param ctl		the client data (see http_getctx_t)

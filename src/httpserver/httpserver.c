@@ -832,14 +832,6 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	return ret;
 }
 
-void httpclient_nonblock(http_client_t *client, int state)
-{
-	if (state)
-		client->state |= CLIENT_NONBLOCK;
-	else
-		client->state &= ~CLIENT_NONBLOCK;
-}
-
 void httpclient_finish(http_client_t *client, int close)
 {
 	client->state &= ~CLIENT_KEEPALIVE;
@@ -849,7 +841,14 @@ void httpclient_finish(http_client_t *client, int close)
 
 static int _httpclient_request(http_client_t *client)
 {
-	int ret = EINCOMPLETE;
+	/**
+	 * By default the function has to way more data on the socket
+	 * before to be call again.
+	 *  ECONTINUE means treatment (here is more data) is needed.
+	 *  EINCOMPLETE means the function needs to be call again ASAP.
+	 * This is the same meaning with the connectors.
+	 */
+	int ret = ECONTINUE;
 	int size = 0;
 	buffer_t *tempo = _buffer_create(1, client->server->config->chunksize);
 	if (client->request == NULL)
@@ -882,7 +881,6 @@ static int _httpclient_request(http_client_t *client)
 		 * store the header informations. It takes some place in  memory,
 		 * depending of the server. It may be dangerous, a hacker can send
 		 * a request with a very big header.
-		 * TODO: check the maximum size of the header.
 		 */
 		if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
 		{
@@ -970,29 +968,31 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_NEW:
 		{
 			client->state &= ~CLIENT_RESPONSEREADY;
-#ifdef VTHREAD
-			int sret;
-			struct timeval *ptimeout = NULL;
-			struct timeval timeout;
-			fd_set rfds;
-			if (client->server->config->keepalive)
-			{
-				timeout.tv_sec = client->server->config->keepalive;
-				timeout.tv_usec = 0;
-				ptimeout = &timeout;
-			}
-			FD_ZERO(&rfds);
-			FD_SET(client->sock, &rfds);
-			sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
-			if (sret < 1)
-			{
-				/* timeout */
-				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-				client->state &= ~CLIENT_KEEPALIVE;
-			}
-			else
-#endif
 			client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
+#ifdef VTHREAD
+			if (request_ret == ECONTINUE)
+			{
+				int sret;
+				struct timeval *ptimeout = NULL;
+				struct timeval timeout;
+				fd_set rfds;
+				if (client->server->config->keepalive)
+				{
+					timeout.tv_sec = client->server->config->keepalive;
+					timeout.tv_usec = 0;
+					ptimeout = &timeout;
+				}
+				FD_ZERO(&rfds);
+				FD_SET(client->sock, &rfds);
+				sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
+				if (sret < 1)
+				{
+					/* timeout */
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state &= ~CLIENT_KEEPALIVE;
+				}
+			}
+#endif
 		}
 		break;
 		case CLIENT_REQUEST:
@@ -1007,7 +1007,7 @@ static int _httpclient_run(http_client_t *client)
 				client->state &= ~CLIENT_KEEPALIVE;
 			}
 #ifdef VTHREAD
-			else if ((client->state & CLIENT_NONBLOCK) == 0)
+			else if (request_ret == ECONTINUE)
 			{
 				int sret;
 				struct timeval *ptimeout = NULL;
