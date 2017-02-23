@@ -222,6 +222,20 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 	mbedtls_ssl_init(&ctx->ssl);
 	mbedtls_ssl_setup(&ctx->ssl, &config->conf);
 	mbedtls_ssl_set_bio(&ctx->ssl, ctl, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
+	if (!(ctx->state & HANDSHAKE))
+	{
+		int ret;
+		ctx->state &= ~RECV_COMPLETE;
+		while((ret = mbedtls_ssl_handshake(&ctx->ssl)) != 0 )
+		{
+			if(ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
+				break;
+		}
+		if (ret == 0)
+		{
+			ctx->state |= HANDSHAKE;
+		}
+	}
 	httpclient_addreceiver(ctl, _mod_mbedtls_recv, ctx);
 	httpclient_addsender(ctl, _mod_mbedtls_send, ctx);
 	return ctx;
@@ -239,20 +253,6 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
-	if (!(ctx->state & HANDSHAKE))
-	{
-		ctx->state &= RECV_COMPLETE;
-		while((ret = mbedtls_ssl_handshake(&ctx->ssl)) != 0 )
-		{
-			if(ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
-				break;
-		}
-		if (ret)
-		{
-			return EINCOMPLETE;
-		}
-		ctx->state |= HANDSHAKE;
-	}
 	if (ctx->state & RECV_COMPLETE)
 		return ESUCCESS;
 
