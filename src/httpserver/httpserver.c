@@ -1722,14 +1722,14 @@ int httpmessage_keepalive(http_message_t *message)
 
 static char default_value[8] = {0};
 static char host[NI_MAXHOST], service[NI_MAXSERV];
-char *httpmessage_SERVER(http_message_t *message, char *key)
+char *httpserver_INFO(http_server_t *server, char *key)
 {
 	char *value = default_value;
 	memset(default_value, 0, sizeof(default_value));
 
 	if (!strcasecmp(key, "name"))
 	{
-		value = message->client->server->config->hostname;
+		value = server->config->hostname;
 	}
 	else if (!strcasecmp(key, "software"))
 	{
@@ -1737,14 +1737,14 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = _http_message_version[(message->client->server->config->version & HTTPVERSION_MASK)];
+		value = _http_message_version[(server->config->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "port"))
 	{
 		//snprintf(value, 5, "%d", message->client->server->config->port);
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
 		{
 			getnameinfo((struct sockaddr *) &sin, len,
 				0, 0,
@@ -1756,7 +1756,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
 		{
 			getnameinfo((struct sockaddr *) &sin, len,
 				host, NI_MAXHOST,
@@ -1765,6 +1765,11 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 		}
 	}
 	return value;
+}
+
+char *httpmessage_SERVER(http_message_t *message, char *key)
+{
+	return httpserver_INFO(message->client->server, key);
 }
 
 char *httpmessage_REQUEST(http_message_t *message, char *key)
