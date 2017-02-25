@@ -832,13 +832,6 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	return ret;
 }
 
-void httpclient_finish(http_client_t *client, int close)
-{
-	client->state &= ~CLIENT_KEEPALIVE;
-	if (close)
-		client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-}
-
 static int _httpclient_request(http_client_t *client)
 {
 	/**
@@ -1176,10 +1169,21 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_COMPLETE:
 		{
 			setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
+			/**
+			 * to stay in keep alive the rules are:
+			 *  - the server has to be configurated;
+			 *  - the request uses the protocol HTTP11 and over
+			 *  - the client is not in error
+			 *  - the request asks to stay in keep alive mode
+			 *  - the response is understandable by the client
+			 *     (the webbrowser nees to know when the response is complete,
+			 *      then the response needs a content length).
+			 */
 			if (client->server->config->keepalive &&
 				(client->state & CLIENT_KEEPALIVE) &&
-				request && request->response->version > HTTP09 &&
-				((client->state & ~CLIENT_ERROR) == client->state))
+				request && request->response->version > HTTP10 &&
+				((client->state & ~CLIENT_ERROR) == client->state) &&
+				request->response->content_length > 0)
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive %p", client);
