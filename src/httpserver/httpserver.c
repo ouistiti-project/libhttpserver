@@ -552,7 +552,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				char *header = data->offset;
 				int length = 0;
 				if (message->headers_storage == NULL)
-					message->headers_storage = _buffer_create(4, message->client->server->config->chunksize);
+					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->client->server->config->chunksize);
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
@@ -1090,7 +1090,7 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_RESPONSEHEADER:
 		{
 			int size = 0;
-			buffer_t *header = _buffer_create(4, client->server->config->chunksize);
+			buffer_t *header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
 			_httpmessage_buildheader(client, request->response, header);
 			while (header->length > 0)
 			{
@@ -1638,7 +1638,7 @@ static void _httpmessage_fillheaderdb(http_message_t *message)
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
 	if (message->headers_storage == NULL)
-		message->headers_storage = _buffer_create(4, message->client->server->config->chunksize);
+		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->client->server->config->chunksize);
 	key = _buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
 	value = _buffer_append(message->headers_storage, value, strlen(value) + 1);
@@ -1712,7 +1712,7 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
 	if (message->content == NULL)
-		message->content = _buffer_create(10, message->client->server->config->chunksize);
+		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
 
 	if (message->state < PARSE_CONTENT)
 	{
