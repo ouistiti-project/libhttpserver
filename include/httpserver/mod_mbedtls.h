@@ -35,7 +35,6 @@ extern "C"
 
 typedef struct mod_mbedtls_s
 {
-	char *pers;
 	char *crtfile;
 	char *pemfile;
 	char *cachain;

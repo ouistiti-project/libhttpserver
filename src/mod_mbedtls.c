@@ -148,10 +148,11 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 			mbedtls_ssl_conf_ca_chain(&config->conf, &config->cachain, NULL);
 	}
 
-	if (modconfig->pers)
+	char *pers = httpserver_INFO(server, "name");
+	if (pers)
 	{
 		ret = mbedtls_ctr_drbg_seed(&config->ctr_drbg, mbedtls_entropy_func, &config->entropy,
-			(const unsigned char *) modconfig->pers, strlen(modconfig->pers));
+			(const unsigned char *) pers, strlen(pers));
 		if (ret)
 			printf("mbedtls_ctr_drbg_seed %d\n", ret);
 		else
