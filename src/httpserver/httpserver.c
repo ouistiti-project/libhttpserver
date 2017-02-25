@@ -1277,7 +1277,15 @@ static int _httpserver_connect(http_server_t *server)
 				client = client->next;
 			}
 		}
-		ret = select(maxfd +1, &rfds, &wfds, NULL, NULL);
+		struct timeval *ptimeout = NULL;
+		struct timeval timeout;
+		if (server->config->keepalive)
+		{
+			timeout.tv_sec = server->config->keepalive;
+			timeout.tv_usec = 0;
+			ptimeout = &timeout;
+		}
+		ret = select(maxfd +1, &rfds, &wfds, NULL, ptimeout);
 		if (ret > 0)
 		{
 			if (FD_ISSET(server->sock, &rfds))
@@ -1344,6 +1352,17 @@ static int _httpserver_connect(http_server_t *server)
 					}
 					client = next;
 				}
+			}
+		}
+		else if (ret == 0)
+		{
+			client = server->clients;
+			while (client != NULL)
+			{
+				http_client_t *next = client->next;
+				client->state &= ~CLIENT_KEEPALIVE;
+				_httpclient_run(client);
+				client = next;
 			}
 		}
 	}
