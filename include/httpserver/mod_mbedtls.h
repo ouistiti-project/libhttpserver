@@ -33,6 +33,7 @@ extern "C"
 {
 #endif
 
+typedef struct mod_mbedtls_s mod_tls_t;
 typedef struct mod_mbedtls_s
 {
 	char *crtfile;
