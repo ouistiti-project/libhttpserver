@@ -790,6 +790,9 @@ static int _httpclient_connect(http_client_t *client)
 		_httpclient_run(client);
 	} while(!(client->state & CLIENT_STOPPED));
 	dbg("client %p close", client);
+#ifdef DEBUG
+	fflush(stderr);
+#endif
 	return 0;
 }
 
@@ -1437,7 +1440,7 @@ static int _httpserver_start(http_server_t *server)
 		memset(&hints, 0, sizeof(struct addrinfo));
 #ifdef IPV6
 		hints.ai_family = AF_INET6;    /* Allow IPv4 or IPv6 */
-#eelse
+#else
 		hints.ai_family = AF_INET;    /* Allow IPv4 or IPv6 */
 #endif
 		hints.ai_socktype = SOCK_STREAM; /* Stream socket */
