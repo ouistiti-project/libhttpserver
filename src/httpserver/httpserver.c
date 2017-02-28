@@ -257,7 +257,8 @@ static char *_http_message_version[] =
 	"HTTP/1.1",
 	"HTTP/2",
 };
-char httpserver_software[] = "libhttpserver";
+static char _httpserver_software[] = "libhttpserver";
+char *httpserver_software = _httpserver_software;
 static const char str_connection[] = "Connection";
 static const char str_contenttype[] = "Content-Type";
 static const char str_contentlength[] = "Content-Length";

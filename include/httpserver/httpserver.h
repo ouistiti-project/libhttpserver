@@ -174,6 +174,14 @@ typedef struct http_server_config_s
 } http_server_config_t;
 
 /**
+ * @brief software name
+ * 
+ * This value may be changed, by default it is "libhttpserver".
+ * It is returned by httpserver_INFO(server, "software")
+ */
+extern char *httpserver_software;
+
+/**
  * @brief create a server object and open the main socket
  *
  * @param config	the server configuration structure
