@@ -1357,6 +1357,10 @@ static int _httpserver_connect(http_server_t *server)
 				}
 			}
 		}
+#ifndef VTHREAD
+		/**
+		 * TODO: this code has to be checked and explained
+		 */
 		else if (ret == 0)
 		{
 			client = server->clients;
@@ -1368,6 +1372,7 @@ static int _httpserver_connect(http_server_t *server)
 				client = next;
 			}
 		}
+#endif
 	}
 	return ret;
 }
@@ -1714,7 +1719,7 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
-	if (message->content == NULL)
+	if (message->content == NULL && content != NULL)
 		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
 
 	if (message->state < PARSE_CONTENT)
@@ -1737,7 +1742,9 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 	}
 	if (message->content_length == 0)
 		message->content_length = length;
-	return message->content->data;
+	if (message->content != NULL && message->content->data != NULL )
+		return message->content->data;
+	return NULL;
 }
 
 int httpmessage_keepalive(http_message_t *message)
