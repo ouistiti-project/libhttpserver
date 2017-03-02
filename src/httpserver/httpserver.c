@@ -1123,7 +1123,7 @@ static int _httpclient_run(http_client_t *client)
 				 * server configuration.
 				 * see http_server_config_t and httpserver_create
 				 */
-				size = client->sendresp(client->ctx, header->data, header->length);
+				size = client->sendresp(client->ctx, header->offset, header->length);
 				if (size < 0)
 					break;
 				header->offset += size;
