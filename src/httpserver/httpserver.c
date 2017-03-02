@@ -1063,6 +1063,8 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (ret != EINCOMPLETE)
 			{
+				if (ret == ESUCCESS)
+					client->state |= CLIENT_RESPONSEREADY;
 				if (request->response->version == HTTP09)
 					client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 				else
@@ -1077,14 +1079,32 @@ static int _httpclient_run(http_client_t *client)
 				ret = request->connector->func(request->connector->arg, request, request->response);
 			if (ret == EREJECT)
 			{
+				/**
+				 * the connector rejects now the request, then an error occured
+				 * and the connector is not able to continue
+				 */
 				/** delete func to stop request after the error response **/
 				request->connector = NULL;
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			else if (ret == ECONTINUE &&
+			else if (ret != EINCOMPLETE &&
+					request->response->content &&
 					request->response->content->length > 0)
 			{
-
+				if (ret == ESUCCESS)
+					client->state |= CLIENT_RESPONSEREADY;
+				/**
+				 * the connector return ESUCCESS or ECONTINUE, then it
+				 * allows the connection to change state
+				 * on EINCOMPLETE the state has to stay in this value
+				 */
+				/**
+				 * on ESUCCESS or ECONTINUE if some value is ready
+				 * it is required to send them
+				 */
+				/**
+				 * an empty file may have not content
+				 */
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			else if (ret == ESUCCESS)
@@ -1144,7 +1164,10 @@ static int _httpclient_run(http_client_t *client)
 				else if (size == request->response->content->length)
 				{
 					_buffer_reset(request->response->content);
-					client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
+					if (client->state & CLIENT_RESPONSEREADY)
+						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+					else
+						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else
 				{
