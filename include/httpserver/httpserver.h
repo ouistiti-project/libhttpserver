@@ -251,6 +251,23 @@ void httpserver_destroy(http_server_t *server);
 /** internal functions for the callback **/
 /*****************************************/
 /**
+ * @brief create message
+ * 
+ * @return the message
+ * 
+ * create message to be use with parsecgi
+ * out of modules
+ */
+http_message_t * httpmessage_create();
+
+/**
+ * @brief destroy message created with httpmessage_create
+ * 
+ * @param message the message to destroy
+ */
+void httpmessage_destroy(http_message_t *message);
+
+/**
  * @brief store and return private data for callback
  *
  * @param message the response message to update

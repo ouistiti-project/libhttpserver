@@ -356,6 +356,11 @@ static http_message_t * _httpmessage_create(http_client_t *client, http_message_
 	return message;
 }
 
+http_message_t * httpmessage_create()
+{
+	return _httpmessage_create(NULL, NULL);
+}
+
 static void _httpmessage_reset(http_message_t *message)
 {
 	if (message->uri)
@@ -366,10 +371,10 @@ static void _httpmessage_reset(http_message_t *message)
 		_buffer_reset(message->headers_storage);
 }
 
-static void _httpmessage_destroy(http_message_t *message)
+void httpmessage_destroy(http_message_t *message)
 {
 	if (message->response)
-		_httpmessage_destroy(message->response);
+		httpmessage_destroy(message->response);
 	if (message->uri)
 		_buffer_destroy(message->uri);
 	if (message->content)
@@ -779,7 +784,7 @@ static void _httpclient_destroy(http_client_t *client)
 		callback = next;
 	}
 	if (client->request)
-		_httpmessage_destroy(client->request);
+		httpmessage_destroy(client->request);
 	if (client->session_storage)
 		vfree(client->session_storage);
 	vfree(client);
@@ -1245,7 +1250,7 @@ static int _httpclient_run(http_client_t *client)
 			if (client->request_queue)
 			{
 				http_message_t *next = client->request_queue->next;
-				_httpmessage_destroy(client->request_queue);
+				httpmessage_destroy(client->request_queue);
 				client->request_queue = next;
 			}
 		}
