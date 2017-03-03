@@ -1646,7 +1646,7 @@ int httpmessage_content(http_message_t *message, char **data, int *size)
 
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
-	buffer_t tempo;
+	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
 	tempo.length = *size;
@@ -1655,6 +1655,8 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 		message->state = PARSE_HEADER;
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length;
+	if (message->state == PARSE_END)
+		message->content = NULL;
 	return ret;
 }
 
