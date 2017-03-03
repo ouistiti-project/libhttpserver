@@ -85,6 +85,8 @@ extern "C" {
 #include "dbentry.h"
 #include "httpserver.h"
 
+#define CHUNKSIZE 64
+
 typedef struct buffer_s
 {
 	char *data;
@@ -447,7 +449,12 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				char *uri = data->offset;
 				int length = 0;
 				if (message->uri == NULL)
-					message->uri = _buffer_create(2, message->client->server->config->chunksize);
+				{
+					int chunksize = CHUNKSIZE;
+					if (message->client)
+						chunksize = message->client->server->config->chunksize;
+					message->uri = _buffer_create(2, chunksize);
+				}
 				while (data->offset < (data->data + data->size) && next == PARSE_URI)
 				{
 					switch (*data->offset)
@@ -491,7 +498,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				if (uri == NULL)
 				{
 					_buffer_destroy(message->uri);
-					message->uri = _buffer_create(1, message->client->server->config->chunksize);
+					int chunksize = CHUNKSIZE;
+					if (message->client)
+						chunksize = message->client->server->config->chunksize;
+					message->uri = _buffer_create(1, chunksize);
 					message->result = RESULT_414;
 					ret = EREJECT;
 				}
@@ -558,7 +568,12 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				char *header = data->offset;
 				int length = 0;
 				if (message->headers_storage == NULL)
-					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->client->server->config->chunksize);
+				{
+					int chunksize = CHUNKSIZE;
+					if (message->client)
+						chunksize = message->client->server->config->chunksize;
+					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
+				}
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
@@ -1835,6 +1850,8 @@ char *httpserver_INFO(http_server_t *server, char *key)
 
 char *httpmessage_SERVER(http_message_t *message, char *key)
 {
+	if (message->client == NULL)
+		return NULL;
 	return httpserver_INFO(message->client->server, key);
 }
 
@@ -1889,12 +1906,17 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	}
 	else if (!strncasecmp(key, "remote_addr", 11))
 	{
+		if (message->client == NULL)
+			return NULL;
+
 		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
 			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
 		value = host;
 	}
 	else if (!strncasecmp(key, "remote_", 7))
 	{
+		if (message->client == NULL)
+			return NULL;
 		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
 			host, NI_MAXHOST,
 			service, NI_MAXSERV, NI_NUMERICSERV);
@@ -1922,7 +1944,11 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 
 char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 {
-	dbentry_t *sessioninfo = message->client->session;
+	dbentry_t *sessioninfo;
+	if (message->client == NULL)
+		return NULL;
+
+	sessioninfo = message->client->session;
 	
 	while (sessioninfo && strcmp(sessioninfo->key, key))
 		sessioninfo = sessioninfo->next;
