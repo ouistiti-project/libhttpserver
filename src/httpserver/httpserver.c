@@ -649,7 +649,11 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 		}
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
-			ret = EINCOMPLETE;
+		{
+			if (next < PARSE_HEADERNEXT)
+				ret = EINCOMPLETE;
+			break;
+		}
 		message->state = (message->state & ~PARSE_MASK) | next;
 	} while (ret == ECONTINUE);
 	return ret;
