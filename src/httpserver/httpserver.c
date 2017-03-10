@@ -2018,7 +2018,12 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 	{
 		sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 		if (!message->client->session_storage)
-			message->client->session_storage = _buffer_create(2, message->client->server->config->chunksize);
+		{
+			int chunksize = CHUNKSIZE;
+			if (message->client)
+				chunksize = message->client->server->config->chunksize;
+			message->client->session_storage = _buffer_create(2, chunksize);
+		}
 		sessioninfo->key = 
 			_buffer_append(message->client->session_storage, key, strlen(key) + 1);
 		sessioninfo->next = message->client->session;
