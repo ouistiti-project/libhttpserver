@@ -453,6 +453,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				int length = 0;
 				if (message->uri == NULL)
 				{
+					/**
+					 * to use parse_cgi from a module, the functions
+					 * has to run on message without client attached.
+					 */
 					int chunksize = CHUNKSIZE;
 					if (message->client)
 						chunksize = message->client->server->config->chunksize;
@@ -1747,7 +1751,12 @@ static void _httpmessage_fillheaderdb(http_message_t *message)
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
 	if (message->headers_storage == NULL)
-		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->client->server->config->chunksize);
+	{
+		int chunksize = CHUNKSIZE;
+		if (message->client != NULL)
+			chunksize = message->client->server->config->chunksize;
+		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
+	}
 	key = _buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
 	value = _buffer_append(message->headers_storage, value, strlen(value) + 1);
