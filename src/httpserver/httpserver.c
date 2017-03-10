@@ -191,6 +191,7 @@ struct http_message_s
 		PARSE_INIT,
 		PARSE_URI,
 		PARSE_VERSION,
+		PARSE_STATUS,
 		PARSE_HEADER,
 		PARSE_HEADERNEXT,
 		PARSE_CONTENT,
@@ -502,22 +503,64 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					if (message->client)
 						chunksize = message->client->server->config->chunksize;
 					message->uri = _buffer_create(1, chunksize);
+					message->version = message->client->server->config->version;
+					message->result = RESULT_414;
+					ret = EREJECT;
+				}
+				else
+					message->query = uri;
+				if (message->uri->maxchunks == 0)
+				{
+					message->version = message->client->server->config->version;
 					message->result = RESULT_414;
 					ret = EREJECT;
 				}
 				if (next != PARSE_URI)
 				{
-					int i;
-					for (i = 0; i < message->uri->length; i++)
+					if (message->uri->length > 1)
 					{
-						if (message->uri->data[i] == '?')
+						int i;
+						for (i = 0; i < message->uri->length; i++)
 						{
-							message->query = message->uri->data + i + 1;
-							break;
+							if (message->uri->data[i] == '?')
+							{
+								message->query = message->uri->data + i + 1;
+								break;
+							}
 						}
+					}
+					else
+					{
+						message->version = message->client->server->config->version;
+						message->result = RESULT_400;
+						ret = EREJECT;
 					}
 					dbg("new request for %s", message->uri->data);
 				}
+			}
+			break;
+			case PARSE_STATUS:
+			{
+				int i;
+				for (i = HTTP09; i < HTTPVERSIONS; i++)
+				{
+					int length = strlen(_http_message_version[i]);
+					if (!strncasecmp(data->offset, _http_message_version[i], length))
+					{
+						message->version = i;
+						data->offset += length;
+						break;
+					}
+				}
+				if (i < HTTPVERSIONS)
+				{
+					/** pass the next space character */
+					data->offset++;
+					char status[4] = {data->offset[0], data->offset[1], data->offset[2], 0};
+					httpmessage_addheader(message, "Status", status);
+					data->offset = strchr(data->offset, '\n') + 1;
+				}
+				next = PARSE_HEADER;
 			}
 			break;
 			case PARSE_VERSION:
@@ -526,13 +569,15 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				for (i = HTTP09; i < HTTPVERSIONS; i++)
 				{
 					int length = strlen(_http_message_version[i]);
-					if (!strncasecmp(data->offset,_http_message_version[i],length))
+					if (!strncasecmp(data->offset, _http_message_version[i], length))
 					{
 						message->version = i;
 						data->offset += length;
 						break;
 					}
 				}
+				if (i == HTTPVERSIONS)
+					ret = EREJECT;
 				while (data->offset < (data->data + data->size) && next == PARSE_VERSION)
 				{
 					switch (*data->offset)
@@ -1652,7 +1697,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	tempo.length = *size;
 	tempo.size = *size;
 	if (message->state == PARSE_INIT)
-		message->state = PARSE_HEADER;
+		message->state = PARSE_STATUS;
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length;
 	if (message->state == PARSE_END)
