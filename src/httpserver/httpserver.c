@@ -354,6 +354,7 @@ static http_message_t * _httpmessage_create(http_client_t *client, http_message_
 			message->type = parent->type;
 			message->client = parent->client;
 			message->version = parent->version;
+			message->result = parent->result;
 		}
 	}
 	return message;
@@ -440,6 +441,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				else
 				{
 					data->offset++;
+					message->version = message->client->server->config->version;
 					message->result = RESULT_405;
 					ret = EREJECT;
 				}
@@ -464,7 +466,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						{
 							*data->offset = '\0';
 							uri = _buffer_append(message->uri, uri, length + 1);
-							message->query = uri;
 							next = PARSE_VERSION;
 						}
 						break;
@@ -475,7 +476,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							if (*(data->offset + 1) == '\n')
 								data->offset++;
 							uri = _buffer_append(message->uri, uri, length + 1);
-							message->query = uri;
 						}
 						break;
 						case '\n':
@@ -638,16 +638,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							message->state &= ~PARSE_CONTINUE;
 						}
 					}
-					else  if (*data->offset == '%')
-					{
-						header = data->offset + 1;
-						length = 0;
-					}
 					else if (*data->offset != '\r')
 						length++;
 					data->offset++;
 				}
-
 				/* not enougth data to complete the line */
 				if (next == PARSE_HEADER && length > 0)
 				{
@@ -939,20 +933,33 @@ static int _httpclient_request(http_client_t *client)
 		tempo->length = size;
 		ret = _httpmessage_parserequest(client->request, tempo);
 
-		/**
-		 * The request is partially read.
-		 * The connector can start to read the request when the header is ready.
-		 * A problem is the size of the header. It is impossible to start
-		 * the treatment before the end of the header, and it needs to
-		 * store the header informations. It takes some place in  memory,
-		 * depending of the server. It may be dangerous, a hacker can send
-		 * a request with a very big header.
-		 */
-		if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
+		if (ret == EREJECT)
 		{
 			if (client->request->response == NULL)
+			{
+				/** parsing error before response creation */
 				client->request->response = _httpmessage_create(client, client->request);
-			ret = _httpclient_checkconnector(client, client->request, client->request->response);
+			}
+		}
+		else
+		{
+			/**
+			 * The request is partially read.
+			 * The connector can start to read the request when the header is ready.
+			 * A problem is the size of the header. It is impossible to start
+			 * the treatment before the end of the header, and it needs to
+			 * store the header informations. It takes some place in  memory,
+			 * depending of the server. It may be dangerous, a hacker can send
+			 * a request with a very big header.
+			 */
+			if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
+			{
+				if (client->request->response == NULL)
+					client->request->response = _httpmessage_create(client, client->request);
+				ret = _httpclient_checkconnector(client, client->request, client->request->response);
+				if (ret == EREJECT)
+					client->request->response->result = RESULT_404;
+			}
 		}
 		client->request->content = NULL;
 	}
@@ -976,12 +983,6 @@ static int _httpclient_request(http_client_t *client)
 		break;
 		case EREJECT:
 		{
-			if (client->request->response->result == RESULT_200)
-			{
-				if (client->request->result == RESULT_200)
-					client->request->result = RESULT_400;
-				client->request->response->result = client->request->result;
-			}
 			ret = ESUCCESS;
 		}
 		break;
@@ -1034,7 +1035,12 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_NEW:
 		{
 			client->state &= ~CLIENT_RESPONSEREADY;
-			client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
+			if (request_ret == ESUCCESS)
+			{
+				client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			else
+				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
 #ifdef VTHREAD
 			if (request_ret == ECONTINUE)
 			{
@@ -1251,7 +1257,7 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_PARSERERROR:
 		{
 			if (request->response->result == RESULT_200)
-				request->response->result = RESULT_404;
+				request->response->result = RESULT_400;
 			httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
 			const char *value = _http_message_result[request->response->result];
 			httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
