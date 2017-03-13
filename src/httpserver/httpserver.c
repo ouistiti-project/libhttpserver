@@ -2014,25 +2014,46 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 	
 	while (sessioninfo && strcmp(sessioninfo->key, key))
 		sessioninfo = sessioninfo->next;
-	if (!sessioninfo)
-	{
-		sessioninfo = vcalloc(1, sizeof(*sessioninfo));
-		if (!message->client->session_storage)
-		{
-			int chunksize = CHUNKSIZE;
-			if (message->client)
-				chunksize = message->client->server->config->chunksize;
-			message->client->session_storage = _buffer_create(2, chunksize);
-		}
-		sessioninfo->key = 
-			_buffer_append(message->client->session_storage, key, strlen(key) + 1);
-		sessioninfo->next = message->client->session;
-		message->client->session = sessioninfo;
-	}
 	if (value != NULL)
 	{
-		if (sessioninfo->value && (strlen(value) <= strlen(sessioninfo->value)))
-			strcpy(sessioninfo->value, value);
+		if (!sessioninfo)
+		{
+			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
+			if (!message->client->session_storage)
+			{
+				int chunksize = CHUNKSIZE;
+				if (message->client)
+					chunksize = message->client->server->config->chunksize;
+				message->client->session_storage = _buffer_create(2, chunksize);
+			}
+			sessioninfo->key = 
+				_buffer_append(message->client->session_storage, key, strlen(key) + 1);
+			sessioninfo->next = message->client->session;
+			message->client->session = sessioninfo;
+		}
+		if (sessioninfo->value)
+		{
+			dbentry_t *next = sessioninfo->next;
+			if (strlen(value) <= strlen(sessioninfo->value))
+			{
+				strcpy(sessioninfo->value, value);
+			}
+			else if (next != NULL)
+			{
+				char *data = message->client->session_storage->data;
+				int length = message->client->session_storage->length;
+				length -= next->key - data;
+				memmove(sessioninfo->key, next->key, length);
+				length = next->key - sessioninfo->key;
+				while (next != NULL)
+				{
+					next->key -= length;
+					next->value -= length;
+					next = next->next;
+				}
+				message->client->session_storage->length -= length;
+			}
+		}
 		else
 			sessioninfo->value = 
 				_buffer_append(message->client->session_storage, value, strlen(value) + 1);
