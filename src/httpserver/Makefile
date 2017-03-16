@@ -13,9 +13,13 @@ slib-$(SLIB_HTTPSERVER)+=httpserver
 httpserver_SOURCES+=httpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
 
-httpserver_SOURCES-$(VTHREAD)+=vthread.c
+ifeq ($(VTHREAD_TYPE),)
+VTHREAD_TYPE:=fork
+endif
+httpserver_SOURCES-$(VTHREAD)+=vthread_$(VTHREAD_TYPE).c
 httpserver_CFLAGS-$(VTHREAD)+=-DVTHREAD
-vthread_CFLAGS+=-DHAVE_PTHREAD -DHAVE_SCHED_YIELD
+vthread_pthread_CFLAGS+=-DHAVE_SCHED_YIELD
+vthread_fork_CFLAGS+=-DHAVE_SCHED_YIELD
 
 lib-$(DLIB_URI)+=uri
 slib-$(SLIB_URI)+=uri

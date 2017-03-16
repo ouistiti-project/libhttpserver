@@ -27,28 +27,26 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 
-#ifdef WIN32
 #include <windows.h>
 #include <tchar.h>
-#else
-#if defined(HAVE_PTHREAD)
-# include <pthread.h>
-#endif
-#endif
 
 #include "valloc.h"
 #include "vthread.h"
 
+#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#ifdef DEBUG
+#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#else
+# define dbg(...)
+#endif
+
 struct vthread_s
 {
-#ifdef WIN32
 	HANDLE handle;
 	DWORD id;
-#else
-	pthread_t pthread;
-	pthread_attr_t attr;
-#endif
 };
 
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
@@ -57,7 +55,6 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	int ret = 0;
 	vthread_t vthread;
 	vthread = vcalloc(1, sizeof(struct vthread_s));
-#ifdef WIN32
 	/**
 	 * the commented lines was found on internet
 	 * but after documention HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, argsize);
@@ -69,23 +66,6 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	 */
 	vthread->handle = CreateThread( NULL, 0, start_routine, arg, 0, &vthread->id);
 	SwitchToThread();
-#elif defined(HAVE_PTHREAD)
-	if (attr == NULL)
-	{
-		attr = &vthread->attr;
-	}
-	pthread_attr_init(attr);
-	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE);
-
-	ret = pthread_create(&(vthread->pthread), attr, start_routine, arg);
-#if defined(HAVE_PTHREAD_YIELD)
-	pthread_yield();
-#elif defined(HAVE_SCHED_YIELD)
-	sched_yield();
-#endif
-#else
-	ret = (int)start_routine(arg);
-#endif
 	*thread = vthread;
 	return ret;
 }
@@ -93,26 +73,17 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 int vthread_join(vthread_t thread, void **value_ptr)
 {
 	int ret = 0;
-#ifdef WIN32
 	CloseHandle(thread->handle);
 /**
 	if (thread->argument)
 		ret = HeapFree(GetProcessHeap(), 0, thread->argument);
 */
-#elif defined(HAVE_PTHREAD)
-	if (thread->pthread)
-	{
-		pthread_cancel(thread->pthread);
-		ret = pthread_join(thread->pthread, value_ptr);
-	}
-#endif
 	vfree(thread);
 	return ret;
 }
 
 void vthread_wait(vthread_t threads[], int nbthreads)
 {
-#ifdef WIN32
 	int i;
 	HANDLE *threadsArray;
 
@@ -122,29 +93,9 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 		threadsArray[i] = threads[i]->handle;
 	}
 	WaitForMultipleObjects(nbthreads, threadsArray, TRUE, INFINITE);
-#elif defined(HAVE_PTHREAD)
-	int i;
-	for (i = 0; i < nbthreads; i++) 
-	{
-		void *value_ptr;
-		vthread_t thread = threads[i];
-		if (thread && thread->pthread)
-		{
-			pthread_join(thread->pthread, value_ptr);
-		}
-	}
-#endif
 }
 
 void vthread_yield(vthread_t thread)
 {
-#ifdef WIN32
 	SwitchToThread();
-#elif defined(HAVE_PTHREAD)
-#if defined(HAVE_PTHREAD_YIELD)
-	pthread_yield();
-#elif defined(HAVE_SCHED_YIELD)
-	sched_yield();
-#endif
-#endif
 }
