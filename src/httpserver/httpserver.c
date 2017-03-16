@@ -278,7 +278,7 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 	 */
 	buffer->data = vcalloc(1, chunksize);
 	/**
-	 * the chunksize hqs to be constant during the life of the application.
+	 * the chunksize has to be constant during the life of the application.
 	 * Two ways are available:
 	 *  - to store the chunksize into each buffer (takes a lot of place).
 	 *  - to store into a global variable (looks bad).
@@ -1452,6 +1452,8 @@ static int _httpserver_connect(http_server_t *server)
 						}
 						else
 						{
+							if (!vthread_exist(client->thread))
+								client->state |= CLIENT_STOPPED;
 							vthread_yield(client->thread);
 						}
 #endif
@@ -2013,7 +2015,9 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 	sessioninfo = message->client->session;
 	
 	while (sessioninfo && strcmp(sessioninfo->key, key))
+	{
 		sessioninfo = sessioninfo->next;
+	}
 	if (value != NULL)
 	{
 		if (!sessioninfo)

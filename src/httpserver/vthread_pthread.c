@@ -87,6 +87,11 @@ int vthread_join(vthread_t thread, void **value_ptr)
 	return ret;
 }
 
+int vthread_exist(vthread_t thread)
+{
+	return 1;
+}
+
 void vthread_wait(vthread_t threads[], int nbthreads)
 {
 	int i;
