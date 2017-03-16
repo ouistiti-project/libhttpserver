@@ -2062,5 +2062,7 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 			sessioninfo->value = 
 				_buffer_append(message->client->session_storage, value, strlen(value) + 1);
 	}
+	else if (sessioninfo == NULL)
+		return default_value;
 	return sessioninfo->value;
 }
