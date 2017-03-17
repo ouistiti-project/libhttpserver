@@ -122,6 +122,7 @@ struct http_client_modctx_s
 	http_client_modctx_t *next;
 };
 
+typedef void (*http_close_t)(void *ctl);
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
@@ -148,6 +149,7 @@ struct http_client_s
 
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */
+	http_close_t close; /* callback to close the socket */
 	void *ctx; /* ctx of recvreq and sendresp functions */
 
 	http_connector_list_t *callbacks;
@@ -210,6 +212,9 @@ struct http_message_s
 	http_message_t *next;
 };
 
+typedef int (*_httpserver_start_t)(http_server_t *server);
+typedef http_client_t *(*_httpserver_createclient_t)(http_server_t *server);
+typedef void (*_httpserver_close_t)(http_server_t *server);
 struct http_server_s
 {
 	int sock;
@@ -219,6 +224,12 @@ struct http_server_s
 	http_connector_list_t *callbacks;
 	http_server_config_t *config;
 	http_server_mod_t *mod;
+	struct
+	{
+		_httpserver_start_t start;
+		_httpserver_createclient_t createclient;
+		_httpserver_close_t close; /* callback to close the socket */
+	} ops;
 };
 
 static int _httpserver_start(http_server_t *server);
@@ -775,6 +786,21 @@ int httpclient_send(void *ctl, char *data, int length)
 	return ret;
 }
 
+void httpclient_close(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+	if (client->sock > -1)
+	{
+		shutdown(client->sock, SHUT_RDWR);
+#ifndef WIN32
+		close(client->sock);
+#else
+		closesocket(client->sock);
+#endif
+	}
+	client->sock = -1;
+}
+
 static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
 {
 	if (response->headers == NULL)
@@ -810,14 +836,10 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 	return ESUCCESS;
 }
 
-static http_client_t *_httpclient_create(http_server_t *server)
+http_client_t *httpclient_create(http_server_t *server)
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
 	client->server = server;
-
-	client->recvreq = httpclient_recv;
-	client->sendresp = httpclient_send;
-	client->ctx = client;
 
 	http_connector_list_t *callback = server->callbacks;
 	while (callback != NULL)
@@ -1309,13 +1331,7 @@ static int _httpclient_run(http_client_t *client)
 					modctx = next;
 				}
 				client->modctx = NULL;
-				shutdown(client->sock, SHUT_RDWR);
-		#ifndef WIN32
-				close(client->sock);
-		#else
-				closesocket(client->sock);
-		#endif
-				client->sock = -1;
+				client->close(client);
 			}
 			if (client->request_queue)
 			{
@@ -1396,11 +1412,7 @@ static int _httpserver_connect(http_server_t *server)
 		{
 			if (FD_ISSET(server->sock, &rfds))
 			{
-				http_client_t *client = _httpclient_create(server);
-				// Client connection request recieved
-				// Create new client socket to communicate
-				client->addr_size = sizeof(client->addr);
-				client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
+				http_client_t *client = server->ops.createclient(server);
 				dbg("new connection %p", client);
 				http_server_mod_t *mod = server->mod;
 				http_client_modctx_t *currentctx = NULL;
@@ -1479,8 +1491,13 @@ static int _httpserver_connect(http_server_t *server)
 		}
 #endif
 	}
+	server->ops.close(server);
 	return ret;
 }
+
+static int _httpserver_start(http_server_t *server);
+static http_client_t *_httpserver_createclient(http_server_t *server);
+static void _httpserver_close(http_server_t *server);
 
 http_server_t *httpserver_create(http_server_config_t *config)
 {
@@ -1491,11 +1508,15 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->config = config;
 	else
 		server->config = &defaultconfig;
+	server->ops.start = _httpserver_start;
+	server->ops.createclient = _httpserver_createclient;
+	server->ops.close = _httpserver_close;
+
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
-	if (_httpserver_start(server))
+	if (server->ops.start(server))
 	{
 		free(server);
 		return NULL;
@@ -1582,12 +1603,7 @@ static int _httpserver_start(http_server_t *server)
 			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
 			if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
 				break;                  /* Success */
-
-#ifndef WIN32
-			close(server->sock);
-#else
-			closesocket(server->sock);
-#endif
+			server->ops.close(server);
 		}
 		freeaddrinfo(result); 
 	}
@@ -1602,6 +1618,39 @@ static int _httpserver_start(http_server_t *server)
 		return -1;
 	}
 	return 0;
+}
+
+static http_client_t *_httpserver_createclient(http_server_t *server)
+{
+	http_client_t * client = httpclient_create(server);
+	client->recvreq = httpclient_recv;
+	client->sendresp = httpclient_send;
+	client->close = httpclient_close;
+	client->ctx = client;
+
+	// Client connection request recieved
+	// Create new client socket to communicate
+	client->addr_size = sizeof(client->addr);
+	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
+
+	return client;
+}
+
+static void _httpserver_close(http_server_t *server)
+{
+	http_client_t *client = server->clients;
+	while (client != NULL)
+	{
+		http_client_t *next = client->next;
+		client->close(client);
+		client = next;
+	}
+
+#ifndef WIN32
+	close(server->sock);
+#else
+	closesocket(server->sock);
+#endif
 }
 
 void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg)
