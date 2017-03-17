@@ -220,6 +220,10 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
 	_mod_mbedtls_config_t *config = (_mod_mbedtls_config_t *)arg;
 
+	ctx->ctx = httpclient_context(ctl);
+	ctx->recvreq = httpclient_addreceiver(ctl, _mod_mbedtls_recv, ctx);
+	ctx->sendresp = httpclient_addsender(ctl, _mod_mbedtls_send, ctx);
+
 	mbedtls_ssl_init(&ctx->ssl);
 	mbedtls_ssl_setup(&ctx->ssl, &config->conf);
 	mbedtls_ssl_set_bio(&ctx->ssl, ctl, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
