@@ -69,6 +69,9 @@ typedef struct _mod_mbedtls_s
 {
 	mbedtls_ssl_context ssl;
 	int state;
+	http_recv_t recvreq;
+	http_send_t sendresp;
+	void *ctx;
 } _mod_mbedtls_t;
 
 typedef struct _mod_mbedtls_config_s
@@ -191,9 +194,10 @@ void mod_mbedtls_destroy(void *mod)
 	mbedtls_free(config);
 }
 
-static int _mod_mbedtls_read(void *ctl, unsigned char *data, int size)
+static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 {
-	int ret = httpclient_recv(ctl, data, size);
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
+	int ret = ctx->recvreq(ctx->ctx, data, size);
 	if (ret < 0  && errno == EAGAIN)
 	{
 		ret = MBEDTLS_ERR_SSL_WANT_READ;
@@ -203,9 +207,10 @@ static int _mod_mbedtls_read(void *ctl, unsigned char *data, int size)
 	return ret;
 }
 
-static int _mod_mbedtls_write(void *ctl, unsigned char *data, int size)
+static int _mod_mbedtls_write(void *arg, unsigned char *data, int size)
 {
-	int ret = httpclient_send(ctl, data, size);
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
+	int ret = ctx->sendresp(ctx->ctx, data, size);
 	if (ret < 0  && errno == EAGAIN)
 	{
 		ret = MBEDTLS_ERR_SSL_WANT_WRITE;
@@ -226,7 +231,7 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 
 	mbedtls_ssl_init(&ctx->ssl);
 	mbedtls_ssl_setup(&ctx->ssl, &config->conf);
-	mbedtls_ssl_set_bio(&ctx->ssl, ctl, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
+	mbedtls_ssl_set_bio(&ctx->ssl, ctx, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
 	if (!(ctx->state & HANDSHAKE))
 	{
 		int ret;
@@ -239,10 +244,9 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 		if (ret == 0)
 		{
 			ctx->state |= HANDSHAKE;
+			dbg("TLS Handshake");
 		}
 	}
-	httpclient_addreceiver(ctl, _mod_mbedtls_recv, ctx);
-	httpclient_addsender(ctl, _mod_mbedtls_send, ctx);
 	return ctx;
 }
 

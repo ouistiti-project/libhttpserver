@@ -435,28 +435,6 @@ http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void
  */
 http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
 
-/**
- * @brief read data on the client socket
- * 
- * @param ctl		the client data (see http_getctx_t)
- * @param data		the buffer to push the data from the socket
- * @param length	the length of the buffer
- * 
- * @return the number of bytes read on the socket
- */
-int httpclient_recv(void *ctl, char *data, int length);
-
-/**
- * @brief send data on the client socket
- * 
- * @param ctl		the client data (see http_getctx_t)
- * @param data		the buffer to send the data on the socket
- * @param length	the number of bytes to send
- * 
- * @return the number of bytes sent on the socket
- */
-int httpclient_send(void *ctl, char *data, int length);
-
 #ifdef __cplusplus
 }
 #endif
