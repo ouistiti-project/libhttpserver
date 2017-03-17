@@ -10,7 +10,7 @@ endif
 
 lib-$(DLIB_HTTPSERVER)+=httpserver
 slib-$(SLIB_HTTPSERVER)+=httpserver
-httpserver_SOURCES+=httpserver.c
+httpserver_SOURCES+=httpserver.c tcpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
 
 ifeq ($(VTHREAD_TYPE),)

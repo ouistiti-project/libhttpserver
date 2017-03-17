@@ -29,7 +29,10 @@
 #define __HTTPSERVER_H__
 
 #ifndef WIN32
+# include <sys/types.h>
 # include <sys/socket.h>
+# include <netinet/in.h>
+# include <netdb.h>
 #else
 # include <winsock2.h>
 #endif

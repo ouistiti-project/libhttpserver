@@ -38,39 +38,13 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#ifndef WIN32
-# include <sys/socket.h>
-# include <sys/ioctl.h>
-# include <sys/un.h>
-# include <net/if.h>
-# include <netinet/in.h>
-# include <netinet/tcp.h>
-# include <arpa/inet.h>
-# include <netdb.h>
+#include "valloc.h"
+#include "vthread.h"
+#include "dbentry.h"
+#include "httpserver.h"
+#include "_httpserver.h"
 
-#else
-
-# include <winsock2.h>
-# include <ws2tcpip.h>
-
-# define SHUT_RDWR SD_BOTH
-# pragma comment (lib, "Ws2_32.lib")
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-   void WSAAPI freeaddrinfo( struct addrinfo* );
-
-   int WSAAPI getaddrinfo( const char*, const char*, const struct addrinfo*,
-                 struct addrinfo** );
-
-   int WSAAPI getnameinfo( const struct sockaddr*, socklen_t, char*, DWORD,
-                char*, DWORD, int );
-#ifdef __cplusplus
-}
-#endif
-
-#endif
+extern httpserver_ops_t *httpserver_ops;
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -80,21 +54,16 @@ extern "C" {
 # define dbg(...)
 #endif
 
-#include "valloc.h"
-#include "vthread.h"
-#include "dbentry.h"
-#include "httpserver.h"
-
 #define CHUNKSIZE 64
 
-typedef struct buffer_s
+struct buffer_s
 {
 	char *data;
 	char *offset;
 	int size;
 	int length;
 	int maxchunks;
-} buffer_t;
+};
 
 struct http_connector_list_s
 {
@@ -103,9 +72,7 @@ struct http_connector_list_s
 	void *arg;
 	struct http_connector_list_s *next;
 };
-typedef struct http_connector_list_s http_connector_list_t;
 
-typedef struct http_server_mod_s http_server_mod_t;
 struct http_server_mod_s
 {
 	void *arg;
@@ -114,64 +81,12 @@ struct http_server_mod_s
 	http_server_mod_t *next;
 };
 
-typedef struct http_client_modctx_s http_client_modctx_t;
 struct http_client_modctx_s
 {
 	void *ctx;
 	http_freectx_t freectx;
 	http_client_modctx_t *next;
 };
-
-typedef void (*http_close_t)(void *ctl);
-#define CLIENT_STARTED 0x0100
-#define CLIENT_RUNNING 0x0200
-#define CLIENT_STOPPED 0x0400
-#define CLIENT_NONBLOCK 0x1000
-#define CLIENT_ERROR 0x2000
-#define CLIENT_RESPONSEREADY 0x4000
-#define CLIENT_KEEPALIVE 0x8000
-#define CLIENT_MACHINEMASK 0x00FF
-#define CLIENT_NEW 0x0000
-#define CLIENT_REQUEST 0x0001
-#define CLIENT_PUSHREQUEST 0x0002
-#define CLIENT_PARSER1 0x0003
-#define CLIENT_PARSER2 0x0004
-#define CLIENT_RESPONSEHEADER 0x0005
-#define CLIENT_RESPONSECONTENT 0x0006
-#define CLIENT_PARSERERROR 0x0007
-#define CLIENT_COMPLETE 0x0008
-struct http_client_s
-{
-	int sock;
-	int state;
-	http_server_t *server; /* the server which create the client */
-	vthread_t thread; /* The thread of socket management during the live of the connection */
-
-	http_recv_t recvreq; /* callback to receive data on the socket */
-	http_send_t sendresp; /* callback to send data on the socket */
-	http_close_t close; /* callback to close the socket */
-	void *ctx; /* ctx of recvreq and sendresp functions */
-
-	http_connector_list_t *callbacks;
-	http_connector_list_t *callback;
-	http_message_t *request;
-	http_message_t *request_queue;
-
-	http_client_modctx_t *modctx; /* list of pointers returned by getctx of each mod */
-
-	dbentry_t *session;
-	buffer_t *session_storage;
-#ifndef WIN32
-	struct sockaddr_un addr;
-#elif defined IPV6
-	struct sockaddr_in6 addr;
-#else
-	struct sockaddr_in addr;
-#endif
-	unsigned int addr_size;
-	struct http_client_s *next;
-};
-typedef struct http_client_s http_client_t;
 
 struct http_message_s
 {
@@ -212,27 +127,6 @@ struct http_message_s
 	http_message_t *next;
 };
 
-typedef int (*_httpserver_start_t)(http_server_t *server);
-typedef http_client_t *(*_httpserver_createclient_t)(http_server_t *server);
-typedef void (*_httpserver_close_t)(http_server_t *server);
-struct http_server_s
-{
-	int sock;
-	int run;
-	vthread_t thread;
-	http_client_t *clients;
-	http_connector_list_t *callbacks;
-	http_server_config_t *config;
-	http_server_mod_t *mod;
-	struct
-	{
-		_httpserver_start_t start;
-		_httpserver_createclient_t createclient;
-		_httpserver_close_t close; /* callback to close the socket */
-	} ops;
-};
-
-static int _httpserver_start(http_server_t *server);
 static void _httpmessage_fillheaderdb(http_message_t *message);
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
 static int _httpclient_run(http_client_t *client);
@@ -772,35 +666,6 @@ http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *
 	return previous;
 }
 
-int httpclient_recv(void *ctl, char *data, int length)
-{
-	http_client_t *client = (http_client_t *)ctl;
-	int ret = recv(client->sock, data, length, MSG_NOSIGNAL);
-	return ret;
-}
-
-int httpclient_send(void *ctl, char *data, int length)
-{
-	http_client_t *client = (http_client_t *)ctl;
-	int ret = send(client->sock, data, length, MSG_NOSIGNAL);
-	return ret;
-}
-
-void httpclient_close(void *ctl)
-{
-	http_client_t *client = (http_client_t *)ctl;
-	if (client->sock > -1)
-	{
-		shutdown(client->sock, SHUT_RDWR);
-#ifndef WIN32
-		close(client->sock);
-#else
-		closesocket(client->sock);
-#endif
-	}
-	client->sock = -1;
-}
-
 static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
 {
 	if (response->headers == NULL)
@@ -1296,7 +1161,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_COMPLETE:
 		{
-			setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
+			client->flush(client);
 			/**
 			 * to stay in keep alive the rules are:
 			 *  - the server has to be configurated;
@@ -1412,7 +1277,7 @@ static int _httpserver_connect(http_server_t *server)
 		{
 			if (FD_ISSET(server->sock, &rfds))
 			{
-				http_client_t *client = server->ops.createclient(server);
+				http_client_t *client = server->ops->createclient(server);
 				dbg("new connection %p", client);
 				http_server_mod_t *mod = server->mod;
 				http_client_modctx_t *currentctx = NULL;
@@ -1491,13 +1356,9 @@ static int _httpserver_connect(http_server_t *server)
 		}
 #endif
 	}
-	server->ops.close(server);
+	server->ops->close(server);
 	return ret;
 }
-
-static int _httpserver_start(http_server_t *server);
-static http_client_t *_httpserver_createclient(http_server_t *server);
-static void _httpserver_close(http_server_t *server);
 
 http_server_t *httpserver_create(http_server_config_t *config)
 {
@@ -1508,149 +1369,18 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->config = config;
 	else
 		server->config = &defaultconfig;
-	server->ops.start = _httpserver_start;
-	server->ops.createclient = _httpserver_createclient;
-	server->ops.close = _httpserver_close;
+	server->ops = httpserver_ops;
 
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
-	if (server->ops.start(server))
+	if (server->ops->start(server))
 	{
 		free(server);
 		return NULL;
 	}
 	return server;
-}
-
-static int _httpserver_start(http_server_t *server)
-{
-	int status;
-
-	if (server->config->addr == NULL)
-	{
-#ifdef IPV6
-		server->sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_IP);
-#else
-		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
-#endif
-		if ( server->sock < 0 )
-		{
-			warn("Error creating socket");
-			return -1;
-		}
-
-		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
-				warn("setsockopt(SO_REUSEADDR) failed");
-#ifdef SO_REUSEPORT
-		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, (void *)&(int){ 1 }, sizeof(int)) < 0)
-				warn("setsockopt(SO_REUSEPORT) failed");
-#endif
-
-		int socklen = sizeof(struct sockaddr_in);
-#ifdef IPV6
-		struct sockaddr_in6saddr;
-		saddr.sin6_family = AF_INET6;
-		saddr.sin6_port = htons(server->config->port);
-		saddr.sin6_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
-#else
-		struct sockaddr_in saddr;
-
-		saddr.sin_family = AF_INET;
-		saddr.sin_port = htons(server->config->port);
-		saddr.sin_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
-#endif
-		status = bind(server->sock, (struct sockaddr *)&saddr, socklen);
-	}
-	else
-	{
-		struct addrinfo hints;
-		struct addrinfo *result, *rp;
-
-		memset(&hints, 0, sizeof(struct addrinfo));
-#ifdef IPV6
-		hints.ai_family = AF_INET6;    /* Allow IPv4 or IPv6 */
-#else
-		hints.ai_family = AF_INET;    /* Allow IPv4 or IPv6 */
-#endif
-		hints.ai_socktype = SOCK_STREAM; /* Stream socket */
-		hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
-		hints.ai_protocol = 0;          /* Any protocol */
-		hints.ai_canonname = NULL;
-		hints.ai_addr = NULL;
-		hints.ai_next = NULL;
-
-		status = getaddrinfo(server->config->addr, NULL, &hints, &result);
-		if (status != 0) {
-			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-			return -1;
-		}
-
-		for (rp = result; rp != NULL; rp = rp->ai_next)
-		{
-			server->sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-			if (server->sock == -1)
-				continue;
-
-			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
-					warn("setsockopt(SO_REUSEADDR) failed");
-#ifdef SO_REUSEPORT
-			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, (void *)&(int){ 1 }, sizeof(int)) < 0)
-					warn("setsockopt(SO_REUSEPORT) failed");
-#endif
-
-			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
-			if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
-				break;                  /* Success */
-			server->ops.close(server);
-		}
-		freeaddrinfo(result); 
-	}
-
-	if (!status)
-	{
-		status = listen(server->sock, server->config->maxclients);
-	}
-	if (status)
-	{
-		warn("Error bind/listen port %d", server->config->port);
-		return -1;
-	}
-	return 0;
-}
-
-static http_client_t *_httpserver_createclient(http_server_t *server)
-{
-	http_client_t * client = httpclient_create(server);
-	client->recvreq = httpclient_recv;
-	client->sendresp = httpclient_send;
-	client->close = httpclient_close;
-	client->ctx = client;
-
-	// Client connection request recieved
-	// Create new client socket to communicate
-	client->addr_size = sizeof(client->addr);
-	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
-
-	return client;
-}
-
-static void _httpserver_close(http_server_t *server)
-{
-	http_client_t *client = server->clients;
-	while (client != NULL)
-	{
-		http_client_t *next = client->next;
-		client->close(client);
-		client = next;
-	}
-
-#ifndef WIN32
-	close(server->sock);
-#else
-	closesocket(server->sock);
-#endif
 }
 
 void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg)
