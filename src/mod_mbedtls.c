@@ -112,13 +112,13 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 		MBEDTLS_SSL_TRANSPORT_STREAM,
 		MBEDTLS_SSL_PRESET_DEFAULT);
 	if (ret)
-		printf("mbedtls_ssl_config_defaults %d\n", ret);
+		err("mbedtls_ssl_config_defaults %d\n", ret);
 
 	if (modconfig->crtfile)
 	{
 		ret = mbedtls_x509_crt_parse_file(&config->srvcert, (const char *) modconfig->crtfile);
 		if (ret)
-			printf("mbedtls_x509_crt_parse_file %d\n", ret);
+			err("mbedtls_x509_crt_parse_file %d\n", ret);
 		else
 			is_set_pemkey++;
 		mbedtls_pk_init(&config->pkey);
@@ -126,7 +126,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 		{
 			ret =  mbedtls_pk_parse_keyfile(&config->pkey, (const char *) modconfig->pemfile, NULL);
 			if (ret)
-				printf("mbedtls_pk_parse_keyfile %d\n", ret);
+				err("mbedtls_pk_parse_keyfile %d\n", ret);
 			else
 				is_set_pemkey++;
 		}
@@ -134,7 +134,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 		{
 			ret =  mbedtls_pk_parse_keyfile(&config->pkey, (const char *) modconfig->crtfile, NULL);
 			if (ret)
-				printf("mbedtls_pk_parse_keyfile %d\n", ret);
+				err("mbedtls_pk_parse_keyfile %d\n", ret);
 			else
 				is_set_pemkey++;
 		}
@@ -143,7 +143,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 	{
 		ret = mbedtls_x509_crt_parse_file(&config->cachain, (const char *) modconfig->cachain);
 		if (ret)
-			printf("mbedtls_x509_crt_parse_file cachain %d\n", ret);
+			err("mbedtls_x509_crt_parse_file cachain %d\n", ret);
 		else
 			mbedtls_ssl_conf_ca_chain(&config->conf, &config->cachain, NULL);
 	}
@@ -154,7 +154,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 		ret = mbedtls_ctr_drbg_seed(&config->ctr_drbg, mbedtls_entropy_func, &config->entropy,
 			(const unsigned char *) pers, strlen(pers));
 		if (ret)
-			printf("mbedtls_ctr_drbg_seed %d\n", ret);
+			err("mbedtls_ctr_drbg_seed %d\n", ret);
 		else
 			mbedtls_ssl_conf_rng(&config->conf, mbedtls_ctr_drbg_random, &config->ctr_drbg );
 	}
@@ -163,7 +163,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 	{
 		ret = mbedtls_ssl_conf_own_cert(&config->conf, &config->srvcert, &config->pkey);
 		if (ret)
-			printf("mbedtls_ssl_conf_own_cert %d\n", ret);
+			err("mbedtls_ssl_conf_own_cert %d\n", ret);
 	}
 
 	if (modconfig->dhmfile)
@@ -171,7 +171,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 		mbedtls_dhm_init(&config->dhm);
 		ret = mbedtls_dhm_parse_dhmfile(&config->dhm, modconfig->dhmfile);
 		if (ret)
-			printf("mbedtls_dhm_parse_dhmfile %d\n", ret);
+			err("mbedtls_dhm_parse_dhmfile %d\n", ret);
 	}
 
 	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config);
