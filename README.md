@@ -1,35 +1,33 @@
 # libhttpserver
 
 ## Introduction
-libhttpserver allows to accept a http communication into an application.
+libhttpserver allows to accept a http communication into an application.  
 Very simple and light, it is not fully featured, but may be useable for small project.
-The content of the response are defined by a callback function.
+The content of the response are defined by a callback function.  
+It is also possible to create modules to link with this library to extend the features.
 
 ## Configuration
 The configuration file (named "config") may be edited to set the following parameters:
+
  * VTHREAD=y to enable the threading support
- * STATIC_FILE=y to build the static file module
- * MBEDTLS=y to build the SSL support with mbedTLS (PolarSSL)
+ * VHTREAD_TYPE=[fork|pthread|win32] to set the threading type (fork is the faster)
+ * MBEDTLS=y to build the SSL support with mbedTLS (previously named PolarSSL)
  * TEST=y to build the test application
  * prefix=/my/installation/path to change the installation prefix (default: /usr/local)
  * libdir=/my/libraries/path to change the installation of libraries (default: $prefix/lib)
- * bindir=/my/binaries/path to change the installation of binaries (default: $prefix/bin)
 
 ## Build
-By default the code may be integrated directly into the project.
-
+By default the code may be integrated directly into the project.  
 But the Makefile builds three binary types:
- * a static library around 12kB and a dynamic library around 80kB.
 
-    CC=gcc make
+ * a static library around 12kB and a dynamic library around 80kB.  
+> CC=gcc make
 
- * a test application that creates a little server responding a very small HTML content.
+ * a test application that creates a little server responding a very small HTML content.  
+> make TEST=y
 
-    make TEST=y
-
-libhttpserver is WIN32 compatible and can be build with mingw32:
-
-    CC=mingw32-gcc make
+libhttpserver is WIN32 compatible and can be build with mingw32:  
+> CC=mingw32-gcc make
 
 and can build DLL file.
 
