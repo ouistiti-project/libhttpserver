@@ -48,9 +48,18 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/certs.h>
 #include <mbedtls/x509.h>
-#include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
+#include <mbedtls/version.h>
+#if MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR==4
+#include <mbedtls/net_sockets.h>
+#elif MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR==2
+#include <mbedtls/net.h>
 
+typedef int (mbedtls_ssl_send_t)(void *, const unsigned char *, size_t);
+typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
+#else
+#error MBEDTLS not found
+#endif
 #include "httpserver.h"
 #include "mod_mbedtls.h"
 
