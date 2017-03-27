@@ -31,6 +31,6 @@ uri_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
 ifeq ($(WIN32),1)
 httpserver_LDFLAGS+=-lws2_32
-else
+elifeq ($(VTHREAD_TYPE),pthread)
 httpserver_LDFLAGS-$(VTHREAD)+=-lpthread
 endif
