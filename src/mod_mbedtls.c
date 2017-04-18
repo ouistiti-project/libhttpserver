@@ -206,7 +206,7 @@ void mod_mbedtls_destroy(void *mod)
 static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
-	int ret = ctx->recvreq(ctx->ctx, data, size);
+	int ret = ctx->recvreq(ctx->ctx, (char *)data, size);
 	if (ret < 0  && errno == EAGAIN)
 	{
 		ret = MBEDTLS_ERR_SSL_WANT_READ;
@@ -219,7 +219,7 @@ static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 static int _mod_mbedtls_write(void *arg, unsigned char *data, int size)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
-	int ret = ctx->sendresp(ctx->ctx, data, size);
+	int ret = ctx->sendresp(ctx->ctx, (char *)data, size);
 	if (ret < 0  && errno == EAGAIN)
 	{
 		ret = MBEDTLS_ERR_SSL_WANT_WRITE;
@@ -285,7 +285,7 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 
 	do
 	{
-		ret = mbedtls_ssl_read(&ctx->ssl, data, size);
+		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
 	}
 	while (ret == MBEDTLS_ERR_SSL_WANT_READ);
 	if (ret < size)
@@ -297,6 +297,6 @@ static int _mod_mbedtls_send(void *vctx, char *data, int size)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
-	ret = mbedtls_ssl_write(&ctx->ssl, data, size);
+	ret = mbedtls_ssl_write(&ctx->ssl, (unsigned char *)data, size);
 	return ret;
 }
