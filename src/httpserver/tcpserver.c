@@ -197,7 +197,10 @@ static int _tcpserver_start(http_server_t *server)
 	}
 	if (status)
 	{
-		warn("Error bind/listen port %d", server->config->port);
+		if (server->config->addr)
+			warn("Error bind/listen %s port %d", server->config->addr, server->config->port);
+		else
+			warn("Error bind/listen port %d", server->config->port);
 		return -1;
 	}
 	return 0;
