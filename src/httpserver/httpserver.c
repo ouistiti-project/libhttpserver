@@ -824,7 +824,7 @@ static int _httpclient_request(http_client_t *client)
 	{
 		tempo->length = size;
 		ret = _httpmessage_parserequest(client->request, tempo);
-
+		dbg("_httpmessage_parserequest %d %X", ret, client->request->state & PARSE_MASK);
 		if (ret == EREJECT)
 		{
 			if (client->request->response == NULL)
@@ -1301,8 +1301,8 @@ static int _httpserver_connect(http_server_t *server)
 					currentctx = modctx;
 				}
 				int flags;
-				flags = fcntl(client->sock,F_GETFL, 0);
-				fcntl(client->sock,F_SETFL, flags | O_NONBLOCK);
+				flags = fcntl(client->sock, F_GETFL, 0);
+				fcntl(client->sock, F_SETFL, flags | O_NONBLOCK);
 
 				client->next = server->clients;
 				server->clients = client;
