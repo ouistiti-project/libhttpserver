@@ -679,6 +679,11 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 	_buffer_append(header, "\r\n", 2);
 	while (headers != NULL)
 	{
+		if (!strcmp(headers->key, str_contentlength))
+		{
+			headers = headers->next;
+			continue;
+		}
 		_buffer_append(header, headers->key, strlen(headers->key));
 		_buffer_append(header, ": ", 2);
 		_buffer_append(header, headers->value, strlen(headers->value));
