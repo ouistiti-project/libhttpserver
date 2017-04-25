@@ -781,10 +781,6 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 				if (ret == ESUCCESS)
 				{
 					client->state |= CLIENT_RESPONSEREADY;
-					if (response->result != RESULT_200)
-					{
-						ret = EREJECT;
-					}
 				}
 				client->callback = iterator;
 				break;
