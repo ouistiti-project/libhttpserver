@@ -865,9 +865,7 @@ static int _httpclient_request(http_client_t *client)
 	{
 		case ESUCCESS:
 		{
-			if (!(client->state & CLIENT_RESPONSEREADY) &&
-				(client->request->type == MESSAGE_TYPE_PUT ||
-				client->request->type == MESSAGE_TYPE_DELETE))
+			if (!(client->state & CLIENT_RESPONSEREADY))
 			{
 				client->request->result = RESULT_405;
 			}
@@ -1150,7 +1148,6 @@ static int _httpclient_run(http_client_t *client)
 		{
 			if (request->response->result == RESULT_200)
 				request->response->result = RESULT_400;
-			httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
 			const char *value = _http_message_result[request->response->result];
 			httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
 			if (request->response->version == HTTP09)
