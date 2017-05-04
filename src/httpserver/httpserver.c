@@ -1113,21 +1113,20 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_RESPONSECONTENT:
 		{
-			if (request->type != MESSAGE_TYPE_HEAD &&
-				request->response->content &&
-				request->response->content->length > 0)
+			int size = 0;
+			if (request->response->content)
+				request->response->content->offset = request->response->content->data;
+			while (request->type != MESSAGE_TYPE_HEAD &&
+					request->response->content &&
+					request->response->content->length > 0)
 			{
-				int size = 0;
-				size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
+				size = client->sendresp(client->ctx, request->response->content->offset, request->response->content->length);
 				if (size < 0)
 				{
 					client->state &= ~CLIENT_KEEPALIVE;
 					client->state |= CLIENT_ERROR;
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				else if (size == 0 && (request->response->content->length > 0))
-				{
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					break;
 				}
 				else if (size == request->response->content->length)
 				{
@@ -1136,6 +1135,7 @@ static int _httpclient_run(http_client_t *client)
 						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 					else
 						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
+					break;
 				}
 				else
 				{
@@ -1143,8 +1143,11 @@ static int _httpclient_run(http_client_t *client)
 					request->response->content->offset += size;
 				}
 			}
-			else
+			if (size == 0)
+			{
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				break;
+			}
 		}
 		break;
 		case CLIENT_PARSERERROR:
