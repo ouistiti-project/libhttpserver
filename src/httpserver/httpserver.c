@@ -1103,6 +1103,9 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (client->state & CLIENT_RESPONSEREADY)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			else if (request->response->content &&
+					request->response->content->length > 0)
+				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 			_buffer_destroy(header);
@@ -1630,7 +1633,9 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		_buffer_append(message->content, content, length);
 	}
 	if (message->content_length == 0)
+	{
 		message->content_length = length;
+	}
 	if (message->content != NULL && message->content->data != NULL )
 		return message->content->data;
 	return NULL;
