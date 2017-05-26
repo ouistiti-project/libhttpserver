@@ -232,6 +232,19 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 	return offset;
 }
 
+static void _buffer_shrink(buffer_t *buffer)
+{
+	buffer->length -= (buffer->offset - buffer->data);
+	while (buffer->length > 0 && (*(buffer->offset) == 0))
+	{
+		buffer->offset++;
+		buffer->length--;
+	}
+	memcpy(buffer->data, buffer->offset, buffer->length);
+	buffer->data[buffer->length] = '\0';
+	buffer->offset = buffer->data;
+}
+
 static void _buffer_reset(buffer_t *buffer)
 {
 	buffer->offset = buffer->data;
@@ -564,17 +577,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				/* create key/value entry for each "<key>:<value>\0" string */
 				_httpmessage_fillheaderdb(message);
 				/* reset the buffer to begin the content at the begining of the buffer */
-				data->length -= (data->offset - data->data);
-				while (data->length > 0 && (*(data->offset) == 0))
-				{
-					data->offset++;
-					data->length--;
-				}
-				if (data->length > 0)
-					memcpy(data->data, data->offset, data->length);
-				else
-					*data->data = '\0';
-				data->offset = data->data;
+				_buffer_shrink(data);
 				next = PARSE_CONTENT;
 			}
 			break;
