@@ -362,6 +362,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					message->version = message->client->server->config->version;
 					message->result = RESULT_405;
 					ret = EREJECT;
+					warn("parse reject method");
 				}
 			}
 			break;
@@ -386,24 +387,17 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					{
 						case ' ':
 						{
-							*data->offset = '\0';
-							uri = _buffer_append(message->uri, uri, length + 1);
+							uri = _buffer_append(message->uri, uri, length);
 							next = PARSE_VERSION;
 						}
 						break;
 						case '\r':
-						{
-							next = PARSE_HEADER;
-							*data->offset = '\0';
-							if (*(data->offset + 1) == '\n')
-								data->offset++;
-							uri = _buffer_append(message->uri, uri, length + 1);
-						}
-						break;
 						case '\n':
 						{
 							next = PARSE_HEADER;
-							*data->offset = '\0';
+							if (*(data->offset + 1) == '\n')
+								data->offset++;
+							uri = _buffer_append(message->uri, uri, length);
 						}
 						break;
 						default:
@@ -426,20 +420,30 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						chunksize = message->client->server->config->chunksize;
 					message->uri = _buffer_create(1, chunksize);
 					message->version = message->client->server->config->version;
+#ifndef HTTP_STATUS_PARTIAL
 					message->result = RESULT_414;
+#else
+					message->result = RESULT_404;
+#endif
 					ret = EREJECT;
+					warn("parse reject uri too long");
 				}
 				else
 					message->query = uri;
 				if (message->uri->maxchunks == 0)
 				{
 					message->version = message->client->server->config->version;
+#ifndef HTTP_STATUS_PARTIAL
 					message->result = RESULT_414;
+#else
+					message->result = RESULT_404;
+#endif
 					ret = EREJECT;
+					warn("parse reject uri too long");
 				}
 				if (next != PARSE_URI)
 				{
-					if (message->uri->length > 1)
+					if (message->uri->length > 0)
 					{
 						int i;
 						for (i = 0; i < message->uri->length; i++)
@@ -450,14 +454,15 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 								break;
 							}
 						}
+						dbg("new request for %s", message->uri->data);
 					}
 					else
 					{
 						message->version = message->client->server->config->version;
 						message->result = RESULT_400;
 						ret = EREJECT;
+						warn("parse reject uri too long");
 					}
-					dbg("new request for %s", message->uri->data);
 				}
 			}
 			break;
@@ -487,46 +492,45 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_VERSION:
 			{
-				int i;
-				for (i = HTTP09; i < HTTPVERSIONS; i++)
-				{
-					int length = strlen(_http_message_version[i]);
-					if (!strncasecmp(data->offset, _http_message_version[i], length))
-					{
-						message->version = i;
-						data->offset += length;
-						break;
-					}
-				}
-				if (i == HTTPVERSIONS)
-					ret = EREJECT;
+				char *version = data->offset;
 				while (data->offset < (data->data + data->size) && next == PARSE_VERSION)
 				{
 					switch (*data->offset)
 					{
+						case '\n':
 						case '\r':
 						{
 							next = PARSE_HEADER;
-							if (data->offset[1] == '\n')
-							{
+							if (*(data->offset + 1) == '\n')
 								data->offset++;
-							}
-						}
-						break;
-						case '\n':
-						{
-							next = PARSE_HEADER;
-							if (data->offset[1] == '\r')
-							{
-								data->offset++;
-							}
 						}
 						break;
 						default:
-						{
-						}
+						break;
 					}
 					data->offset++;
+				}
+				if (next != PARSE_VERSION)
+				{
+					int i;
+					for (i = HTTP09; i < HTTPVERSIONS; i++)
+					{
+						int length = strlen(_http_message_version[i]);
+						if (!strncasecmp(version, _http_message_version[i], length))
+						{
+							message->version = i;
+							break;
+						}
+					}
+					if (i == HTTPVERSIONS)
+					{
+						ret = EREJECT;
+						warn("request bad protocol version");
+					}
+				}
+				else
+				{
+					_buffer_shrink(data);
 				}
 			}
 			break;
@@ -544,24 +548,33 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
-					if (*data->offset == '\n')
+					switch (*data->offset)
 					{
-						*data->offset = '\0';
+						case '\n':
+						{
+						/**
+						 * Empty Header line defines the end of the header and
+						 * the beginning fo the content.
+						 **/
 						if (length == 0 && !(message->state & PARSE_CONTINUE))
 						{
 							next = PARSE_HEADERNEXT;
 						}
 						else
 						{
-							header[length] = 0;
+							header[length] = '\0';
 							_buffer_append(message->headers_storage, header, length + 1);
 							header = data->offset + 1;
 							length = 0;
 							message->state &= ~PARSE_CONTINUE;
 						}
+						}
+						break;
+						case '\r':
+						break;
+						default:
+							length++;
 					}
-					else if (*data->offset != '\r')
-						length++;
 					data->offset++;
 				}
 				/* not enougth data to complete the line */
@@ -809,60 +822,81 @@ static int _httpclient_request(http_client_t *client)
 	if (client->request == NULL)
 		client->request = _httpmessage_create(client, NULL);
 
-	/**
-	 * here, it is the call to the recvreq callback from the
-	 * server configuration.
-	 * see http_server_config_t and httpserver_create
-	 */
-	size = client->recvreq(client->ctx, tempo->data, tempo->size);
-	if (size < 0)
+	do
 	{
-		if (errno != EAGAIN)
+		/**
+		 * here, it is the call to the recvreq callback from the
+		 * server configuration.
+		 * see http_server_config_t and httpserver_create
+		 */
+		size = client->recvreq(client->ctx, tempo->offset, tempo->size - tempo->length);
+		if (size > 0)
+		{
+			tempo->length += size;
+			tempo->data[tempo->length] = 0;
+		}
+		else if (size < 0)
+		{
+			_buffer_destroy(tempo);
+			if (errno != EAGAIN)
+				return EREJECT;
+			else
+				return ECONTINUE;
+		}
+		else if (size == 0) /* socket shutdown */
 		{
 			_buffer_destroy(tempo);
 			return EREJECT;
 		}
-	}
-	else if (size > 0)
-	{
-		tempo->length = size;
+
 		ret = _httpmessage_parserequest(client->request, tempo);
-		dbg("_httpmessage_parserequest %d %X", ret, client->request->state & PARSE_MASK);
-		if (ret == EREJECT)
-		{
-			if (client->request->response == NULL)
-			{
-				/** parsing error before response creation */
-				client->request->response = _httpmessage_create(client, client->request);
-			}
-		}
-		else
+	} while (ret == EINCOMPLETE && (tempo->size - tempo->length));
+
+	if (ret == EREJECT)
+	{
+		if (client->request->response == NULL)
 		{
 			/**
-			 * The request is partially read.
-			 * The connector can start to read the request when the header is ready.
-			 * A problem is the size of the header. It is impossible to start
-			 * the treatment before the end of the header, and it needs to
-			 * store the header informations. It takes some place in  memory,
-			 * depending of the server. It may be dangerous, a hacker can send
-			 * a request with a very big header.
-			 */
-			if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
-			{
-				if (client->request->response == NULL)
-					client->request->response = _httpmessage_create(client, client->request);
-				ret = _httpclient_checkconnector(client, client->request, client->request->response);
-				if (ret == EREJECT)
-					client->request->response->result = RESULT_404;
-			}
+			 * parsing error before response creation 
+			 * response's result will be the result set into the request.
+			 **/
+			client->request->response = _httpmessage_create(client, client->request);
 		}
-		client->request->content = NULL;
-	}
-	else /* socket shutdown */
-	{
 		_buffer_destroy(tempo);
-		return EREJECT;
+		/**
+		 * the parsing found an error in the request
+		 * the treatment is completed and is successed
+		 **/
+		return ESUCCESS;
 	}
+
+	/**
+	 * The request is partially read.
+	 * The connector can start to read the request when the header is ready.
+	 * A problem is the size of the header. It is impossible to start
+	 * the treatment before the end of the header, and it needs to
+	 * store the header informations. It takes some place in  memory,
+	 * depending of the server. It may be dangerous, a hacker can send
+	 * a request with a very big header.
+	 */
+	if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
+	{
+		if (client->request->response == NULL)
+			client->request->response = _httpmessage_create(client, client->request);
+		ret = _httpclient_checkconnector(client, client->request, client->request->response);
+		if (ret == EREJECT)
+		{
+			client->request->response->result = RESULT_404;
+			warn("request not found %s", client->request->uri->data);
+		}
+	}
+	/**
+	 * The request's content should be used by  "_httpclient_checkconnector"
+	 * if it is required. After that the content is not stored and useless.
+	 * The content is the "tempo" buffer, it is useless to free it.
+	 **/
+	client->request->content = NULL;
+
 	_buffer_destroy(tempo);
 	switch (ret)
 	{
