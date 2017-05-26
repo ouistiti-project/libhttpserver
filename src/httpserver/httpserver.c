@@ -1035,7 +1035,7 @@ static int _httpclient_run(http_client_t *client)
 		{
 			if (client->request->response->result != RESULT_200)
 				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
-			else if (client->request->response->content == NULL)
+			else if (client->request->response->content == NULL && client->request->response->content_length == 0)
 				client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
 			else if (client->request->version == HTTP09)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
