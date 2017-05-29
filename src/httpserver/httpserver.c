@@ -492,45 +492,47 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_VERSION:
 			{
-				char *version = data->offset;
-				while (data->offset < (data->data + data->size) && next == PARSE_VERSION)
-				{
-					switch (*data->offset)
-					{
-						case '\n':
-						case '\r':
-						{
-							next = PARSE_HEADER;
-							if (*(data->offset + 1) == '\n')
-								data->offset++;
-						}
-						break;
-						default:
-						break;
-					}
-					data->offset++;
-				}
-				if (next != PARSE_VERSION)
-				{
-					int i;
-					for (i = HTTP09; i < HTTPVERSIONS; i++)
-					{
-						int length = strlen(_http_message_version[i]);
-						if (!strncasecmp(version, _http_message_version[i], length))
-						{
-							message->version = i;
-							break;
-						}
-					}
-					if (i == HTTPVERSIONS)
-					{
-						ret = EREJECT;
-						warn("request bad protocol version");
-					}
-				}
-				else
+				/**
+				 * There is not enougth data to parse the version.
+				 * Move the rest to the beginning and request
+				 * more data.
+				 **/
+				if (data->offset + 10 > data->data + data->size)
 				{
 					_buffer_shrink(data);
+					data->offset = data->data + data->length;
+					break;
+				}
+				char *version = data->offset;
+				int i;
+				for (i = HTTP09; i < HTTPVERSIONS; i++)
+				{
+					int length = strlen(_http_message_version[i]);
+					if (!strncasecmp(version, _http_message_version[i], length))
+					{
+						data->offset += length;
+						if (*data->offset == '\r')
+							data->offset++;
+						if (*data->offset == '\n')
+						{
+							data->offset++;
+							next = PARSE_HEADER;
+						}
+						else
+						{
+							ret = EREJECT;
+							message->result = RESULT_400;
+							warn("bad request %s", data->data);
+						}
+						message->version = i;
+						break;
+					}
+				}
+				if (i == HTTPVERSIONS)
+				{
+					ret = EREJECT;
+					message->result = RESULT_400;
+					warn("request bad protocol version %s", version);
 				}
 			}
 			break;
