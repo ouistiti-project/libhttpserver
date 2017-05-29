@@ -736,6 +736,7 @@ http_client_t *httpclient_create(http_server_t *server)
 		callback = callback->next;
 	}
 	client->callback = client->callbacks;
+	client->sockdata = _buffer_create(1, client->server->config->chunksize);
 
 	return client;
 }
@@ -751,6 +752,8 @@ static void _httpclient_destroy(http_client_t *client)
 		free(callback);
 		callback = next;
 	}
+	if (client->sockdata)
+		_buffer_destroy(client->sockdata);
 	if (client->request)
 		httpmessage_destroy(client->request);
 	if (client->session_storage)
@@ -820,39 +823,40 @@ static int _httpclient_request(http_client_t *client)
 	 */
 	int ret = ECONTINUE;
 	int size = 0;
-	buffer_t *tempo = _buffer_create(1, client->server->config->chunksize);
 	if (client->request == NULL)
 		client->request = _httpmessage_create(client, NULL);
 
-	do
+	/**
+	 * here, it is the call to the recvreq callback from the
+	 * server configuration.
+	 * see http_server_config_t and httpserver_create
+	 */
+	if (client->sockdata->size <= client->sockdata->length)
+		_buffer_reset(client->sockdata);
+	size = client->recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+	if (size > 0)
 	{
-		/**
-		 * here, it is the call to the recvreq callback from the
-		 * server configuration.
-		 * see http_server_config_t and httpserver_create
-		 */
-		size = client->recvreq(client->ctx, tempo->offset, tempo->size - tempo->length);
-		if (size > 0)
-		{
-			tempo->length += size;
-			tempo->data[tempo->length] = 0;
-		}
-		else if (size < 0)
-		{
-			_buffer_destroy(tempo);
-			if (errno != EAGAIN)
-				return EREJECT;
-			else
-				return ECONTINUE;
-		}
-		else if (size == 0) /* socket shutdown */
-		{
-			_buffer_destroy(tempo);
+		client->sockdata->length += size;
+		client->sockdata->data[client->sockdata->length] = 0;
+	}
+	else if (size < 0)
+	{
+		if (errno != EAGAIN)
 			return EREJECT;
-		}
+		else
+			return ECONTINUE;
+	}
+	else if (size == 0) /* socket shutdown */
+	{
+		return EREJECT;
+	}
 
-		ret = _httpmessage_parserequest(client->request, tempo);
-	} while (ret == EINCOMPLETE && (tempo->size - tempo->length));
+	/**
+	 * the receviing may complete the buffer, but the parser has
+	 * to check the whole buffer.
+	 **/
+	client->sockdata->offset = client->sockdata->data;
+	ret = _httpmessage_parserequest(client->request, client->sockdata);
 
 	if (ret == EREJECT)
 	{
@@ -864,7 +868,6 @@ static int _httpclient_request(http_client_t *client)
 			 **/
 			client->request->response = _httpmessage_create(client, client->request);
 		}
-		_buffer_destroy(tempo);
 		/**
 		 * the parsing found an error in the request
 		 * the treatment is completed and is successed
@@ -899,7 +902,6 @@ static int _httpclient_request(http_client_t *client)
 	 **/
 	client->request->content = NULL;
 
-	_buffer_destroy(tempo);
 	switch (ret)
 	{
 		case ESUCCESS:

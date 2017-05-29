@@ -83,6 +83,8 @@ struct http_client_s
 
 	http_client_modctx_t *modctx; /* list of pointers returned by getctx of each mod */
 
+	buffer_t *sockdata;
+
 	dbentry_t *session;
 	buffer_t *session_storage;
 #ifndef WIN32
