@@ -371,7 +371,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					message->version = message->client->server->config->version;
 					message->result = RESULT_405;
 					ret = EREJECT;
-					warn("parse reject method");
+					warn("parse reject method %s", data->offset);
 				}
 			}
 			break;
@@ -396,8 +396,13 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					{
 						case ' ':
 						{
-							uri = _buffer_append(message->uri, uri, length);
 							next = PARSE_VERSION;
+						}
+						break;
+						case '?':
+						{
+							length++;
+							message->query = message->uri->data + length + 1;
 						}
 						break;
 						case '\r':
@@ -406,7 +411,6 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 							next = PARSE_HEADER;
 							if (*(data->offset + 1) == '\n')
 								data->offset++;
-							uri = _buffer_append(message->uri, uri, length);
 						}
 						break;
 						default:
@@ -416,53 +420,28 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					}
 					data->offset++;
 				}
-				
-				if (next == PARSE_URI)
+
+				if (length > 0)
 				{
 					uri = _buffer_append(message->uri, uri, length);
-				}
-				if (uri == NULL)
-				{
-					_buffer_destroy(message->uri);
-					int chunksize = CHUNKSIZE;
-					if (message->client)
-						chunksize = message->client->server->config->chunksize;
-					message->uri = _buffer_create(1, chunksize);
-					message->version = message->client->server->config->version;
+					if (uri == NULL && message->query == NULL)
+					{
+						message->version = message->client->server->config->version;
 #ifndef HTTP_STATUS_PARTIAL
-					message->result = RESULT_414;
+						message->result = RESULT_414;
 #else
-					message->result = RESULT_404;
+						message->result = RESULT_404;
 #endif
-					ret = EREJECT;
-					warn("parse reject uri too long");
-				}
-				else
-					message->query = uri;
-				if (message->uri->maxchunks == 0)
-				{
-					message->version = message->client->server->config->version;
-#ifndef HTTP_STATUS_PARTIAL
-					message->result = RESULT_414;
-#else
-					message->result = RESULT_404;
-#endif
-					ret = EREJECT;
-					warn("parse reject uri too long");
+						ret = EREJECT;
+						warn("parse reject uri too long 2: %s %s", message->uri->data, data->data);
+					}
 				}
 				if (next != PARSE_URI)
 				{
 					if (message->uri->length > 0)
 					{
-						int i;
-						for (i = 0; i < message->uri->length; i++)
-						{
-							if (message->uri->data[i] == '?')
-							{
-								message->query = message->uri->data + i + 1;
-								break;
-							}
-						}
+						if (message->query == NULL)
+							message->query = message->uri->data + message->uri->length;
 						dbg("new request for %s", message->uri->data);
 					}
 					else
@@ -470,7 +449,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 						message->version = message->client->server->config->version;
 						message->result = RESULT_400;
 						ret = EREJECT;
-						warn("parse reject uri too long");
+						warn("parse reject uri too short");
 					}
 				}
 			}
