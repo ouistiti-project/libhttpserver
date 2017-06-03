@@ -212,6 +212,7 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 			data = vrealloc(buffer->data, buffer->size + chunksize);
 			if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > BUFFERMAX)
 			{
+				buffer->maxchunks = 0;
 				warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
 				return NULL;
 			}
@@ -223,14 +224,21 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 				buffer->data = data;
 			}
 		}
+		else
+			length = 0;
 		length = (length > chunksize)? chunksize: length;
 	}
 	char *offset = buffer->offset;
-	memcpy(buffer->offset, data, length);
-	buffer->length += length;
-	buffer->offset += length;
-	*buffer->offset = '\0';
-	return offset;
+	if (length > 0)
+	{
+		memcpy(buffer->offset, data, length);
+		buffer->length += length;
+		buffer->offset += length;
+		*buffer->offset = '\0';
+		return offset;
+	}
+	else
+		return NULL;
 }
 
 static void _buffer_shrink(buffer_t *buffer)
@@ -1585,9 +1593,9 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value)
 			chunksize = message->client->server->config->chunksize;
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
 	}
-	key = _buffer_append(message->headers_storage, key, strlen(key));
+	_buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
-	value = _buffer_append(message->headers_storage, value, strlen(value) + 1);
+	_buffer_append(message->headers_storage, value, strlen(value) + 1);
 }
 
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
@@ -1601,9 +1609,10 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	dbg("header %s => %s", key, value);
 	if (value)
 	{
-		if (!strncasecmp(key, str_connection, 10) && strcasestr(value, "Keep-Alive") )
+		if (!strncasecmp(key, str_connection, 10))
 		{
-			message->keepalive = 1;
+			if (strcasestr(value, "Keep-Alive"))
+				message->keepalive = 1;
 		}
 		if (!strncasecmp(key, str_contentlength, 14))
 		{
