@@ -148,6 +148,7 @@ static const char *_http_message_result[] =
 	" 404 File Not Found",
 	" 405 Method Not Allowed",
 #ifndef HTTP_STATUS_PARTIAL
+	" 101 Switching Protocols",
 	" 301 Moved Permanently",
 	" 302 Found",
 	" 304 Not Modified",
@@ -1221,7 +1222,8 @@ static int _httpclient_run(http_client_t *client)
 				(client->state & CLIENT_KEEPALIVE) &&
 				request && request->response->version > HTTP10 &&
 				((client->state & ~CLIENT_ERROR) == client->state) &&
-				request->response->content_length > 0)
+				request->response->content_length > 0 &&
+				request->response->result != RESULT_101) 
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive %p", client);
