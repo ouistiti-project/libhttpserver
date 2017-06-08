@@ -13,6 +13,16 @@ slib-$(SLIB_HTTPSERVER)+=httpserver
 httpserver_SOURCES+=httpserver.c tcpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
 
+ifneq ($(MAXCHUNKS_HEADER),)
+httpserver_CFLAGS+=-DMAXCHUNKS_HEADER=$(MAXCHUNKS_HEADER)
+endif
+ifneq ($(MAXCHUNKS_SESSION),)
+httpserver_CFLAGS+=-DMAXCHUNKS_SESSION=$(MAXCHUNKS_SESSION)
+endif
+ifneq ($(MAXCHUNKS_URI),)
+httpserver_CFLAGS+=-DMAXCHUNKS_URI=$(MAXCHUNKS_URI)
+endif
+
 ifeq ($(VTHREAD_TYPE),)
 VTHREAD_TYPE:=fork
 endif

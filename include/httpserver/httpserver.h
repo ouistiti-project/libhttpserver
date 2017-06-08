@@ -57,8 +57,18 @@ extern "C"
  * If a new module uses this feature and needs more than 3 chunk before
  * to send, the value MAXCHUNKS_CONTENT has to be increased.
  */
+#ifndef MAXCHUNKS_HEADER
 #define MAXCHUNKS_HEADER  8
+#endif
+#ifndef MAXCHUNKS_CONTENT
 #define MAXCHUNKS_CONTENT 3
+#endif
+#ifndef MAXCHUNKS_SESSION
+#define MAXCHUNKS_SESSION 2
+#endif
+#ifndef MAXCHUNKS_URI
+#define MAXCHUNKS_URI 2
+#endif
 
 #define ESUCCESS 0
 #define EINCOMPLETE -1

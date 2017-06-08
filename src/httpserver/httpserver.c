@@ -388,7 +388,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					int chunksize = CHUNKSIZE;
 					if (message->client)
 						chunksize = message->client->server->config->chunksize;
-					message->uri = _buffer_create(2, chunksize);
+					message->uri = _buffer_create(MAXCHUNKS_URI, chunksize);
 				}
 				while (data->offset < (data->data + data->size) && next == PARSE_URI)
 				{
@@ -1041,6 +1041,12 @@ static int _httpclient_run(http_client_t *client)
 			{
 				client->state |= CLIENT_KEEPALIVE;
 			}
+			/**
+			 * The request was pushed to the request_queue with 
+			 * _httpclient_pushrequest. The next loop will unqueue
+			 * this request. Here the client->request is free to be
+			 * reused for a new request.
+			 */
 			client->request = NULL;
 		}
 		break;
@@ -1847,7 +1853,7 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 				int chunksize = CHUNKSIZE;
 				if (message->client)
 					chunksize = message->client->server->config->chunksize;
-				message->client->session_storage = _buffer_create(2, chunksize);
+				message->client->session_storage = _buffer_create(MAXCHUNKS_SESSION, chunksize);
 			}
 			sessioninfo->key = 
 				_buffer_append(message->client->session_storage, key, strlen(key) + 1);
