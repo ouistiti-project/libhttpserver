@@ -1622,6 +1622,9 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 					result = RESULT_405;
 				break;
 #ifndef HTTP_STATUS_PARTIAL
+				case 101:
+					result = RESULT_101;
+				break;
 				case 301:
 					result = RESULT_301;
 				break;
