@@ -1214,9 +1214,7 @@ static int _httpclient_run(http_client_t *client)
 			if (client->server->config->keepalive &&
 				(client->state & CLIENT_KEEPALIVE) &&
 				request && request->response->version > HTTP10 &&
-				((client->state & ~CLIENT_ERROR) == client->state) &&
-				request->response->content_length > 0 &&
-				request->response->result != RESULT_101) 
+				request->response->content_length > 0)
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive %p", client);
