@@ -1214,10 +1214,13 @@ static int _httpclient_run(http_client_t *client)
 			 *     (the webbrowser nees to know when the response is complete,
 			 *      then the response needs a content length).
 			 */
-			if (client->server->config->keepalive &&
+			if (client->state & CLIENT_LOCKED)
+			{
+				client->state |= CLIENT_STOPPED;
+			}
+			else if (client->server->config->keepalive &&
 				(client->state & CLIENT_KEEPALIVE) &&
-				request && request->response->version > HTTP10 &&
-				request->response->content_length > 0)
+				request && request->response->version > HTTP10)
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive %p", client);
@@ -1691,6 +1694,12 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 int httpmessage_keepalive(http_message_t *message)
 {
 	message->keepalive = 1;
+	return message->client->sock;
+}
+
+int httpmessage_lock(http_message_t *message)
+{
+	message->client->state |= CLIENT_LOCKED;
 	return message->client->sock;
 }
 

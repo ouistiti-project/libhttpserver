@@ -349,6 +349,19 @@ int httpmessage_content(http_message_t *message, char **content, int *length);
 int httpmessage_keepalive(http_message_t *message);
 
 /**
+ * @brief lock the connection
+ *
+ * the server will keep the client connection opened
+ * any thread can use this connection to send more data directly
+ * onto the socket.
+ *
+ * @param message the response message to update
+ *
+ * @return the client socket descriptor
+ */
+int httpmessage_lock(http_message_t *message);
+
+/**
  * @brief create response for data stream
  *
  * @param message the response message to update
