@@ -1,11 +1,13 @@
 ifeq ($(STATIC),y)
 SLIB_HTTPSERVER:=y
 SLIB_URI:=y
+SLIB_WEBSOCKET:=$(WEBSOCKET)
 endif
 
 ifeq ($(DYNAMIC),y)
 DLIB_HTTPSERVER:=y
 DLIB_URI:=y
+DLIB_WEBSOCKET:=$(WEBSOCKET)
 endif
 
 lib-$(DLIB_HTTPSERVER)+=httpserver
@@ -36,8 +38,14 @@ slib-$(SLIB_URI)+=uri
 uri_SOURCES+=uri.c
 uri_CFLAGS+=-I../../include/httpserver
 
+lib-$(DLIB_WEBSOCKET)+=websocket
+slib-$(SLIB_WEBSOCKET)+=websocket
+websocket_SOURCES+=websocket.c
+websocket_CFLAGS+=-I../../include/httpserver
+
 httpserver_CFLAGS-$(DEBUG)+=-g -DDEBUG
 uri_CFLAGS-$(DEBUG)+=-g -DDEBUG
+websocket_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
 ifeq ($(WIN32),1)
 httpserver_LDFLAGS+=-lws2_32
