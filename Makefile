@@ -2,6 +2,7 @@ include scripts.mk
 
 subdir-y+=src/httpserver
 subdir-$(MBEDTLS)+=src/mod_mbedtls.mk
+subdir-$(WEBSOCKET)+=src/mod_websocket.mk
 subdir-$(FORMPARSER)+=src/mod_formparser.mk
 subdir-$(DATE)+=src/mod_date.mk
 subdir-$(TEST)+=src/test.mk

@@ -57,8 +57,18 @@ extern "C"
  * If a new module uses this feature and needs more than 3 chunk before
  * to send, the value MAXCHUNKS_CONTENT has to be increased.
  */
+#ifndef MAXCHUNKS_HEADER
 #define MAXCHUNKS_HEADER  8
+#endif
+#ifndef MAXCHUNKS_CONTENT
 #define MAXCHUNKS_CONTENT 3
+#endif
+#ifndef MAXCHUNKS_SESSION
+#define MAXCHUNKS_SESSION 2
+#endif
+#ifndef MAXCHUNKS_URI
+#define MAXCHUNKS_URI 2
+#endif
 
 #define ESUCCESS 0
 #define EINCOMPLETE -1
@@ -90,6 +100,7 @@ typedef enum
 	RESULT_404,
 	RESULT_405,
 #ifndef HTTP_STATUS_PARTIAL
+	RESULT_101,
 	RESULT_301,
 	RESULT_302,
 	RESULT_304,
@@ -336,6 +347,19 @@ int httpmessage_content(http_message_t *message, char **content, int *length);
  * @return the client socket descriptor
  */
 int httpmessage_keepalive(http_message_t *message);
+
+/**
+ * @brief lock the connection
+ *
+ * the server will keep the client connection opened
+ * any thread can use this connection to send more data directly
+ * onto the socket.
+ *
+ * @param message the response message to update
+ *
+ * @return the client socket descriptor
+ */
+int httpmessage_lock(http_message_t *message);
 
 /**
  * @brief create response for data stream

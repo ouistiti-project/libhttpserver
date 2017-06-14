@@ -148,6 +148,7 @@ static const char *_http_message_result[] =
 	" 404 File Not Found",
 	" 405 Method Not Allowed",
 #ifndef HTTP_STATUS_PARTIAL
+	" 101 Switching Protocols",
 	" 301 Moved Permanently",
 	" 302 Found",
 	" 304 Not Modified",
@@ -211,6 +212,7 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 			data = vrealloc(buffer->data, buffer->size + chunksize);
 			if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > BUFFERMAX)
 			{
+				buffer->maxchunks = 0;
 				warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
 				return NULL;
 			}
@@ -222,14 +224,34 @@ static char *_buffer_append(buffer_t *buffer, char *data, int length)
 				buffer->data = data;
 			}
 		}
+		else
+			length = 0;
 		length = (length > chunksize)? chunksize: length;
 	}
 	char *offset = buffer->offset;
-	memcpy(buffer->offset, data, length);
-	buffer->length += length;
-	buffer->offset += length;
-	*buffer->offset = '\0';
-	return offset;
+	if (length > 0)
+	{
+		memcpy(buffer->offset, data, length);
+		buffer->length += length;
+		buffer->offset += length;
+		*buffer->offset = '\0';
+		return offset;
+	}
+	else
+		return NULL;
+}
+
+static void _buffer_shrink(buffer_t *buffer)
+{
+	buffer->length -= (buffer->offset - buffer->data);
+	while (buffer->length > 0 && (*(buffer->offset) == 0))
+	{
+		buffer->offset++;
+		buffer->length--;
+	}
+	memcpy(buffer->data, buffer->offset, buffer->length);
+	buffer->data[buffer->length] = '\0';
+	buffer->offset = buffer->data;
 }
 
 static void _buffer_reset(buffer_t *buffer)
@@ -349,6 +371,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					message->version = message->client->server->config->version;
 					message->result = RESULT_405;
 					ret = EREJECT;
+					warn("parse reject method %s", data->offset);
 				}
 			}
 			break;
@@ -365,7 +388,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					int chunksize = CHUNKSIZE;
 					if (message->client)
 						chunksize = message->client->server->config->chunksize;
-					message->uri = _buffer_create(2, chunksize);
+					message->uri = _buffer_create(MAXCHUNKS_URI, chunksize);
 				}
 				while (data->offset < (data->data + data->size) && next == PARSE_URI)
 				{
@@ -373,24 +396,21 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					{
 						case ' ':
 						{
-							*data->offset = '\0';
-							uri = _buffer_append(message->uri, uri, length + 1);
 							next = PARSE_VERSION;
 						}
 						break;
-						case '\r':
+						case '?':
 						{
-							next = PARSE_HEADER;
-							*data->offset = '\0';
-							if (*(data->offset + 1) == '\n')
-								data->offset++;
-							uri = _buffer_append(message->uri, uri, length + 1);
+							length++;
+							message->query = message->uri->data + length + 1;
 						}
 						break;
+						case '\r':
 						case '\n':
 						{
 							next = PARSE_HEADER;
-							*data->offset = '\0';
+							if (*(data->offset + 1) == '\n')
+								data->offset++;
 						}
 						break;
 						default:
@@ -400,51 +420,37 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					}
 					data->offset++;
 				}
-				
-				if (next == PARSE_URI)
+
+				if (length > 0)
 				{
 					uri = _buffer_append(message->uri, uri, length);
-				}
-				if (uri == NULL)
-				{
-					_buffer_destroy(message->uri);
-					int chunksize = CHUNKSIZE;
-					if (message->client)
-						chunksize = message->client->server->config->chunksize;
-					message->uri = _buffer_create(1, chunksize);
-					message->version = message->client->server->config->version;
-					message->result = RESULT_414;
-					ret = EREJECT;
-				}
-				else
-					message->query = uri;
-				if (message->uri->maxchunks == 0)
-				{
-					message->version = message->client->server->config->version;
-					message->result = RESULT_414;
-					ret = EREJECT;
+					if (uri == NULL && message->query == NULL)
+					{
+						message->version = message->client->server->config->version;
+#ifndef HTTP_STATUS_PARTIAL
+						message->result = RESULT_414;
+#else
+						message->result = RESULT_404;
+#endif
+						ret = EREJECT;
+						warn("parse reject uri too long 2: %s %s", message->uri->data, data->data);
+					}
 				}
 				if (next != PARSE_URI)
 				{
-					if (message->uri->length > 1)
+					if (message->uri->length > 0)
 					{
-						int i;
-						for (i = 0; i < message->uri->length; i++)
-						{
-							if (message->uri->data[i] == '?')
-							{
-								message->query = message->uri->data + i + 1;
-								break;
-							}
-						}
+						if (message->query == NULL)
+							message->query = message->uri->data + message->uri->length;
+						dbg("new request for %s", message->uri->data);
 					}
 					else
 					{
 						message->version = message->client->server->config->version;
 						message->result = RESULT_400;
 						ret = EREJECT;
+						warn("parse reject uri too short");
 					}
-					dbg("new request for %s", message->uri->data);
 				}
 			}
 			break;
@@ -474,46 +480,47 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_VERSION:
 			{
+				/**
+				 * There is not enougth data to parse the version.
+				 * Move the rest to the beginning and request
+				 * more data.
+				 **/
+				if (data->offset + 10 > data->data + data->size)
+				{
+					_buffer_shrink(data);
+					data->offset = data->data + data->length;
+					break;
+				}
+				char *version = data->offset;
 				int i;
 				for (i = HTTP09; i < HTTPVERSIONS; i++)
 				{
 					int length = strlen(_http_message_version[i]);
-					if (!strncasecmp(data->offset, _http_message_version[i], length))
+					if (!strncasecmp(version, _http_message_version[i], length))
 					{
-						message->version = i;
 						data->offset += length;
+						if (*data->offset == '\r')
+							data->offset++;
+						if (*data->offset == '\n')
+						{
+							data->offset++;
+							next = PARSE_HEADER;
+						}
+						else
+						{
+							ret = EREJECT;
+							message->result = RESULT_400;
+							warn("bad request %s", data->data);
+						}
+						message->version = i;
 						break;
 					}
 				}
 				if (i == HTTPVERSIONS)
-					ret = EREJECT;
-				while (data->offset < (data->data + data->size) && next == PARSE_VERSION)
 				{
-					switch (*data->offset)
-					{
-						case '\r':
-						{
-							next = PARSE_HEADER;
-							if (data->offset[1] == '\n')
-							{
-								data->offset++;
-							}
-						}
-						break;
-						case '\n':
-						{
-							next = PARSE_HEADER;
-							if (data->offset[1] == '\r')
-							{
-								data->offset++;
-							}
-						}
-						break;
-						default:
-						{
-						}
-					}
-					data->offset++;
+					ret = EREJECT;
+					message->result = RESULT_400;
+					warn("request bad protocol version %s", version);
 				}
 			}
 			break;
@@ -531,24 +538,33 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
 				{
-					if (*data->offset == '\n')
+					switch (*data->offset)
 					{
-						*data->offset = '\0';
+						case '\n':
+						{
+						/**
+						 * Empty Header line defines the end of the header and
+						 * the beginning fo the content.
+						 **/
 						if (length == 0 && !(message->state & PARSE_CONTINUE))
 						{
 							next = PARSE_HEADERNEXT;
 						}
 						else
 						{
-							header[length] = 0;
+							header[length] = '\0';
 							_buffer_append(message->headers_storage, header, length + 1);
 							header = data->offset + 1;
 							length = 0;
 							message->state &= ~PARSE_CONTINUE;
 						}
+						}
+						break;
+						case '\r':
+						break;
+						default:
+							length++;
 					}
-					else if (*data->offset != '\r')
-						length++;
 					data->offset++;
 				}
 				/* not enougth data to complete the line */
@@ -564,17 +580,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				/* create key/value entry for each "<key>:<value>\0" string */
 				_httpmessage_fillheaderdb(message);
 				/* reset the buffer to begin the content at the begining of the buffer */
-				data->length -= (data->offset - data->data);
-				while (data->length > 0 && (*(data->offset) == 0))
-				{
-					data->offset++;
-					data->length--;
-				}
-				if (data->length > 0)
-					memcpy(data->data, data->offset, data->length);
-				else
-					*data->data = '\0';
-				data->offset = data->data;
+				_buffer_shrink(data);
 				next = PARSE_CONTENT;
 			}
 			break;
@@ -718,6 +724,7 @@ http_client_t *httpclient_create(http_server_t *server)
 		callback = callback->next;
 	}
 	client->callback = client->callbacks;
+	client->sockdata = _buffer_create(1, client->server->config->chunksize);
 
 	return client;
 }
@@ -733,6 +740,8 @@ static void _httpclient_destroy(http_client_t *client)
 		free(callback);
 		callback = next;
 	}
+	if (client->sockdata)
+		_buffer_destroy(client->sockdata);
 	if (client->request)
 		httpmessage_destroy(client->request);
 	if (client->session_storage)
@@ -802,7 +811,6 @@ static int _httpclient_request(http_client_t *client)
 	 */
 	int ret = ECONTINUE;
 	int size = 0;
-	buffer_t *tempo = _buffer_create(1, client->server->config->chunksize);
 	if (client->request == NULL)
 		client->request = _httpmessage_create(client, NULL);
 
@@ -811,63 +819,82 @@ static int _httpclient_request(http_client_t *client)
 	 * server configuration.
 	 * see http_server_config_t and httpserver_create
 	 */
-	size = client->recvreq(client->ctx, tempo->data, tempo->size);
-	if (size < 0)
+	if (client->sockdata->size <= client->sockdata->length)
+		_buffer_reset(client->sockdata);
+	size = client->recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+	if (size > 0)
+	{
+		client->sockdata->length += size;
+		client->sockdata->data[client->sockdata->length] = 0;
+	}
+	else if (size < 0)
 	{
 		if (errno != EAGAIN)
-		{
-			_buffer_destroy(tempo);
 			return EREJECT;
-		}
-	}
-	else if (size > 0)
-	{
-		tempo->length = size;
-		ret = _httpmessage_parserequest(client->request, tempo);
-		dbg("_httpmessage_parserequest %d %X", ret, client->request->state & PARSE_MASK);
-		if (ret == EREJECT)
-		{
-			if (client->request->response == NULL)
-			{
-				/** parsing error before response creation */
-				client->request->response = _httpmessage_create(client, client->request);
-			}
-		}
 		else
-		{
-			/**
-			 * The request is partially read.
-			 * The connector can start to read the request when the header is ready.
-			 * A problem is the size of the header. It is impossible to start
-			 * the treatment before the end of the header, and it needs to
-			 * store the header informations. It takes some place in  memory,
-			 * depending of the server. It may be dangerous, a hacker can send
-			 * a request with a very big header.
-			 */
-			if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
-			{
-				if (client->request->response == NULL)
-					client->request->response = _httpmessage_create(client, client->request);
-				ret = _httpclient_checkconnector(client, client->request, client->request->response);
-				if (ret == EREJECT)
-					client->request->response->result = RESULT_404;
-			}
-		}
-		client->request->content = NULL;
+			return ECONTINUE;
 	}
-	else /* socket shutdown */
+	else if (size == 0) /* socket shutdown */
 	{
-		_buffer_destroy(tempo);
 		return EREJECT;
 	}
-	_buffer_destroy(tempo);
+
+	/**
+	 * the receviing may complete the buffer, but the parser has
+	 * to check the whole buffer.
+	 **/
+	client->sockdata->offset = client->sockdata->data;
+	ret = _httpmessage_parserequest(client->request, client->sockdata);
+
+	if (ret == EREJECT)
+	{
+		if (client->request->response == NULL)
+		{
+			/**
+			 * parsing error before response creation 
+			 * response's result will be the result set into the request.
+			 **/
+			client->request->response = _httpmessage_create(client, client->request);
+		}
+		/**
+		 * the parsing found an error in the request
+		 * the treatment is completed and is successed
+		 **/
+		return ESUCCESS;
+	}
+
+	/**
+	 * The request is partially read.
+	 * The connector can start to read the request when the header is ready.
+	 * A problem is the size of the header. It is impossible to start
+	 * the treatment before the end of the header, and it needs to
+	 * store the header informations. It takes some place in  memory,
+	 * depending of the server. It may be dangerous, a hacker can send
+	 * a request with a very big header.
+	 */
+	if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
+	{
+		if (client->request->response == NULL)
+			client->request->response = _httpmessage_create(client, client->request);
+		ret = _httpclient_checkconnector(client, client->request, client->request->response);
+		if (ret == EREJECT)
+		{
+			client->request->response->result = RESULT_404;
+			warn("request not found %s", client->request->uri->data);
+		}
+	}
+	/**
+	 * The request's content should be used by  "_httpclient_checkconnector"
+	 * if it is required. After that the content is not stored and useless.
+	 * The content is the "tempo" buffer, it is useless to free it.
+	 **/
+	client->request->content = NULL;
+
 	switch (ret)
 	{
 		case ESUCCESS:
 		{
-			if (!(client->state & CLIENT_RESPONSEREADY) &&
-				(client->request->type == MESSAGE_TYPE_PUT ||
-				client->request->type == MESSAGE_TYPE_DELETE))
+			if (!(client->state & CLIENT_RESPONSEREADY))
 			{
 				client->request->result = RESULT_405;
 			}
@@ -1000,7 +1027,7 @@ static int _httpclient_run(http_client_t *client)
 		{
 			if (client->request->response->result != RESULT_200)
 				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
-			else if (client->request->response->content == NULL)
+			else if (client->request->response->content == NULL && client->request->response->content_length == 0)
 				client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
 			else if (client->request->version == HTTP09)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1014,6 +1041,12 @@ static int _httpclient_run(http_client_t *client)
 			{
 				client->state |= CLIENT_KEEPALIVE;
 			}
+			/**
+			 * The request was pushed to the request_queue with 
+			 * _httpclient_pushrequest. The next loop will unqueue
+			 * this request. Here the client->request is free to be
+			 * reused for a new request.
+			 */
 			client->request = NULL;
 		}
 		break;
@@ -1105,6 +1138,9 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (client->state & CLIENT_RESPONSEREADY)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+			else if (request->response->content &&
+					request->response->content->length > 0)
+				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 			_buffer_destroy(header);
@@ -1112,21 +1148,20 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_RESPONSECONTENT:
 		{
-			if (request->type != MESSAGE_TYPE_HEAD &&
-				request->response->content &&
-				request->response->content->length > 0)
+			int size = 0;
+			if (request->response->content)
+				request->response->content->offset = request->response->content->data;
+			while (request->type != MESSAGE_TYPE_HEAD &&
+					request->response->content &&
+					request->response->content->length > 0)
 			{
-				int size = 0;
-				size = client->sendresp(client->ctx, request->response->content->data, request->response->content->length);
+				size = client->sendresp(client->ctx, request->response->content->offset, request->response->content->length);
 				if (size < 0)
 				{
 					client->state &= ~CLIENT_KEEPALIVE;
 					client->state |= CLIENT_ERROR;
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				else if (size == 0 && (request->response->content->length > 0))
-				{
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					break;
 				}
 				else if (size == request->response->content->length)
 				{
@@ -1135,6 +1170,7 @@ static int _httpclient_run(http_client_t *client)
 						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 					else
 						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
+					break;
 				}
 				else
 				{
@@ -1142,17 +1178,22 @@ static int _httpclient_run(http_client_t *client)
 					request->response->content->offset += size;
 				}
 			}
-			else
+			if (size == 0)
+			{
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				break;
+			}
 		}
 		break;
 		case CLIENT_PARSERERROR:
 		{
 			if (request->response->result == RESULT_200)
 				request->response->result = RESULT_400;
-			httpmessage_addheader(request->response, "Allow", "GET, POST, HEAD");
-			const char *value = _http_message_result[request->response->result];
-			httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
+			if (request->response->content == NULL)
+			{
+				const char *value = _http_message_result[request->response->result];
+				httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
+			}
 			if (request->response->version == HTTP09)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
@@ -1173,11 +1214,13 @@ static int _httpclient_run(http_client_t *client)
 			 *     (the webbrowser nees to know when the response is complete,
 			 *      then the response needs a content length).
 			 */
-			if (client->server->config->keepalive &&
+			if (client->state & CLIENT_LOCKED)
+			{
+				client->state |= CLIENT_STOPPED;
+			}
+			else if (client->server->config->keepalive &&
 				(client->state & CLIENT_KEEPALIVE) &&
-				request && request->response->version > HTTP10 &&
-				((client->state & ~CLIENT_ERROR) == client->state) &&
-				request->response->content_length > 0)
+				request && request->response->version > HTTP10)
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive %p", client);
@@ -1539,9 +1582,9 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value)
 			chunksize = message->client->server->config->chunksize;
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
 	}
-	key = _buffer_append(message->headers_storage, key, strlen(key));
+	_buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
-	value = _buffer_append(message->headers_storage, value, strlen(value) + 1);
+	_buffer_append(message->headers_storage, value, strlen(value) + 1);
 }
 
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
@@ -1553,59 +1596,66 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 	headerinfo->next = message->headers;
 	message->headers = headerinfo;
 	dbg("header %s => %s", key, value);
-	if (!strncasecmp(key, str_connection, 10) && strcasestr(value, "Keep-Alive") )
+	if (value)
 	{
-		message->keepalive = 1;
-	}
-	if (!strncasecmp(key, str_contentlength, 14))
-	{
-		message->content_length = atoi(value);
-	}
-	if (!strncasecmp(key, "Status", 6))
-	{
-		int result;
-		sscanf(value,"%d",&result);
-		switch (result)
+		if (!strncasecmp(key, str_connection, 10))
 		{
-			case 200:
-				result = RESULT_200;
-			break;
-			case 400:
-				result = RESULT_400;
-			break;
-			case 404:
-				result = RESULT_404;
-			break;
-			case 405:
-				result = RESULT_405;
-			break;
-#ifndef HTTP_STATUS_PARTIAL
-			case 301:
-				result = RESULT_301;
-			break;
-			case 302:
-				result = RESULT_302;
-			break;
-			case 304:
-				result = RESULT_304;
-			break;
-			case 401:
-				result = RESULT_401;
-			break;
-			case 414:
-				result = RESULT_414;
-			break;
-			case 505:
-				result = RESULT_505;
-			break;
-			case 511:
-				result = RESULT_511;
-			break;
-#endif
-			default:
-				result = RESULT_400;
+			if (strcasestr(value, "Keep-Alive"))
+				message->keepalive = 1;
 		}
-		httpmessage_result(message, result);
+		if (!strncasecmp(key, str_contentlength, 14))
+		{
+			message->content_length = atoi(value);
+		}
+		if (!strncasecmp(key, "Status", 6))
+		{
+			int result;
+			sscanf(value,"%d",&result);
+			switch (result)
+			{
+				case 200:
+					result = RESULT_200;
+				break;
+				case 400:
+					result = RESULT_400;
+				break;
+				case 404:
+					result = RESULT_404;
+				break;
+				case 405:
+					result = RESULT_405;
+				break;
+#ifndef HTTP_STATUS_PARTIAL
+				case 101:
+					result = RESULT_101;
+				break;
+				case 301:
+					result = RESULT_301;
+				break;
+				case 302:
+					result = RESULT_302;
+				break;
+				case 304:
+					result = RESULT_304;
+				break;
+				case 401:
+					result = RESULT_401;
+				break;
+				case 414:
+					result = RESULT_414;
+				break;
+				case 505:
+					result = RESULT_505;
+				break;
+				case 511:
+					result = RESULT_511;
+				break;
+#endif
+				default:
+					result = RESULT_400;
+			}
+			httpmessage_result(message, result);
+		}
 	}
 }
 
@@ -1620,7 +1670,7 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		{
 			httpmessage_addheader(message, (char *)str_contenttype, "text/plain");
 		}
-		else
+		else if (strcmp(type, "none"))
 		{
 			httpmessage_addheader(message, (char *)str_contenttype, type);
 		}
@@ -1633,7 +1683,9 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		_buffer_append(message->content, content, length);
 	}
 	if (message->content_length == 0)
+	{
 		message->content_length = length;
+	}
 	if (message->content != NULL && message->content->data != NULL )
 		return message->content->data;
 	return NULL;
@@ -1642,6 +1694,12 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 int httpmessage_keepalive(http_message_t *message)
 {
 	message->keepalive = 1;
+	return message->client->sock;
+}
+
+int httpmessage_lock(http_message_t *message)
+{
+	message->client->state |= CLIENT_LOCKED;
 	return message->client->sock;
 }
 
@@ -1808,7 +1866,7 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 				int chunksize = CHUNKSIZE;
 				if (message->client)
 					chunksize = message->client->server->config->chunksize;
-				message->client->session_storage = _buffer_create(2, chunksize);
+				message->client->session_storage = _buffer_create(MAXCHUNKS_SESSION, chunksize);
 			}
 			sessioninfo->key = 
 				_buffer_append(message->client->session_storage, key, strlen(key) + 1);

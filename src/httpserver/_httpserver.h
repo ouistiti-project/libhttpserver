@@ -49,6 +49,7 @@ typedef void (*http_close_t)(void *ctl);
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
+#define CLIENT_LOCKED  0x0800
 #define CLIENT_NONBLOCK 0x1000
 #define CLIENT_ERROR 0x2000
 #define CLIENT_RESPONSEREADY 0x4000
@@ -82,6 +83,8 @@ struct http_client_s
 	http_message_t *request_queue;
 
 	http_client_modctx_t *modctx; /* list of pointers returned by getctx of each mod */
+
+	buffer_t *sockdata;
 
 	dbentry_t *session;
 	buffer_t *session_storage;
