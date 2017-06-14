@@ -1189,8 +1189,11 @@ static int _httpclient_run(http_client_t *client)
 		{
 			if (request->response->result == RESULT_200)
 				request->response->result = RESULT_400;
-			const char *value = _http_message_result[request->response->result];
-			httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
+			if (request->response->content == NULL)
+			{
+				const char *value = _http_message_result[request->response->result];
+				httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
+			}
 			if (request->response->version == HTTP09)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
@@ -1664,7 +1667,7 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		{
 			httpmessage_addheader(message, (char *)str_contenttype, "text/plain");
 		}
-		else
+		else if (strcmp(type, "none"))
 		{
 			httpmessage_addheader(message, (char *)str_contenttype, type);
 		}
