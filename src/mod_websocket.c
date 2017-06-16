@@ -141,18 +141,18 @@ static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol, http
 	{
 		char *service = ctx->mod->config->services;
 		int length = 0;
-		char *end;
-		while (*service != '\0')
+		char *end = service;
+		while (end != NULL)
 		{
 			end = strchr(service, ',');
 			if (end)
-				length = service - end;
+				length = end - service;
 			else
 				length = strlen(service);
 			if (!strncmp(protocol, service, length))
 			{
 				int socket = httpmessage_lock(response);
-				if (ctx->mod->run(ctx->mod->runarg, socket, service, request) > 0)
+				if (ctx->mod->run(ctx->mod->runarg, socket, protocol, request) > 0)
 				{
 					httpmessage_addheader(response, str_connection, str_upgrade);
 					httpmessage_addheader(response, str_upgrade, str_websocket);
@@ -163,7 +163,7 @@ static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol, http
 				}
 				break;
 			}
-			service += length;
+			service += length + 1;
 		}
 	}
 
