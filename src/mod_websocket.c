@@ -82,6 +82,7 @@
 #include "httpserver/httpserver.h"
 #include "httpserver/uri.h"
 #include "httpserver/mod_websocket.h"
+#include "httpserver/utils.h"
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -192,10 +193,9 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 	}
 	if (ret == EREJECT)
 	{
-		char *protocol = httpmessage_REQUEST(request, "uri");
-		if (protocol[0] == '/')
-			protocol++;
+		char *protocol = utils_urldecode(httpmessage_REQUEST(request, "uri"));
 		ret = _mod_websocket_check(ctx, protocol, request, response);
+		free(protocol);
 	}
 	return ret;
 }
