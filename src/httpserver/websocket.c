@@ -25,15 +25,19 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
+#include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#ifndef WIN32
-# include <netdb.h>
-#else
-# include <ws2tcpip.h>
-#endif
+#include <arpa/inet.h>
 
 #include "websocket.h"
+
+#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#ifdef DEBUG
+#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#else
+# define dbg(...)
+#endif
 
 /*********************************************************************/
 struct frame_s
