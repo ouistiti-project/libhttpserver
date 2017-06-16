@@ -71,13 +71,11 @@ enum frame_opcode_e
 	fo_creserveF,
 };
 
-static onclose_t _onclose;
-static onping_t _onping;
+static websocket_t *_config;
 
-void websocket_init(onclose_t onclose, onping_t onping)
+void websocket_init(websocket_t *config)
 {
-	_onclose = onclose;
-	_onping = onping;
+	_config = config;
 }
 
 int websocket_unframed(char *in, int inlength, char *out, void *arg)
@@ -146,14 +144,14 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 				{
 					out[payloadlen] = 0;
 				}
-				if (_onclose)
-					_onclose(arg, status);
+				if (_config->onclose)
+					_config->onclose(arg, status);
 			}
 			break;
 			case fo_ping:
 			{
-				if (_onping)
-					_onping(arg, out);
+				if (_config->onping)
+					_config->onping(arg, out);
 			}
 			break;
 			default:

@@ -28,15 +28,26 @@
 #ifndef __WEBSOCKET_H__
 #define __WEBSOCKET_H__
 
+#define MAX_FRAGMENTHEADER_SIZE 14
+typedef int (*onclose_t)(void *arg, int status);
+typedef int (*onping_t)(void *arg, char *message);
+
+#define WS_TEXT 153
+struct websocket_s
+{
+	int type;
+	int mtu;
+	onclose_t onclose;
+	onping_t onping;
+};
+typedef struct websocket_s websocket_t;
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-#define MAX_FRAGMENTHEADER_SIZE 14
-typedef int (*onclose_t)(void *arg, int status);
-typedef int (*onping_t)(void *arg, char *message);
-void websocket_init(onclose_t onclose, onping_t onping);
+void websocket_init(websocket_t *config);
 int websocket_unframed(char *in, int inlength, char *out, void *arg);
 int websocket_framed(char *in, int inlength, char *out, int *outlength, void *arg);
 
