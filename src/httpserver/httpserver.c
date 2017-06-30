@@ -1513,6 +1513,11 @@ void *httpmessage_private(http_message_t *message, void *data)
 	return message->private;
 }
 
+http_client_t *httpmessage_client(http_message_t *message)
+{
+	return message->client;
+}
+
 int httpmessage_content(http_message_t *message, char **data, int *size)
 {
 	*size = 0;

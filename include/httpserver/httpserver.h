@@ -282,6 +282,15 @@ http_message_t * httpmessage_create();
 void httpmessage_destroy(http_message_t *message);
 
 /**
+ * @brief return the client of the request
+ *
+ * @param message the response message to update
+ * 
+ * @return the client instance
+ */
+http_client_t *httpmessage_client(http_message_t *message);
+
+/**
  * @brief store and return private data for callback
  *
  * @param message the response message to update
