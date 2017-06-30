@@ -106,6 +106,8 @@ struct _mod_websocket_s
 struct _mod_websocket_ctx_s
 {
 	_mod_websocket_t *mod;
+	char *protocol;
+	int socket;
 };
 
 static char *str_connection = "Connection";
@@ -134,7 +136,7 @@ static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *
 	}
 }
 
-static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol, http_message_t *request, http_message_t *response)
+static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol)
 {
 	int ret = EREJECT;
 	if (protocol)
@@ -151,16 +153,7 @@ static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol, http
 				length = strlen(service);
 			if (!strncmp(protocol, service, length))
 			{
-				int socket = httpmessage_lock(response);
-				if (ctx->mod->run(ctx->mod->runarg, socket, protocol, request) > 0)
-				{
-					httpmessage_addheader(response, str_connection, str_upgrade);
-					httpmessage_addheader(response, str_upgrade, str_websocket);
-					httpmessage_addcontent(response, "none", "", -1);
-					httpmessage_result(response, RESULT_101);
-					dbg("Result 101");
-					ret = ESUCCESS;
-				}
+				ret = ESUCCESS;
 				break;
 			}
 			service += length + 1;
@@ -174,28 +167,55 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 	int ret = EREJECT;
 	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)arg;
 
-	char *connection = httpmessage_REQUEST(request, str_connection);
-	_mod_websocket_handshake(ctx, request, response);
-
-	if (strcasestr(connection, str_upgrade))
+	if (ctx->protocol == NULL)
 	{
-		char *upgrade = httpmessage_REQUEST(request, str_upgrade);
+		char *connection = httpmessage_REQUEST(request, str_connection);
+		_mod_websocket_handshake(ctx, request, response);
 
-		if (strcasestr(upgrade, str_websocket))
+		if (strcasestr(connection, str_upgrade))
 		{
-			char *protocol = httpmessage_REQUEST(request, str_protocol);
-			if (protocol[0] != '\0')
+			char *upgrade = httpmessage_REQUEST(request, str_upgrade);
+
+			if (strcasestr(upgrade, str_websocket))
 			{
-				httpmessage_addheader(response, str_protocol, protocol);
-				ret = _mod_websocket_check(ctx, protocol, request, response);
+				char *protocol = httpmessage_REQUEST(request, str_protocol);
+				if (protocol[0] != '\0')
+				{
+					ctx->protocol = malloc(strlen(protocol) + 1);
+					strcpy(ctx->protocol, protocol);
+					ret = _mod_websocket_check(ctx, ctx->protocol);
+					if (ret == ESUCCESS)
+						httpmessage_addheader(response, str_protocol, ctx->protocol);
+				}
 			}
 		}
+		if (ret == EREJECT)
+		{
+			ctx->protocol = utils_urldecode(httpmessage_REQUEST(request, "uri"));
+			ret = _mod_websocket_check(ctx, ctx->protocol);
+		}
+		if (ret == ESUCCESS)
+		{
+			ctx->socket = httpmessage_lock(response);
+			httpmessage_addheader(response, str_connection, str_upgrade);
+			httpmessage_addheader(response, str_upgrade, str_websocket);
+			httpmessage_addcontent(response, "none", "", -1);
+			httpmessage_result(response, RESULT_101);
+			dbg("Result 101");
+			ret = ECONTINUE;
+		}
+		else
+		{
+			free(ctx->protocol);
+			ctx->protocol = NULL;
+		}
 	}
-	if (ret == EREJECT)
+	else
 	{
-		char *protocol = utils_urldecode(httpmessage_REQUEST(request, "uri"));
-		ret = _mod_websocket_check(ctx, protocol, request, response);
-		free(protocol);
+		ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->protocol, request);
+		free(ctx->protocol);
+		ctx->protocol = NULL;
+		ret = ESUCCESS;
 	}
 	return ret;
 }
