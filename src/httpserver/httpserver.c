@@ -659,16 +659,22 @@ void *httpclient_context(http_client_t *client)
 http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
 {
 	http_recv_t previous = client->recvreq;
-	client->recvreq = func;
-	client->ctx = arg;
+	if (func)
+	{
+		client->recvreq = func;
+		client->ctx = arg;
+	}
 	return previous;
 }
 
 http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg)
 {
 	http_send_t previous = client->sendresp;
-	client->sendresp = func;
-	client->ctx = arg;
+	if (func)
+	{
+		client->sendresp = func;
+		client->ctx = arg;
+	}
 	return previous;
 }
 
