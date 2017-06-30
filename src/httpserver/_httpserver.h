@@ -64,6 +64,7 @@ typedef void (*http_close_t)(void *ctl);
 #define CLIENT_RESPONSECONTENT 0x0006
 #define CLIENT_PARSERERROR 0x0007
 #define CLIENT_COMPLETE 0x0008
+#define CLIENT_EXIT 0x0009
 struct http_client_s
 {
 	int sock;

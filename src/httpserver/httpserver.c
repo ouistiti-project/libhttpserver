@@ -945,7 +945,8 @@ static int _httpclient_run(http_client_t *client)
 		request = client->request_queue;
 
 	int request_ret = ECONTINUE;
-	if ((client->server->config->version >= (HTTP11 | HTTP_PIPELINE)) || 
+	if ((!(client->state & CLIENT_LOCKED) &&
+		(client->server->config->version >= (HTTP11 | HTTP_PIPELINE))) || 
 		((client->state & CLIENT_MACHINEMASK) < CLIENT_PUSHREQUEST))
 	{
 		request_ret = _httpclient_request(client);
@@ -1001,7 +1002,6 @@ static int _httpclient_run(http_client_t *client)
 			else if (request_ret == EREJECT)
 			{
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-				client->state &= ~CLIENT_KEEPALIVE;
 			}
 #ifdef VTHREAD
 			else if (request_ret == ECONTINUE)
@@ -1138,9 +1138,7 @@ static int _httpclient_run(http_client_t *client)
 			client->sendresp(client->ctx, "\r\n", 2);
 			if (size < 0)
 			{
-				client->state &= ~CLIENT_KEEPALIVE;
-				client->state |= CLIENT_ERROR;
-				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			else if (client->state & CLIENT_RESPONSEREADY)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1156,39 +1154,39 @@ static int _httpclient_run(http_client_t *client)
 		{
 			int size = 0;
 			if (request->response->content)
+			{
 				request->response->content->offset = request->response->content->data;
-			while (request->type != MESSAGE_TYPE_HEAD &&
-					request->response->content &&
-					request->response->content->length > 0)
-			{
-				size = client->sendresp(client->ctx, request->response->content->offset, request->response->content->length);
-				if (size < 0)
+				while (request->type != MESSAGE_TYPE_HEAD &&
+						request->response->content->length > 0)
 				{
-					client->state &= ~CLIENT_KEEPALIVE;
-					client->state |= CLIENT_ERROR;
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-					break;
-				}
-				else if (size == request->response->content->length)
-				{
-					_buffer_reset(request->response->content);
-					if (client->state & CLIENT_RESPONSEREADY)
-						client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
+					size = client->sendresp(client->ctx, request->response->content->offset, request->response->content->length);
+					if (size  > 0 && size != request->response->content->length)
+					{
+						request->response->content->length -= size;
+						request->response->content->offset += size;
+					}
 					else
-						client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
-					break;
+						break;
 				}
-				else
-				{
-					request->response->content->length -= size;
-					request->response->content->offset += size;
-				}
+				_buffer_reset(request->response->content);
 			}
-			if (size == 0)
-			{
+			if (client->state & CLIENT_RESPONSEREADY)
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-				break;
+			else if (client->state & CLIENT_LOCKED &&
+				request->connector && request->connector->func)
+			{
+				int ret;
+
+				ret = request->connector->func(request->connector->arg, request, request->response);
+				if (ret == ECONTINUE)
+					size = 1;
 			}
+			else if (size <= 0 && errno != EAGAIN)
+			{
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			else
+				client->state = CLIENT_PARSER2 | (client->state & ~CLIENT_MACHINEMASK);
 		}
 		break;
 		case CLIENT_PARSERERROR:
@@ -1199,12 +1197,12 @@ static int _httpclient_run(http_client_t *client)
 			{
 				const char *value = _http_message_result[request->response->result];
 				httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
+				client->state |= CLIENT_RESPONSEREADY;
 			}
 			if (request->response->version == HTTP09)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-			client->state |= CLIENT_RESPONSEREADY;
 		}
 		break;
 		case CLIENT_COMPLETE:
@@ -1214,7 +1212,6 @@ static int _httpclient_run(http_client_t *client)
 			 * to stay in keep alive the rules are:
 			 *  - the server has to be configurated;
 			 *  - the request uses the protocol HTTP11 and over
-			 *  - the client is not in error
 			 *  - the request asks to stay in keep alive mode
 			 *  - the response is understandable by the client
 			 *     (the webbrowser nees to know when the response is complete,
@@ -1226,27 +1223,15 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (client->server->config->keepalive &&
 				(client->state & CLIENT_KEEPALIVE) &&
-				request && request->response->version > HTTP10)
+				request && request->response->version > HTTP10 &&
+				request->keepalive)
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive %p", client);
 			}
 			else
 			{
-				client->state |= CLIENT_STOPPED;
-				http_client_modctx_t *modctx = client->modctx;
-				while (modctx)
-				{
-					http_client_modctx_t *next = modctx->next;
-					if (modctx->freectx)
-					{
-						modctx->freectx(modctx->ctx);
-					}
-					free(modctx);
-					modctx = next;
-				}
-				client->modctx = NULL;
-				client->close(client);
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			if (client->request_queue)
 			{
@@ -1254,6 +1239,24 @@ static int _httpclient_run(http_client_t *client)
 				httpmessage_destroy(client->request_queue);
 				client->request_queue = next;
 			}
+		}
+		break;
+		case CLIENT_EXIT:
+		{
+			client->state |= CLIENT_STOPPED;
+			http_client_modctx_t *modctx = client->modctx;
+			while (modctx)
+			{
+				http_client_modctx_t *next = modctx->next;
+				if (modctx->freectx)
+				{
+					modctx->freectx(modctx->ctx);
+				}
+				free(modctx);
+				modctx = next;
+			}
+			client->modctx = NULL;
+			client->close(client);
 		}
 		break;
 	}
