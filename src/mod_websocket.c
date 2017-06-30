@@ -36,6 +36,7 @@
 #include <dirent.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/ioctl.h>
 
 #if defined(MBEDTLS)
 # include <mbedtls/sha1.h>
@@ -83,6 +84,7 @@
 #include "httpserver/uri.h"
 #include "httpserver/mod_websocket.h"
 #include "httpserver/utils.h"
+#include "httpserver/websocket.h"
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -253,4 +255,147 @@ void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod
 void mod_websocket_destroy(void *data)
 {
 	free(data);
+}
+
+static int _websocket_socket(void *arg, char *protocol)
+{
+	mod_websocket_t *config = (mod_websocket_t *)arg;
+	int sock;
+	struct sockaddr_un addr;
+	memset(&addr, 0, sizeof(struct sockaddr_un));
+	addr.sun_family = AF_UNIX;
+	snprintf(addr.sun_path, sizeof(addr.sun_path) - 1, "%s/%s", config->path, protocol);
+
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sock > 0)
+	{
+		int ret = connect(sock, (struct sockaddr *) &addr, sizeof(addr));
+		if (ret < 0)
+		{
+			close(sock);
+			sock = -1;
+		}
+	}
+	if (sock == -1)
+	{
+		warn("websocket error: %s", strerror(errno));
+	}
+	return sock;
+}
+
+typedef struct _websocket_main_s _websocket_main_t;
+struct _websocket_main_s
+{
+	int client;
+	int socket;
+	http_recv_t recvreq;
+	http_send_t sendresp;
+	void *ctx;
+};
+
+static int websocket_close(void *arg, int status)
+{
+	_websocket_main_t *info = (_websocket_main_t *)arg;
+	char message[] = { 0x88, 0x02, 0x03, 0xEA};
+	return info->sendresp(info->ctx, message, sizeof(message));
+}
+
+static int websocket_pong(void *arg, char *data)
+{
+	_websocket_main_t *info = (_websocket_main_t *)arg;
+	char message[] = { 0x8A, 0x00};
+	return info->sendresp(info->ctx, message, sizeof(message));
+}
+
+static void *_websocket_main(void *arg)
+{
+	_websocket_main_t *info = (_websocket_main_t *)arg;
+	int socket = info->socket;
+	int client = info->client;
+	int end = 0;
+
+	while (!end)
+	{
+		fd_set rdfs;
+		int maxfd = socket;
+		FD_ZERO(&rdfs);
+		FD_SET(socket, &rdfs);
+		maxfd = (maxfd > client)?maxfd:client;
+		FD_SET(client, &rdfs);
+		int ret = select(maxfd + 1, &rdfs, NULL, NULL, NULL);
+		if (ret > 0 && FD_ISSET(socket, &rdfs))
+		{
+			int length = 0;
+			ret = ioctl(socket, FIONREAD, &length);
+			if (ret == 0 && length > 0)
+			{
+				char *buffer = calloc(1, length);
+				ret = info->recvreq(info->ctx, (char *)buffer, length);
+				//ret = read(socket, buffer, 63);
+				if (ret > 0)
+				{
+					ret = websocket_unframed(buffer, ret, buffer, arg);
+					ret = write(client, buffer, ret);
+				}
+				free(buffer);
+			}
+			else
+				end = 1;
+		}
+		else if (ret > 0 && FD_ISSET(client, &rdfs))
+		{
+			int length;
+			ret = ioctl(client, FIONREAD, &length);
+			while (length > 0)
+			{
+				char *buffer;
+				buffer = calloc(1, length);
+				ret = read(client, buffer, length);
+				if (ret > 0)
+				{
+					length -= ret;
+					ssize_t size = 0;
+					char *out = calloc(1, ret + MAX_FRAGMENTHEADER_SIZE);
+					while (size < ret)
+					{
+						ssize_t length;
+						int outlength = 0;
+						length = websocket_framed((char *)buffer, ret, out, &outlength, arg);
+						info->sendresp(info->ctx, (char *)out, outlength);
+						size += length;
+					}
+					free(out);
+				}
+				free(buffer);
+			}
+		}
+		else if (errno != EAGAIN)
+		{
+			end = 1;
+		}
+	}
+	close(socket);
+	close(client);
+	return 0;
+}
+
+int default_websocket_run(void *arg, int socket, char *protocol, http_message_t *request)
+{
+	int wssock = _websocket_socket(arg, protocol);
+
+	_websocket_main_t info = {.socket = socket, .client = wssock};
+	http_client_t *ctl = httpmessage_client(request);
+	info.ctx = httpclient_context(ctl);
+	info.recvreq = httpclient_addreceiver(ctl, NULL, NULL);
+	info.sendresp = httpclient_addsender(ctl, NULL, NULL);
+
+	websocket_t config =
+	{
+		.onclose = websocket_close,
+		.onping = websocket_pong,
+		.type = WS_TEXT,
+	};
+	websocket_init(&config);
+	_websocket_main(&info);
+	return wssock;
 }
