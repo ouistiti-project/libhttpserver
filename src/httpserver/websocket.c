@@ -71,7 +71,14 @@ enum frame_opcode_e
 	fo_creserveF,
 };
 
-static websocket_t *_config;
+static websocket_t default_config = 
+{
+	.type = WS_TEXT,
+	.mtu = 0,
+	.onclose = NULL,
+	.onping = NULL,
+};
+static websocket_t *_config = &default_config;
 
 void websocket_init(websocket_t *config)
 {
