@@ -149,6 +149,7 @@ static const char *_http_message_result[] =
 	" 405 Method Not Allowed",
 #ifndef HTTP_STATUS_PARTIAL
 	" 101 Switching Protocols",
+	" 206 Partial Content",
 	" 301 Moved Permanently",
 	" 302 Found",
 	" 304 Not Modified",
@@ -1642,6 +1643,9 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 #ifndef HTTP_STATUS_PARTIAL
 				case 101:
 					result = RESULT_101;
+				break;
+				case 206:
+					result = RESULT_206;
 				break;
 				case 301:
 					result = RESULT_301;
