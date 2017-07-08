@@ -27,6 +27,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #ifndef WIN32
 # include <netdb.h>
 #else
@@ -35,6 +36,14 @@
 
 #include "uri.h"
 #include "dbentry.h"
+
+#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#ifdef DEBUG
+#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#else
+# define dbg(...)
+#endif
 
 const char *g_localhost = "localhost";
 const char *g_defaultscheme = "http";
@@ -210,7 +219,7 @@ int uri_parse(uri_t *uri, char *string)
 					}
 					else
 					{
-						uri->path = it;
+						uri->path = it - 1;
 						state = e_path;
 					}
 				}
@@ -240,11 +249,10 @@ int uri_parse(uri_t *uri, char *string)
 				{
 					uri->host = uri->user;
 					uri->user = NULL;
-					uri->path = it + 1;
-					*it = 0;
+					uri->path = it;
 					state = e_path;
 				}
-				if (*it == ':')
+				else if (*it == ':')
 				{
 					uri->host = uri->user;
 					uri->user = NULL;
@@ -262,16 +270,14 @@ int uri_parse(uri_t *uri, char *string)
 				}
 				if (*it == '/')
 				{
-					uri->path = it + 1;
-					*it = 0;
+					uri->path = it;
 					state = e_path;
 				}
 			break;
 			case e_port:
 				if (*it == '/')
 				{
-					uri->path = it + 1;
-					*it = 0;
+					uri->path = it;
 					state = e_path;
 				}
 			break;
