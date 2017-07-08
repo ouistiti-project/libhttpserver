@@ -153,8 +153,9 @@ static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol)
 				length = end - service;
 			else
 				length = strlen(service);
-			if (!strncmp(protocol, service, length))
+			if (strlen(protocol) == length && !strncmp(protocol, service, length))
 			{
+				dbg("websocket: protocol %s", protocol);
 				ret = ESUCCESS;
 				break;
 			}
@@ -203,7 +204,6 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 			httpmessage_addheader(response, str_upgrade, str_websocket);
 			httpmessage_addcontent(response, "none", "", -1);
 			httpmessage_result(response, RESULT_101);
-			dbg("Result 101");
 			ret = ECONTINUE;
 		}
 		else
@@ -266,6 +266,7 @@ static int _websocket_socket(void *arg, char *protocol)
 	addr.sun_family = AF_UNIX;
 	snprintf(addr.sun_path, sizeof(addr.sun_path) - 1, "%s/%s", config->path, protocol);
 
+	dbg("websocket %s", addr.sun_path);
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock > 0)
 	{
@@ -335,7 +336,7 @@ static void *_websocket_main(void *arg)
 				if (ret > 0)
 				{
 					ret = websocket_unframed(buffer, ret, buffer, arg);
-					ret = write(client, buffer, ret);
+					ret = send(client, buffer, ret, MSG_NOSIGNAL);
 				}
 				free(buffer);
 			}
@@ -350,7 +351,7 @@ static void *_websocket_main(void *arg)
 			{
 				char *buffer;
 				buffer = calloc(1, length);
-				ret = read(client, buffer, length);
+				ret = recv(client, buffer, length, MSG_NOSIGNAL);
 				if (ret > 0)
 				{
 					length -= ret;
@@ -383,19 +384,26 @@ int default_websocket_run(void *arg, int socket, char *protocol, http_message_t 
 {
 	int wssock = _websocket_socket(arg, protocol);
 
-	_websocket_main_t info = {.socket = socket, .client = wssock};
-	http_client_t *ctl = httpmessage_client(request);
-	info.ctx = httpclient_context(ctl);
-	info.recvreq = httpclient_addreceiver(ctl, NULL, NULL);
-	info.sendresp = httpclient_addsender(ctl, NULL, NULL);
-
-	websocket_t config =
+	if (wssock > 0)
 	{
-		.onclose = websocket_close,
-		.onping = websocket_pong,
-		.type = WS_TEXT,
-	};
-	websocket_init(&config);
-	_websocket_main(&info);
+		_websocket_main_t info = {.socket = socket, .client = wssock};
+		http_client_t *ctl = httpmessage_client(request);
+		info.ctx = httpclient_context(ctl);
+		info.recvreq = httpclient_addreceiver(ctl, NULL, NULL);
+		info.sendresp = httpclient_addsender(ctl, NULL, NULL);
+
+		websocket_t config =
+		{
+			.onclose = websocket_close,
+			.onping = websocket_pong,
+			.type = 0,
+		};
+		websocket_init(&config);
+		_websocket_main(&info);
+	}
+	else
+	{
+		close(socket);
+	}
 	return wssock;
 }
