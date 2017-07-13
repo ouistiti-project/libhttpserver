@@ -155,6 +155,7 @@ static const char *_http_message_result[] =
 	" 304 Not Modified",
 	" 401 Unauthorized",
 	" 414 Request URI too long",
+	" 416 Range Not Satisfiable",
 	" 505 HTTP Version Not Supported",
 	" 511 Network Authentication Required",
 #endif
@@ -886,6 +887,10 @@ static int _httpclient_request(http_client_t *client)
 		ret = _httpclient_checkconnector(client, client->request, client->request->response);
 		if (ret == EREJECT)
 		{
+#ifdef DEBUG
+			if (client->request->response->result != RESULT_200)
+				err("Result error may return ESUCCESS");
+#endif
 			client->request->response->result = RESULT_404;
 			warn("request not found %s", client->request->uri->data);
 		}
@@ -1661,6 +1666,9 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 				break;
 				case 414:
 					result = RESULT_414;
+				break;
+				case 416:
+					result = RESULT_416;
 				break;
 				case 505:
 					result = RESULT_505;

@@ -107,6 +107,7 @@ typedef enum
 	RESULT_304,
 	RESULT_401,
 	RESULT_414,
+	RESULT_416,
 	RESULT_505,
 	RESULT_511,
 #endif
