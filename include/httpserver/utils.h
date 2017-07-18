@@ -1,5 +1,5 @@
 /*****************************************************************************
- * mod_websocket.h: Simple HTTPS module
+ * utils.h: Simple HTTP module
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
@@ -25,29 +25,24 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef __MOD_WEBSOCKET_H__
-#define __MOD_WEBSOCKET_H__
+#ifndef __UTILS_H__
+#define __UTILS_H__
 
-#ifdef __cplusplus
-extern "C"
+extern char *str_location;
+
+typedef enum
 {
-#endif
+	MIME_TEXTPLAIN,
+	MIME_TEXTHTML,
+	MIME_TEXTCSS,
+	MIME_APPLICATIONJAVASCRIPT,
+	MIME_IMAGEPNG,
+	MIME_IMAGEJPEG,
+	MIME_APPLICATIONOCTETSTREAM,
+} utils_mimetype_enum;
+const char *utils_getmime(char *path);
 
-typedef int (*mod_websocket_run_t)(void *arg, int socket, char *protocol, http_message_t *request);
-int default_websocket_run(void *arg, int socket, char *protocol, http_message_t *request);
-
-typedef struct mod_websocket_s mod_websocket_t;
-struct mod_websocket_s
-{
-	char *services;
-	char *path;
-};
-
-void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod_websocket_run_t run, void *runarg);
-void mod_websocket_destroy(void *data);
-
-#ifdef __cplusplus
-}
-#endif
-
+char *utils_urldecode(char *encoded);
+int utils_searchext(char *filepath, char *extlist);
+char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext, struct stat *filestat);
 #endif

@@ -25,15 +25,19 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
+#include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#ifndef WIN32
-# include <netdb.h>
-#else
-# include <ws2tcpip.h>
-#endif
+#include <arpa/inet.h>
 
 #include "websocket.h"
+
+#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#ifdef DEBUG
+#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#else
+# define dbg(...)
+#endif
 
 /*********************************************************************/
 struct frame_s
@@ -67,13 +71,18 @@ enum frame_opcode_e
 	fo_creserveF,
 };
 
-static onclose_t _onclose;
-static onping_t _onping;
-
-void websocket_init(onclose_t onclose, onping_t onping)
+static websocket_t default_config = 
 {
-	_onclose = onclose;
-	_onping = onping;
+	.type = WS_TEXT,
+	.mtu = 0,
+	.onclose = NULL,
+	.onping = NULL,
+};
+static websocket_t *_config = &default_config;
+
+void websocket_init(websocket_t *config)
+{
+	_config = config;
 }
 
 int websocket_unframed(char *in, int inlength, char *out, void *arg)
@@ -142,14 +151,14 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 				{
 					out[payloadlen] = 0;
 				}
-				if (_onclose)
-					_onclose(arg, status);
+				if (_config->onclose)
+					_config->onclose(arg, status);
 			}
 			break;
 			case fo_ping:
 			{
-				if (_onping)
-					_onping(arg, out);
+				if (_config->onping)
+					_config->onping(arg, out);
 			}
 			break;
 			default:
@@ -164,6 +173,8 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 int websocket_framed(char *in, int inlength, char *out, int *outlength, void *arg)
 {
 	struct frame_s frame;
+	int mtu = 126;
+	uint16_t payloadlen = 0;
 	memset(&frame, 0, sizeof(frame));
 /*
 	if (in[inlength - 1] == 0)
@@ -173,21 +184,41 @@ int websocket_framed(char *in, int inlength, char *out, int *outlength, void *ar
 	}
 	else
 */
-	frame.opcode = fo_text;
+	if (_config->type == WS_TEXT)
+		frame.opcode = fo_text;
+	else
+		frame.opcode = fo_binary;
 
 	frame.mask = 0;
 
+	if (_config->mtu)
+		mtu = _config->mtu;
 	if (inlength < 126)
 	{
 		frame.payloadlen = inlength;
 		frame.fin = 1;
 	}
+	else if ((inlength + sizeof(frame) + sizeof(uint16_t)) < 0xFFFF)
+	{
+		frame.payloadlen = 0x7E;
+		payloadlen = htons(inlength);
+		frame.fin = 1;
+	}
 	else
 	{
 		frame.payloadlen = 125;
+		inlength = 125;
 	}
 	memcpy(out, &frame, sizeof(frame));
-	memcpy(out + sizeof(frame), in, frame.payloadlen);
-	*outlength = frame.payloadlen + sizeof(frame);
-	return frame.payloadlen;
+	*outlength = sizeof(frame);
+	out += sizeof(frame);
+	if (payloadlen)
+	{
+		memcpy(out, &payloadlen, sizeof(payloadlen));
+		*outlength += sizeof(payloadlen);
+		out += sizeof(payloadlen);
+	}
+	memcpy(out, in, inlength);
+	*outlength += inlength;
+	return inlength;
 }

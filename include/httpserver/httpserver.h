@@ -101,11 +101,13 @@ typedef enum
 	RESULT_405,
 #ifndef HTTP_STATUS_PARTIAL
 	RESULT_101,
+	RESULT_206,
 	RESULT_301,
 	RESULT_302,
 	RESULT_304,
 	RESULT_401,
 	RESULT_414,
+	RESULT_416,
 	RESULT_505,
 	RESULT_511,
 #endif
@@ -280,6 +282,15 @@ http_message_t * httpmessage_create();
  * @param message the message to destroy
  */
 void httpmessage_destroy(http_message_t *message);
+
+/**
+ * @brief return the client of the request
+ *
+ * @param message the response message to update
+ * 
+ * @return the client instance
+ */
+http_client_t *httpmessage_client(http_message_t *message);
 
 /**
  * @brief store and return private data for callback

@@ -6,6 +6,7 @@ subdir-$(WEBSOCKET)+=src/mod_websocket.mk
 subdir-$(FORMPARSER)+=src/mod_formparser.mk
 subdir-$(DATE)+=src/mod_date.mk
 subdir-$(TEST)+=src/test.mk
+subdir-y+=src/utils.mk
 
 ifeq ($(CC),mingw32-gcc)
 WIN32:=1
