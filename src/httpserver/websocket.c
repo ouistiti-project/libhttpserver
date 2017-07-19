@@ -1,5 +1,6 @@
 /*****************************************************************************
  * websocket.c: Simple websocket framing support
+ * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
  *

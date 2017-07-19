@@ -1,5 +1,6 @@
 /*****************************************************************************
- * utils.c: ouistiti utils  for modules
+ * utils.c: http utils  for modules
+ * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
  *

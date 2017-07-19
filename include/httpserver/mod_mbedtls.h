@@ -1,9 +1,10 @@
 /*****************************************************************************
  * mod_mbedtls.h: Simple HTTPS module
+ * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
- * Authors: Marc Chalain <marc.chalain@gmail.com
+ * Authors: Marc Chalain <marc.chalain@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
