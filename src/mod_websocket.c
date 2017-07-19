@@ -1,5 +1,6 @@
 /*****************************************************************************
- * mod_websocket.c: callbacks and management of request method
+ * mod_websocket.c: websocket server module
+ * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
