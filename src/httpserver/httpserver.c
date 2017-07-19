@@ -1,5 +1,6 @@
 /*****************************************************************************
  * httpserver.c: Simple HTTP server
+ * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
@@ -680,16 +681,16 @@ http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *
 	return previous;
 }
 
-static int _httpmessage_buildheader(http_client_t *client, http_message_t *response, buffer_t *header)
+static int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header)
 {
-	if (response->headers == NULL)
-		_httpmessage_fillheaderdb(response);
-	dbentry_t *headers = response->headers;
-	http_message_version_e version = response->version;
-	if (response->version > (client->server->config->version & HTTPVERSION_MASK))
-		version = (client->server->config->version & HTTPVERSION_MASK);
-	_buffer_append(header, _http_message_version[version], strlen(_http_message_version[version]));
-	_buffer_append(header, (char *)_http_message_result[response->result], strlen(_http_message_result[response->result]));
+	if (message->headers == NULL)
+		_httpmessage_fillheaderdb(message);
+	dbentry_t *headers = message->headers;
+	http_message_version_e _version = message->version;
+	if (message->version > (version & HTTPVERSION_MASK))
+		_version = (version & HTTPVERSION_MASK);
+	_buffer_append(header, _http_message_version[_version], strlen(_http_message_version[_version]));
+	_buffer_append(header, (char *)_http_message_result[message->result], strlen(_http_message_result[message->result]));
 	_buffer_append(header, "\r\n", 2);
 	while (headers != NULL)
 	{
@@ -704,16 +705,16 @@ static int _httpmessage_buildheader(http_client_t *client, http_message_t *respo
 		_buffer_append(header, "\r\n", 2);
 		headers = headers->next;
 	}
-	if (response->content_length > 0)
+	if (message->content_length > 0)
 	{
-		if (response->keepalive > 0)
+		if (message->keepalive > 0)
 		{
 			char keepalive[32];
 			snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
 			_buffer_append(header, keepalive, strlen(keepalive));
 		}
 		char content_length[32];
-		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, response->content_length);
+		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, message->content_length);
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	header->offset = header->data;
@@ -1127,7 +1128,7 @@ static int _httpclient_run(http_client_t *client)
 		{
 			int size = 0;
 			buffer_t *header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
-			_httpmessage_buildheader(client, request->response, header);
+			_httpmessage_buildheader(request->response, client->server->config->version, header);
 			while (header->length > 0)
 			{
 				/**
