@@ -101,6 +101,7 @@ struct http_client_s
 };
 typedef struct http_client_s http_client_t;
 http_client_t *httpclient_create(http_server_t *server);
+int httpclient_socket(http_client_t *client);
 
 typedef int (*_httpserver_start_t)(http_server_t *server);
 typedef http_client_t *(*_httpserver_createclient_t)(http_server_t *server);

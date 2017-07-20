@@ -774,6 +774,11 @@ static int _httpclient_connect(http_client_t *client)
 	return 0;
 }
 
+int httpclient_socket(http_client_t *client)
+{
+	return client->sock;
+}
+
 static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int ret = ESUCCESS;
@@ -807,6 +812,14 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 		iterator = iterator->next;
 	}
 	return ret;
+}
+
+static int _httpclient_runconnector(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	http_connector_list_t *connector = request->connector;
+	if (connector && connector->func)
+		return connector->func(connector->arg, request, response);
+	return EREJECT;
 }
 
 static int _httpclient_request(http_client_t *client)
@@ -1065,9 +1078,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_PARSER1:
 		{
-			int ret = EREJECT;
-			if (request->connector)
-				ret = request->connector->func(request->connector->arg, request, request->response);
+			int ret = _httpclient_runconnector(client, request, request->response);
 			if (ret == EREJECT)
 			{
 				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
@@ -1087,9 +1098,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_PARSER2:
 		{
-			int ret = EREJECT;
-			if (request->connector && request->connector->func)
-				ret = request->connector->func(request->connector->arg, request, request->response);
+			int ret = _httpclient_runconnector(client, request, request->response);
 			if (ret == EREJECT)
 			{
 				/**
@@ -1179,14 +1188,13 @@ static int _httpclient_run(http_client_t *client)
 			}
 			if (client->state & CLIENT_RESPONSEREADY)
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-			else if (client->state & CLIENT_LOCKED &&
-				request->connector && request->connector->func)
+			else if (client->state & CLIENT_LOCKED)
 			{
-				int ret;
-
-				ret = request->connector->func(request->connector->arg, request, request->response);
+				int ret = _httpclient_runconnector(client, request, request->response);
 				if (ret == ECONTINUE)
 					size = 1;
+				else if (ret == EREJECT)
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			else if (size <= 0 && errno != EAGAIN)
 			{
@@ -1308,19 +1316,19 @@ static int _httpserver_connect(http_server_t *server)
 				_httpclient_destroy(client);
 				client = client2;
 			}
-			else if (client->sock > 0)
+			else if (httpclient_socket(client) > 0)
 			{
 #ifndef VTHREAD
 				if ((client->state & CLIENT_MACHINEMASK) != CLIENT_REQUEST)
 				{
-					FD_SET(client->sock, &wfds);
+					FD_SET(httpclient_socket(client), &wfds);
 				}
 				else
-					FD_SET(client->sock, &rfds);
+					FD_SET(httpclient_socket(client), &rfds);
 #else
-				FD_SET(client->sock, &rfds);
+				FD_SET(httpclient_socket(client), &rfds);
 #endif
-				maxfd = (maxfd > client->sock)? maxfd:client->sock;
+				maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
 				client = client->next;
 			}
 		}
@@ -1360,8 +1368,8 @@ static int _httpserver_connect(http_server_t *server)
 					currentctx = modctx;
 				}
 				int flags;
-				flags = fcntl(client->sock, F_GETFL, 0);
-				fcntl(client->sock, F_SETFL, flags | O_NONBLOCK);
+				flags = fcntl(httpclient_socket(client), F_GETFL, 0);
+				fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
 
 				client->next = server->clients;
 				server->clients = client;
@@ -1374,7 +1382,7 @@ static int _httpserver_connect(http_server_t *server)
 				while (client != NULL)
 				{
 					http_client_t *next = client->next;
-					if (FD_ISSET(client->sock, &rfds) || FD_ISSET(client->sock, &wfds))
+					if (FD_ISSET(httpclient_socket(client), &rfds) || FD_ISSET(httpclient_socket(client), &wfds))
 					{
 #ifndef VTHREAD
 						client->state |= CLIENT_RUNNING;
@@ -1721,13 +1729,13 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 int httpmessage_keepalive(http_message_t *message)
 {
 	message->keepalive = 1;
-	return message->client->sock;
+	return _httpclient_socket(message->client);
 }
 
 int httpmessage_lock(http_message_t *message)
 {
 	message->client->state |= CLIENT_LOCKED;
-	return message->client->sock;
+	return _httpclient_socket(message->client);
 }
 
 static char default_value[8] = {0};
