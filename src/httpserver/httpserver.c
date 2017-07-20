@@ -56,6 +56,8 @@ extern httpserver_ops_t *httpserver_ops;
 #endif
 
 #define CHUNKSIZE 64
+#define HTTPMESSAGE_KEEPALIVE 0x01
+#define HTTPMESSAGE_LOCKED 0x02
 
 struct buffer_s
 {
@@ -92,7 +94,7 @@ struct http_client_modctx_s
 struct http_message_s
 {
 	http_message_result_e result;
-	int keepalive;
+	int mode;
 	http_client_t *client;
 	http_message_t *response;
 	http_connector_list_t *connector;
@@ -667,7 +669,7 @@ static int _httpmessage_buildheader(http_message_t *message, int version, buffer
 	}
 	if (message->content_length > 0)
 	{
-		if (message->keepalive > 0)
+		if (message->mode & HTTPMESSAGE_KEEPALIVE > 0)
 		{
 			char keepalive[32];
 			snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
@@ -783,7 +785,7 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 		if (!strncasecmp(key, str_connection, 10))
 		{
 			if (strcasestr(value, "Keep-Alive"))
-				message->keepalive = 1;
+				message->mode |= HTTPMESSAGE_KEEPALIVE;
 		}
 		if (!strncasecmp(key, str_contentlength, 14))
 		{
@@ -881,13 +883,13 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 
 int httpmessage_keepalive(http_message_t *message)
 {
-	message->keepalive = 1;
+	message->mode |= HTTPMESSAGE_KEEPALIVE;
 	return httpclient_socket(message->client);
 }
 
 int httpmessage_lock(http_message_t *message)
 {
-	message->client->state |= CLIENT_LOCKED;
+	message->mode |= HTTPMESSAGE_LOCKED;
 	return httpclient_socket(message->client);
 }
 
@@ -1278,13 +1280,21 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
-			if (client->request->keepalive)
+			if (client->request->mode & HTTPMESSAGE_KEEPALIVE)
 			{
 				client->state |= CLIENT_KEEPALIVE;
 			}
-			if (client->request->response->keepalive)
+			if (client->request->response->mode & HTTPMESSAGE_KEEPALIVE)
 			{
 				client->state |= CLIENT_KEEPALIVE;
+			}
+			if (client->request->mode & HTTPMESSAGE_LOCKED)
+			{
+				client->state |= CLIENT_LOCKED;
+			}
+			if (client->request->response->mode & HTTPMESSAGE_LOCKED)
+			{
+				client->state |= CLIENT_LOCKED;
 			}
 			/**
 			 * The request was pushed to the request_queue with 
@@ -1457,8 +1467,7 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (client->server->config->keepalive &&
 				(client->state & CLIENT_KEEPALIVE) &&
-				request && request->response->version > HTTP10 &&
-				request->keepalive)
+				request && request->response->version > HTTP10)
 			{
 				client->state = CLIENT_NEW | (client->state & ~CLIENT_MACHINEMASK);
 				dbg("keepalive %p", client);
