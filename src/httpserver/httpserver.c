@@ -269,6 +269,9 @@ static void _buffer_destroy(buffer_t *buffer)
 	vfree(buffer);
 }
 
+/**********************************************************************
+ * http_message
+ */
 static http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent)
 {
 	http_message_t *message;
@@ -636,6 +639,260 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 	return ret;
 }
 
+static int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header)
+{
+	if (message->headers == NULL)
+		_httpmessage_fillheaderdb(message);
+	dbentry_t *headers = message->headers;
+	http_message_version_e _version = message->version;
+	if (message->version > (version & HTTPVERSION_MASK))
+		_version = (version & HTTPVERSION_MASK);
+	_buffer_append(header, _http_message_version[_version], strlen(_http_message_version[_version]));
+	_buffer_append(header, (char *)_http_message_result[message->result], strlen(_http_message_result[message->result]));
+	_buffer_append(header, "\r\n", 2);
+	while (headers != NULL)
+	{
+		if (!strcmp(headers->key, str_contentlength))
+		{
+			headers = headers->next;
+			continue;
+		}
+		_buffer_append(header, headers->key, strlen(headers->key));
+		_buffer_append(header, ": ", 2);
+		_buffer_append(header, headers->value, strlen(headers->value));
+		_buffer_append(header, "\r\n", 2);
+		headers = headers->next;
+	}
+	if (message->content_length > 0)
+	{
+		if (message->keepalive > 0)
+		{
+			char keepalive[32];
+			snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
+			_buffer_append(header, keepalive, strlen(keepalive));
+		}
+		char content_length[32];
+		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, message->content_length);
+		_buffer_append(header, content_length, strlen(content_length));
+	}
+	header->offset = header->data;
+	return ESUCCESS;
+}
+
+void *httpmessage_private(http_message_t *message, void *data)
+{
+	if (data != NULL)
+	{
+		message->private = data;
+	}
+	return message->private;
+}
+
+http_client_t *httpmessage_client(http_message_t *message)
+{
+	return message->client;
+}
+
+int httpmessage_content(http_message_t *message, char **data, int *size)
+{
+	*size = 0;
+	if (message->content)
+	{
+		*data = message->content->data;
+		*size = message->content->length;
+	}
+	return message->content_length + *size;
+}
+
+int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
+{
+	static buffer_t tempo;
+	tempo.data = data;
+	tempo.offset = data;
+	tempo.length = *size;
+	tempo.size = *size;
+	if (message->state == PARSE_INIT)
+		message->state = PARSE_STATUS;
+	int ret = _httpmessage_parserequest(message, &tempo);
+	*size = tempo.length;
+	if (message->state == PARSE_END)
+		message->content = NULL;
+	return ret;
+}
+
+http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result)
+{
+	if (result > 0)
+		message->result = result;
+	return message->result;
+}
+
+static void _httpmessage_fillheaderdb(http_message_t *message)
+{
+	int i;
+	buffer_t *storage = message->headers_storage;
+	if (storage == NULL)
+		return;
+	char *key = storage->data;
+	char *value = NULL;
+	for (i = 0; i < storage->length; i++)
+	{
+		if (storage->data[i] == ':' && value == NULL)
+		{
+			storage->data[i] = '\0';
+			value = storage->data + i + 1;
+			while (*value == ' ')
+				value++;
+		}
+		else if (storage->data[i] == '\0')
+		{
+			_httpmessage_addheader(message, key, value);
+			key = storage->data + i + 1;
+			value = NULL;
+		}
+	}
+}
+
+void httpmessage_addheader(http_message_t *message, char *key, char *value)
+{
+	if (message->headers_storage == NULL)
+	{
+		int chunksize = CHUNKSIZE;
+		if (message->client != NULL)
+			chunksize = message->client->server->config->chunksize;
+		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
+	}
+	_buffer_append(message->headers_storage, key, strlen(key));
+	_buffer_append(message->headers_storage, ":", 1);
+	_buffer_append(message->headers_storage, value, strlen(value) + 1);
+}
+
+static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
+{
+	dbentry_t *headerinfo;
+	headerinfo = vcalloc(1, sizeof(dbentry_t));
+	headerinfo->key = key;
+	headerinfo->value = value;
+	headerinfo->next = message->headers;
+	message->headers = headerinfo;
+	dbg("header %s => %s", key, value);
+	if (value)
+	{
+		if (!strncasecmp(key, str_connection, 10))
+		{
+			if (strcasestr(value, "Keep-Alive"))
+				message->keepalive = 1;
+		}
+		if (!strncasecmp(key, str_contentlength, 14))
+		{
+			message->content_length = atoi(value);
+		}
+		if (!strncasecmp(key, "Status", 6))
+		{
+			int result;
+			sscanf(value,"%d",&result);
+			switch (result)
+			{
+				case 200:
+					result = RESULT_200;
+				break;
+				case 400:
+					result = RESULT_400;
+				break;
+				case 404:
+					result = RESULT_404;
+				break;
+				case 405:
+					result = RESULT_405;
+				break;
+#ifndef HTTP_STATUS_PARTIAL
+				case 101:
+					result = RESULT_101;
+				break;
+				case 206:
+					result = RESULT_206;
+				break;
+				case 301:
+					result = RESULT_301;
+				break;
+				case 302:
+					result = RESULT_302;
+				break;
+				case 304:
+					result = RESULT_304;
+				break;
+				case 401:
+					result = RESULT_401;
+				break;
+				case 414:
+					result = RESULT_414;
+				break;
+				case 416:
+					result = RESULT_416;
+				break;
+				case 505:
+					result = RESULT_505;
+				break;
+				case 511:
+					result = RESULT_511;
+				break;
+#endif
+				default:
+					result = RESULT_400;
+			}
+			httpmessage_result(message, result);
+		}
+	}
+}
+
+char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
+{
+	if (message->content == NULL && content != NULL)
+		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
+
+	if (message->state < PARSE_CONTENT)
+	{
+		if (type == NULL)
+		{
+			httpmessage_addheader(message, (char *)str_contenttype, "text/plain");
+		}
+		else if (strcmp(type, "none"))
+		{
+			httpmessage_addheader(message, (char *)str_contenttype, type);
+		}
+		message->state = PARSE_CONTENT;
+	}
+	if (content != NULL)
+	{
+		if (length == -1)
+			length = strlen(content);
+		_buffer_append(message->content, content, length);
+	}
+	if (message->content_length == 0)
+	{
+		message->content_length = length;
+	}
+	if (message->content != NULL && message->content->data != NULL )
+		return message->content->data;
+	return NULL;
+}
+
+int httpmessage_keepalive(http_message_t *message)
+{
+	message->keepalive = 1;
+	return httpclient_socket(message->client);
+}
+
+int httpmessage_lock(http_message_t *message)
+{
+	message->client->state |= CLIENT_LOCKED;
+	return httpclient_socket(message->client);
+}
+
+/***********************************************************************
+ * http_client
+ */
+
 void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg)
 {
 	http_connector_list_t *callback;
@@ -679,46 +936,6 @@ http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *
 		client->ctx = arg;
 	}
 	return previous;
-}
-
-static int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header)
-{
-	if (message->headers == NULL)
-		_httpmessage_fillheaderdb(message);
-	dbentry_t *headers = message->headers;
-	http_message_version_e _version = message->version;
-	if (message->version > (version & HTTPVERSION_MASK))
-		_version = (version & HTTPVERSION_MASK);
-	_buffer_append(header, _http_message_version[_version], strlen(_http_message_version[_version]));
-	_buffer_append(header, (char *)_http_message_result[message->result], strlen(_http_message_result[message->result]));
-	_buffer_append(header, "\r\n", 2);
-	while (headers != NULL)
-	{
-		if (!strcmp(headers->key, str_contentlength))
-		{
-			headers = headers->next;
-			continue;
-		}
-		_buffer_append(header, headers->key, strlen(headers->key));
-		_buffer_append(header, ": ", 2);
-		_buffer_append(header, headers->value, strlen(headers->value));
-		_buffer_append(header, "\r\n", 2);
-		headers = headers->next;
-	}
-	if (message->content_length > 0)
-	{
-		if (message->keepalive > 0)
-		{
-			char keepalive[32];
-			snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
-			_buffer_append(header, keepalive, strlen(keepalive));
-		}
-		char content_length[32];
-		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, message->content_length);
-		_buffer_append(header, content_length, strlen(content_length));
-	}
-	header->offset = header->data;
-	return ESUCCESS;
 }
 
 http_client_t *httpclient_create(http_server_t *server)
@@ -1278,6 +1495,9 @@ static int _httpclient_run(http_client_t *client)
 	return 0;
 }
 
+/***********************************************************************
+ * http_server
+ */
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
@@ -1523,219 +1743,6 @@ void httpserver_destroy(http_server_t *server)
 #ifdef WIN32
 	WSACleanup();
 #endif
-}
-
-/*************************************************************
- * httpmessage public functions
- */
-void *httpmessage_private(http_message_t *message, void *data)
-{
-	if (data != NULL)
-	{
-		message->private = data;
-	}
-	return message->private;
-}
-
-http_client_t *httpmessage_client(http_message_t *message)
-{
-	return message->client;
-}
-
-int httpmessage_content(http_message_t *message, char **data, int *size)
-{
-	*size = 0;
-	if (message->content)
-	{
-		*data = message->content->data;
-		*size = message->content->length;
-	}
-	return message->content_length + *size;
-}
-
-int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
-{
-	static buffer_t tempo;
-	tempo.data = data;
-	tempo.offset = data;
-	tempo.length = *size;
-	tempo.size = *size;
-	if (message->state == PARSE_INIT)
-		message->state = PARSE_STATUS;
-	int ret = _httpmessage_parserequest(message, &tempo);
-	*size = tempo.length;
-	if (message->state == PARSE_END)
-		message->content = NULL;
-	return ret;
-}
-
-http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result)
-{
-	if (result > 0)
-		message->result = result;
-	return message->result;
-}
-
-static void _httpmessage_fillheaderdb(http_message_t *message)
-{
-	int i;
-	buffer_t *storage = message->headers_storage;
-	if (storage == NULL)
-		return;
-	char *key = storage->data;
-	char *value = NULL;
-	for (i = 0; i < storage->length; i++)
-	{
-		if (storage->data[i] == ':' && value == NULL)
-		{
-			storage->data[i] = '\0';
-			value = storage->data + i + 1;
-			while (*value == ' ')
-				value++;
-		}
-		else if (storage->data[i] == '\0')
-		{
-			_httpmessage_addheader(message, key, value);
-			key = storage->data + i + 1;
-			value = NULL;
-		}
-	}
-}
-
-void httpmessage_addheader(http_message_t *message, char *key, char *value)
-{
-	if (message->headers_storage == NULL)
-	{
-		int chunksize = CHUNKSIZE;
-		if (message->client != NULL)
-			chunksize = message->client->server->config->chunksize;
-		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
-	}
-	_buffer_append(message->headers_storage, key, strlen(key));
-	_buffer_append(message->headers_storage, ":", 1);
-	_buffer_append(message->headers_storage, value, strlen(value) + 1);
-}
-
-static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
-{
-	dbentry_t *headerinfo;
-	headerinfo = vcalloc(1, sizeof(dbentry_t));
-	headerinfo->key = key;
-	headerinfo->value = value;
-	headerinfo->next = message->headers;
-	message->headers = headerinfo;
-	dbg("header %s => %s", key, value);
-	if (value)
-	{
-		if (!strncasecmp(key, str_connection, 10))
-		{
-			if (strcasestr(value, "Keep-Alive"))
-				message->keepalive = 1;
-		}
-		if (!strncasecmp(key, str_contentlength, 14))
-		{
-			message->content_length = atoi(value);
-		}
-		if (!strncasecmp(key, "Status", 6))
-		{
-			int result;
-			sscanf(value,"%d",&result);
-			switch (result)
-			{
-				case 200:
-					result = RESULT_200;
-				break;
-				case 400:
-					result = RESULT_400;
-				break;
-				case 404:
-					result = RESULT_404;
-				break;
-				case 405:
-					result = RESULT_405;
-				break;
-#ifndef HTTP_STATUS_PARTIAL
-				case 101:
-					result = RESULT_101;
-				break;
-				case 206:
-					result = RESULT_206;
-				break;
-				case 301:
-					result = RESULT_301;
-				break;
-				case 302:
-					result = RESULT_302;
-				break;
-				case 304:
-					result = RESULT_304;
-				break;
-				case 401:
-					result = RESULT_401;
-				break;
-				case 414:
-					result = RESULT_414;
-				break;
-				case 416:
-					result = RESULT_416;
-				break;
-				case 505:
-					result = RESULT_505;
-				break;
-				case 511:
-					result = RESULT_511;
-				break;
-#endif
-				default:
-					result = RESULT_400;
-			}
-			httpmessage_result(message, result);
-		}
-	}
-}
-
-char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
-{
-	if (message->content == NULL && content != NULL)
-		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
-
-	if (message->state < PARSE_CONTENT)
-	{
-		if (type == NULL)
-		{
-			httpmessage_addheader(message, (char *)str_contenttype, "text/plain");
-		}
-		else if (strcmp(type, "none"))
-		{
-			httpmessage_addheader(message, (char *)str_contenttype, type);
-		}
-		message->state = PARSE_CONTENT;
-	}
-	if (content != NULL)
-	{
-		if (length == -1)
-			length = strlen(content);
-		_buffer_append(message->content, content, length);
-	}
-	if (message->content_length == 0)
-	{
-		message->content_length = length;
-	}
-	if (message->content != NULL && message->content->data != NULL )
-		return message->content->data;
-	return NULL;
-}
-
-int httpmessage_keepalive(http_message_t *message)
-{
-	message->keepalive = 1;
-	return _httpclient_socket(message->client);
-}
-
-int httpmessage_lock(http_message_t *message)
-{
-	message->client->state |= CLIENT_LOCKED;
-	return _httpclient_socket(message->client);
 }
 
 static char default_value[8] = {0};
