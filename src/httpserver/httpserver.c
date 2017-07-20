@@ -117,6 +117,7 @@ struct http_message_s
 		PARSE_MASK = 0x00FF,
 		PARSE_CONTINUE = 0x0100,
 	} state;
+	int chunksize;
 	buffer_t *content;
 	int content_length;
 	buffer_t *uri;
@@ -272,7 +273,7 @@ static void _buffer_destroy(buffer_t *buffer)
 /**********************************************************************
  * http_message
  */
-static http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent)
+static http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize)
 {
 	http_message_t *message;
 
@@ -280,6 +281,7 @@ static http_message_t * _httpmessage_create(http_client_t *client, http_message_
 	if (message)
 	{
 		message->client = client;
+		message->chunksize = chunksize;
 		if (parent)
 		{
 			parent->response = message;
@@ -293,9 +295,9 @@ static http_message_t * _httpmessage_create(http_client_t *client, http_message_
 	return message;
 }
 
-http_message_t * httpmessage_create()
+http_message_t * httpmessage_create(int chunksize)
 {
-	return _httpmessage_create(NULL, NULL);
+	return _httpmessage_create(NULL, NULL, chunksize);
 }
 
 static void _httpmessage_reset(http_message_t *message)
@@ -1051,7 +1053,7 @@ static int _httpclient_request(http_client_t *client)
 	int ret = ECONTINUE;
 	int size = 0;
 	if (client->request == NULL)
-		client->request = _httpmessage_create(client, NULL);
+		client->request = _httpmessage_create(client, NULL, client->server->config->chunksize);
 
 	/**
 	 * here, it is the call to the recvreq callback from the
@@ -1093,7 +1095,7 @@ static int _httpclient_request(http_client_t *client)
 			 * parsing error before response creation 
 			 * response's result will be the result set into the request.
 			 **/
-			client->request->response = _httpmessage_create(client, client->request);
+			client->request->response = _httpmessage_create(client, client->request, client->server->config->chunksize);
 		}
 		/**
 		 * the parsing found an error in the request
@@ -1114,7 +1116,7 @@ static int _httpclient_request(http_client_t *client)
 	if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
 	{
 		if (client->request->response == NULL)
-			client->request->response = _httpmessage_create(client, client->request);
+			client->request->response = _httpmessage_create(client, client->request, client->server->config->chunksize);
 		ret = _httpclient_checkconnector(client, client->request, client->request->response);
 		if (ret == EREJECT)
 		{
