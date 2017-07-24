@@ -133,6 +133,7 @@ struct http_message_s
 
 static void _httpmessage_fillheaderdb(http_message_t *message);
 static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
+static char *_httpmessage_status(http_message_t *message);
 static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
@@ -652,7 +653,8 @@ static int _httpmessage_buildheader(http_message_t *message, int version, buffer
 	if (message->version > (version & HTTPVERSION_MASK))
 		_version = (version & HTTPVERSION_MASK);
 	_buffer_append(header, _http_message_version[_version], strlen(_http_message_version[_version]));
-	_buffer_append(header, (char *)_http_message_result[message->result], strlen(_http_message_result[message->result]));
+	char *status = _httpmessage_status(message);
+	_buffer_append(header, status, strlen(status));
 	_buffer_append(header, "\r\n", 2);
 	while (headers != NULL)
 	{
@@ -729,6 +731,11 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
 	if (result > 0)
 		message->result = result;
 	return message->result;
+}
+
+static char *_httpmessage_status(http_message_t *message)
+{
+	return (char *)_http_message_result[message->result];
 }
 
 static void _httpmessage_fillheaderdb(http_message_t *message)
@@ -1439,7 +1446,7 @@ static int _httpclient_run(http_client_t *client)
 				request->response->result = RESULT_400;
 			if (request->response->content == NULL)
 			{
-				const char *value = _http_message_result[request->response->result];
+				const char *value = _httpmessage_status(request->response);
 				httpmessage_addcontent(request->response, "text/plain", (char *)value, strlen(value));
 				client->state |= CLIENT_RESPONSEREADY;
 			}
