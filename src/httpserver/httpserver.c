@@ -146,24 +146,32 @@ static http_server_config_t defaultconfig = {
 	.version = HTTP10,
 };
 
-static const char *_http_message_result[] =
+struct _http_message_result_s
 {
-	" 200 OK",
-	" 400 Bad Request",
-	" 404 File Not Found",
-	" 405 Method Not Allowed",
+	int result;
+	char *status;
+};
+typedef struct _http_message_result_s _http_message_result_t;
+
+static const _http_message_result_t *_http_message_result[] =
+{
+	&(_http_message_result_t){RESULT_200, " 200 OK"},
+	&(_http_message_result_t){RESULT_400, " 400 Bad Request"},
+	&(_http_message_result_t){RESULT_404, " 404 File Not Found"},
+	&(_http_message_result_t){RESULT_405, " 405 Method Not Allowed"},
 #ifndef HTTP_STATUS_PARTIAL
-	" 101 Switching Protocols",
-	" 206 Partial Content",
-	" 301 Moved Permanently",
-	" 302 Found",
-	" 304 Not Modified",
-	" 401 Unauthorized",
-	" 414 Request URI too long",
-	" 416 Range Not Satisfiable",
-	" 505 HTTP Version Not Supported",
-	" 511 Network Authentication Required",
+	&(_http_message_result_t){RESULT_101, " 101 Switching Protocols"},
+	&(_http_message_result_t){RESULT_206, " 206 Partial Content"},
+	&(_http_message_result_t){RESULT_301, " 301 Moved Permanently"},
+	&(_http_message_result_t){RESULT_302, " 302 Found"},
+	&(_http_message_result_t){RESULT_304, " 304 Not Modified"},
+	&(_http_message_result_t){RESULT_401, " 401 Unauthorized"},
+	&(_http_message_result_t){RESULT_414, " 414 Request URI too long"},
+	&(_http_message_result_t){RESULT_416, " 416 Range Not Satisfiable"},
+	&(_http_message_result_t){RESULT_505, " 505 HTTP Version Not Supported"},
+	&(_http_message_result_t){RESULT_511, " 511 Network Authentication Required"},
 #endif
+	NULL
 };
 
 static char *_http_message_version[] =
@@ -735,7 +743,14 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
 
 static char *_httpmessage_status(http_message_t *message)
 {
-	return (char *)_http_message_result[message->result];
+	int i = 0;
+	while (_http_message_result[i] != NULL)
+	{
+		if (_http_message_result[i]->result == message->result)
+			return _http_message_result[i]->status;
+		i++;
+	}
+	return NULL;
 }
 
 static void _httpmessage_fillheaderdb(http_message_t *message)
