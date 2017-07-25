@@ -94,25 +94,23 @@ typedef enum
 	HTTP_PIPELINE = 0x0100,
 } http_message_version_e;
 
-typedef enum
-{
-	RESULT_200,
-	RESULT_400,
-	RESULT_404,
-	RESULT_405,
+typedef int http_message_result_e;
+#define RESULT_200 200
+#define RESULT_400 400
+#define RESULT_404 404
+#define RESULT_405 405
 #ifndef HTTP_STATUS_PARTIAL
-	RESULT_101,
-	RESULT_206,
-	RESULT_301,
-	RESULT_302,
-	RESULT_304,
-	RESULT_401,
-	RESULT_414,
-	RESULT_416,
-	RESULT_505,
-	RESULT_511,
+#define RESULT_101 101
+#define RESULT_206 206
+#define RESULT_301 301
+#define RESULT_302 302
+#define RESULT_304 304
+#define RESULT_401 401
+#define RESULT_414 414
+#define RESULT_416 416
+#define RESULT_505 505
+#define RESULT_511 511
 #endif
-} http_message_result_e;
 
 /**
  * @brief callback to manage a request

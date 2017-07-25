@@ -291,6 +291,7 @@ static http_message_t * _httpmessage_create(http_client_t *client, http_message_
 	message = vcalloc(1, sizeof(*message));
 	if (message)
 	{
+		message->result = RESULT_200;
 		message->client = client;
 		message->chunksize = chunksize;
 		if (parent)
@@ -1294,7 +1295,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_PUSHREQUEST:
 		{
-			if (client->request->response->result != RESULT_200)
+			if (client->request->response->result > 299)
 				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
 			else if (client->request->response->content == NULL && client->request->response->content_length == 0)
 				client->state = CLIENT_PARSER1 | (client->state & ~CLIENT_MACHINEMASK);
