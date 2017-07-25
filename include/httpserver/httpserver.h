@@ -472,6 +472,13 @@ http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void
  */
 http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
 
+
+/**
+ * @brief shutdown and close the client
+ *
+ * @param client the connection that received the request
+ */
+void httpclient_shutdown(http_client_t *client);
 #ifdef __cplusplus
 }
 #endif

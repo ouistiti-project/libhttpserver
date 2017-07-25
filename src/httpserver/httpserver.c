@@ -1388,6 +1388,11 @@ static int _httpclient_run(http_client_t *client)
 	return 0;
 }
 
+void httpclient_shutdown(http_client_t *client)
+{
+	client->close(client);
+}
+
 /***********************************************************************
  * http_server
  */
