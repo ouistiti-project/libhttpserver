@@ -44,6 +44,8 @@
 #include "dbentry.h"
 #include "httpserver.h"
 #include "_httpserver.h"
+#define _HTTPMESSAGE_
+#include "_httpmessage.h"
 
 extern httpserver_ops_t *httpserver_ops;
 
@@ -54,19 +56,6 @@ extern httpserver_ops_t *httpserver_ops;
 #else
 # define dbg(...)
 #endif
-
-#define CHUNKSIZE 64
-#define HTTPMESSAGE_KEEPALIVE 0x01
-#define HTTPMESSAGE_LOCKED 0x02
-
-struct buffer_s
-{
-	char *data;
-	char *offset;
-	int size;
-	int length;
-	int maxchunks;
-};
 
 struct http_connector_list_s
 {
@@ -91,49 +80,6 @@ struct http_client_modctx_s
 	http_client_modctx_t *next;
 };
 
-struct http_message_s
-{
-	http_message_result_e result;
-	int mode;
-	http_client_t *client;
-	http_message_t *response;
-	http_connector_list_t *connector;
-	enum
-	{
-		MESSAGE_TYPE_GET,
-		MESSAGE_TYPE_POST,
-		MESSAGE_TYPE_HEAD,
-		MESSAGE_TYPE_PUT,
-		MESSAGE_TYPE_DELETE,
-	} type;
-	enum
-	{
-		PARSE_INIT,
-		PARSE_URI,
-		PARSE_VERSION,
-		PARSE_STATUS,
-		PARSE_HEADER,
-		PARSE_HEADERNEXT,
-		PARSE_CONTENT,
-		PARSE_END,
-		PARSE_MASK = 0x00FF,
-		PARSE_CONTINUE = 0x0100,
-	} state;
-	int chunksize;
-	buffer_t *content;
-	int content_length;
-	buffer_t *uri;
-	char *query;
-	http_message_version_e version;
-	buffer_t *headers_storage;
-	dbentry_t *headers;
-	void *private;
-	http_message_t *next;
-};
-
-static void _httpmessage_fillheaderdb(http_message_t *message);
-static void _httpmessage_addheader(http_message_t *message, char *key, char *value);
-static char *_httpmessage_status(http_message_t *message);
 static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
@@ -146,68 +92,8 @@ static http_server_config_t defaultconfig = {
 	.version = HTTP10,
 };
 
-struct _http_message_result_s
-{
-	int result;
-	char *status;
-};
-typedef struct _http_message_result_s _http_message_result_t;
-
-static const _http_message_result_t *_http_message_result[] =
-{
-#if defined(RESULT_101)
-	&(_http_message_result_t){RESULT_101, " 101 Switching Protocols"},
-#endif
-	&(_http_message_result_t){RESULT_200, " 200 OK"},
-#if defined(RESULT_206)
-	&(_http_message_result_t){RESULT_206, " 206 Partial Content"},
-#endif
-#if defined(RESULT_301)
-	&(_http_message_result_t){RESULT_301, " 301 Moved Permanently"},
-#endif
-#if defined(RESULT_302)
-	&(_http_message_result_t){RESULT_302, " 302 Found"},
-#endif
-#if defined(RESULT_304)
-	&(_http_message_result_t){RESULT_304, " 304 Not Modified"},
-#endif
-	&(_http_message_result_t){RESULT_400, " 400 Bad Request"},
-#if defined(RESULT_401)
-	&(_http_message_result_t){RESULT_401, " 401 Unauthorized"},
-#endif
-#if defined(RESULT_404)
-	&(_http_message_result_t){RESULT_404, " 404 File Not Found"},
-#endif
-#if defined(RESULT_405)
-	&(_http_message_result_t){RESULT_405, " 405 Method Not Allowed"},
-#endif
-#if defined(RESULT_414)
-	&(_http_message_result_t){RESULT_414, " 414 Request URI too long"},
-#endif
-#if defined(RESULT_416)
-	&(_http_message_result_t){RESULT_416, " 416 Range Not Satisfiable"},
-#endif
-#if defined(RESULT_505)
-	&(_http_message_result_t){RESULT_505, " 505 HTTP Version Not Supported"},
-#endif
-#if defined(RESULT_511)
-	&(_http_message_result_t){RESULT_511, " 511 Network Authentication Required"},
-#endif
-	NULL
-};
-
-static char *_http_message_version[] =
-{
-	"HTTP/0.9",
-	"HTTP/1.0",
-	"HTTP/1.1",
-	"HTTP/2",
-};
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
-static const char str_connection[] = "Connection";
-static const char str_contenttype[] = "Content-Type";
-static const char str_contentlength[] = "Content-Length";
 /********************************************************************/
 #define BUFFERMAX 2048
 static int ChunkSize = 0;
@@ -234,7 +120,7 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 	return buffer;
 }
 
-static char *_buffer_append(buffer_t *buffer, char *data, int length)
+static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
 	if (buffer->data + buffer->size <= buffer->offset + length + 1)
 	{
@@ -306,7 +192,7 @@ static void _buffer_destroy(buffer_t *buffer)
 /**********************************************************************
  * http_message
  */
-static http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize)
+HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize)
 {
 	http_message_t *message;
 
@@ -334,7 +220,7 @@ http_message_t * httpmessage_create(int chunksize)
 	return _httpmessage_create(NULL, NULL, chunksize);
 }
 
-static void _httpmessage_reset(http_message_t *message)
+HTTPMESSAGE_DECL void _httpmessage_reset(http_message_t *message)
 {
 	if (message->uri)
 		_buffer_reset(message->uri);
@@ -364,7 +250,7 @@ void httpmessage_destroy(http_message_t *message)
 	vfree(message);
 }
 
-static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
+HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 {
 	int ret = ECONTINUE;
 
@@ -675,7 +561,7 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 	return ret;
 }
 
-static int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header)
+HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header)
 {
 	if (message->headers == NULL)
 		_httpmessage_fillheaderdb(message);
@@ -764,7 +650,7 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
 	return message->result;
 }
 
-static char *_httpmessage_status(http_message_t *message)
+HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 {
 	int i = 0;
 	while (_http_message_result[i] != NULL)
@@ -776,7 +662,7 @@ static char *_httpmessage_status(http_message_t *message)
 	return NULL;
 }
 
-static void _httpmessage_fillheaderdb(http_message_t *message)
+HTTPMESSAGE_DECL void _httpmessage_fillheaderdb(http_message_t *message)
 {
 	int i;
 	buffer_t *storage = message->headers_storage;
@@ -816,7 +702,7 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value)
 	_buffer_append(message->headers_storage, value, strlen(value) + 1);
 }
 
-static void _httpmessage_addheader(http_message_t *message, char *key, char *value)
+HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
 	dbentry_t *headerinfo;
 	headerinfo = vcalloc(1, sizeof(dbentry_t));
@@ -1769,7 +1655,7 @@ char *httpserver_INFO(http_server_t *server, char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = _http_message_version[(server->config->version & HTTPVERSION_MASK)];
+		value = (char *)_http_message_version[(server->config->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "port"))
 	{
