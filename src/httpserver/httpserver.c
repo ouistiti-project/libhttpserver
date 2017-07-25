@@ -807,28 +807,31 @@ http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void
 
 http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg)
 {
-	http_send_t previous = client->sendresp;
+	http_send_t previous = client->ops->sendresp;
 	if (func)
 	{
-		client->sendresp = func;
+		client->ops->sendresp = func;
 		client->ctx = arg;
 	}
 	return previous;
 }
 
-http_client_t *httpclient_create(http_server_t *server)
+http_client_t *httpclient_create(http_server_t *server, int chunksize)
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
 	client->server = server;
 
-	http_connector_list_t *callback = server->callbacks;
-	while (callback != NULL)
+	if (server)
 	{
-		httpclient_addconnector(client, callback->vhost, callback->func, callback->arg);
-		callback = callback->next;
+		http_connector_list_t *callback = server->callbacks;
+		while (callback != NULL)
+		{
+			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg);
+			callback = callback->next;
+		}
 	}
 	client->callback = client->callbacks;
-	client->sockdata = _buffer_create(1, client->server->config->chunksize);
+	client->sockdata = _buffer_create(1, chunksize);
 
 	return client;
 }

@@ -107,14 +107,13 @@ struct http_client_s
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
-http_client_t *httpclient_create(http_server_t *server);
+http_client_t *httpclient_create(http_server_t *server, int chunksize);
 int httpclient_socket(http_client_t *client);
 
 typedef int (*_httpserver_start_t)(http_server_t *server);
 typedef http_client_t *(*_httpserver_createclient_t)(http_server_t *server);
 typedef void (*_httpserver_close_t)(http_server_t *server);
 typedef struct httpserver_ops_s httpserver_ops_t;
-
 struct httpserver_ops_s
 {
 		_httpserver_start_t start;

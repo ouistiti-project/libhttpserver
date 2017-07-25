@@ -216,7 +216,7 @@ static int _tcpserver_start(http_server_t *server)
 
 static http_client_t *_tcpserver_createclient(http_server_t *server)
 {
-	http_client_t * client = httpclient_create(server);
+	http_client_t * client = httpclient_create(server, server->config->chunksize);
 	client->ops = httpclient_ops;
 	client->ctx = client;
 
