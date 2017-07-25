@@ -155,20 +155,42 @@ typedef struct _http_message_result_s _http_message_result_t;
 
 static const _http_message_result_t *_http_message_result[] =
 {
-	&(_http_message_result_t){RESULT_200, " 200 OK"},
-	&(_http_message_result_t){RESULT_400, " 400 Bad Request"},
-	&(_http_message_result_t){RESULT_404, " 404 File Not Found"},
-	&(_http_message_result_t){RESULT_405, " 405 Method Not Allowed"},
-#ifndef HTTP_STATUS_PARTIAL
+#if defined(RESULT_101)
 	&(_http_message_result_t){RESULT_101, " 101 Switching Protocols"},
+#endif
+	&(_http_message_result_t){RESULT_200, " 200 OK"},
+#if defined(RESULT_206)
 	&(_http_message_result_t){RESULT_206, " 206 Partial Content"},
+#endif
+#if defined(RESULT_301)
 	&(_http_message_result_t){RESULT_301, " 301 Moved Permanently"},
+#endif
+#if defined(RESULT_302)
 	&(_http_message_result_t){RESULT_302, " 302 Found"},
+#endif
+#if defined(RESULT_304)
 	&(_http_message_result_t){RESULT_304, " 304 Not Modified"},
+#endif
+	&(_http_message_result_t){RESULT_400, " 400 Bad Request"},
+#if defined(RESULT_401)
 	&(_http_message_result_t){RESULT_401, " 401 Unauthorized"},
+#endif
+#if defined(RESULT_404)
+	&(_http_message_result_t){RESULT_404, " 404 File Not Found"},
+#endif
+#if defined(RESULT_405)
+	&(_http_message_result_t){RESULT_405, " 405 Method Not Allowed"},
+#endif
+#if defined(RESULT_414)
 	&(_http_message_result_t){RESULT_414, " 414 Request URI too long"},
+#endif
+#if defined(RESULT_416)
 	&(_http_message_result_t){RESULT_416, " 416 Range Not Satisfiable"},
+#endif
+#if defined(RESULT_505)
 	&(_http_message_result_t){RESULT_505, " 505 HTTP Version Not Supported"},
+#endif
+#if defined(RESULT_511)
 	&(_http_message_result_t){RESULT_511, " 511 Network Authentication Required"},
 #endif
 	NULL
@@ -447,10 +469,10 @@ static int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 					if (uri == NULL && message->query == NULL)
 					{
 						message->version = message->client->server->config->version;
-#ifndef HTTP_STATUS_PARTIAL
+#ifdef RESULT_414
 						message->result = RESULT_414;
 #else
-						message->result = RESULT_404;
+						message->result = RESULT_400;
 #endif
 						ret = EREJECT;
 						warn("parse reject uri too long 2: %s %s", message->uri->data, data->data);
@@ -818,55 +840,6 @@ static void _httpmessage_addheader(http_message_t *message, char *key, char *val
 		{
 			int result;
 			sscanf(value,"%d",&result);
-			switch (result)
-			{
-				case 200:
-					result = RESULT_200;
-				break;
-				case 400:
-					result = RESULT_400;
-				break;
-				case 404:
-					result = RESULT_404;
-				break;
-				case 405:
-					result = RESULT_405;
-				break;
-#ifndef HTTP_STATUS_PARTIAL
-				case 101:
-					result = RESULT_101;
-				break;
-				case 206:
-					result = RESULT_206;
-				break;
-				case 301:
-					result = RESULT_301;
-				break;
-				case 302:
-					result = RESULT_302;
-				break;
-				case 304:
-					result = RESULT_304;
-				break;
-				case 401:
-					result = RESULT_401;
-				break;
-				case 414:
-					result = RESULT_414;
-				break;
-				case 416:
-					result = RESULT_416;
-				break;
-				case 505:
-					result = RESULT_505;
-				break;
-				case 511:
-					result = RESULT_511;
-				break;
-#endif
-				default:
-					result = RESULT_400;
-			}
 			httpmessage_result(message, result);
 		}
 	}
