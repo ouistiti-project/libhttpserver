@@ -193,6 +193,25 @@ static void _buffer_destroy(buffer_t *buffer)
 /**********************************************************************
  * http_message
  */
+#ifdef HTTPCLIENT_FEATURES
+http_message_t * httpmessage_create(int chunksize)
+{
+       return _httpmessage_create(NULL, NULL, chunksize);
+}
+
+void httpmessage_request(http_message_t *message, http_message_method_e type, char *resource)
+{
+	message->type = type;
+	if (resource)
+	{
+		int length = strlen(resource);
+		int nbchunks = (length / message->chunksize) + 1;
+		message->uri = _buffer_create(nbchunks, message->chunksize);
+		_buffer_append(message->uri, resource, length);
+	}
+}
+#endif
+
 HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize)
 {
 	http_message_t *message;
@@ -214,11 +233,6 @@ HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, htt
 		}
 	}
 	return message;
-}
-
-http_message_t * httpmessage_create(int chunksize)
-{
-	return _httpmessage_create(NULL, NULL, chunksize);
 }
 
 HTTPMESSAGE_DECL void _httpmessage_reset(http_message_t *message)
@@ -622,6 +636,7 @@ int httpmessage_content(http_message_t *message, char **data, int *size)
 	return message->content_length + *size;
 }
 
+#ifdef HTTPCLIENT_FEATURES
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
 	static buffer_t tempo;
@@ -637,6 +652,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 		message->content = NULL;
 	return ret;
 }
+#endif
 
 http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result)
 {
@@ -830,11 +846,81 @@ http_client_t *httpclient_create(http_server_t *server, int chunksize)
 			callback = callback->next;
 		}
 	}
+#ifdef HTTPCLIENT_FEATURES
+	else
+	{
+		client->ops = httpclient_ops;
+	}
+#endif
 	client->callback = client->callbacks;
 	client->sockdata = _buffer_create(1, chunksize);
 
 	return client;
 }
+
+#ifdef HTTPCLIENT_FEATURES
+int httpclient_connect(http_client_t *client, char *addr, int port)
+{
+	struct sockaddr_in *saddr;
+
+	saddr = (struct sockaddr_in *)&client->addr;
+	saddr->sin_family = AF_INET;
+	saddr->sin_port = htons(port);
+	saddr->sin_addr.s_addr = inet_aton(addr);
+
+	if (client->ops->connect)
+		return client->ops->connect(client);
+	return EREJECT;
+}
+
+int httpclient_sendrequest(http_client_t *client, http_message_t *message)
+{
+	int size = 0;
+	buffer_t *header = _buffer_create(MAXCHUNKS_HEADER, message->chunksize);
+	char *method = httpmessage_REQUEST(message, "method");
+	_buffer_append(header, method, strlen(method));
+	_buffer_append(header, " ", 1);
+	char *uri = httpmessage_REQUEST(message, "uri");
+	_buffer_append(header, uri, strlen(uri));
+	char *version = httpmessage_REQUEST(message, "version");
+	if (version)
+	{
+		_buffer_append(header, " ", 1);
+		_buffer_append(header, version, strlen(version));
+	}
+	_buffer_append(header, "\r\n", 2);
+	while (header->length > 0)
+	{
+		/**
+		 * here, it is the call to the sendresp callback from the
+		 * server configuration.
+		 * see http_server_config_t and httpserver_create
+		 */
+		size = client->ops->sendresp(client->ctx, header->offset, header->length);
+		if (size < 0)
+			break;
+		header->offset += size;
+		header->length -= size;
+	}
+	_buffer_reset(header);
+	_httpmessage_buildheader(message, HTTP11, header);
+	while (header->length > 0)
+	{
+		/**
+		 * here, it is the call to the sendresp callback from the
+		 * server configuration.
+		 * see http_server_config_t and httpserver_create
+		 */
+		size = client->ops->sendresp(client->ctx, header->offset, header->length);
+		if (size < 0)
+			break;
+		header->offset += size;
+		header->length -= size;
+	}
+	client->ops->sendresp(client->ctx, "\r\n", 2);
+	return ESUCCESS;
+}
+#endif
 
 static void _httpclient_destroy(http_client_t *client)
 {

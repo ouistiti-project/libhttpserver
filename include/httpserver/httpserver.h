@@ -281,6 +281,8 @@ void httpserver_destroy(http_server_t *server);
  * 
  * create message to be use with parsecgi
  * out of modules
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
  */
 http_message_t * httpmessage_create(int chunksize);
 
@@ -322,6 +324,17 @@ void *httpmessage_private(http_message_t *message, void *data);
  * If result is 0, the function only returns the current result of the message.
  */
 http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result);
+
+/**
+ * @brief create a request message
+ *
+ * @param message the request message to update
+ * @param type 
+ * @param resource the path+query parts of the URI
+ * 
+ * This function is available only if HTTPCLIENT_FEATURES is defined
+ */
+void httpmessage_request(http_message_t *message, http_message_method_e type, char *resource);
 
 /**
  * @brief add a header to the response message
@@ -392,6 +405,8 @@ int httpmessage_lock(http_message_t *message);
  *
  * After ESUCCESS, it is possible to add more data into the content
  * with this same function.
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
  */
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
 
@@ -439,6 +454,31 @@ char *httpmessage_REQUEST(http_message_t *message, char *key);
 char *httpmessage_SESSION(http_message_t *message, char *key, char *value);
 
 /**********************************************************************/
+/**
+ * @brief connect the client to an external server
+ *
+ * @param client the connection that will send the request
+ * @param addr the address of the server
+ * @param port the port of the server
+ *
+ * @return ESUCCESS on success EREJECT on error
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
+ */
+int httpclient_connect(http_client_t *client, char *addr, int port);
+
+/**
+ * @brief send a request with client
+ *
+ * @param client the connection that will send the request
+ * @param message the request
+ *
+ * @return ESUCCESS on success EREJECT on error
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
+ */
+int httpclient_sendrequest(http_client_t *client, http_message_t *message);
+
 /**
  * @brief return the receiver and sender context
  *

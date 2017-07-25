@@ -72,6 +72,29 @@ extern "C" {
 # define dbg(...)
 #endif
 
+#ifdef HTTPCLIENT_FEATURES
+static int tcpclient_connect(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+
+	if (client->sock != -1)
+		return EREJECT;
+	client->sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (client->sock == -1)
+		return EREJECT;
+
+	if (connect(client->sock, (struct sockaddr *)&client->addr, client->addr_size) != 0)
+	{
+		close(client->sock);
+		client->sock = -1;
+		return EREJECT;
+	}
+	return ESUCCESS;
+}
+#else
+#define tcpclient_connect NULL
+#endif
+
 static int tcpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
@@ -109,6 +132,7 @@ static void tcpclient_close(void *ctl)
 
 httpclient_ops_t *httpclient_ops = &(httpclient_ops_t)
 {
+	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,
 	.sendresp = tcpclient_send,
 	.flush = tcpclient_flush,

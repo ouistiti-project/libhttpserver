@@ -51,6 +51,7 @@ typedef struct httpclient_ops_s httpclient_ops_t;
 
 struct httpclient_ops_s
 {
+	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */
 	http_flush_t flush; /* callback to flush the socket */
