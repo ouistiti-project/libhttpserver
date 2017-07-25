@@ -107,6 +107,14 @@ static void tcpclient_close(void *ctl)
 	client->sock = -1;
 }
 
+httpclient_ops_t *httpclient_ops = &(httpclient_ops_t)
+{
+	.recvreq = tcpclient_recv,
+	.sendresp = tcpclient_send,
+	.flush = tcpclient_flush,
+	.close = tcpclient_close,
+};
+
 static int _tcpserver_start(http_server_t *server)
 {
 	int status;
@@ -209,10 +217,7 @@ static int _tcpserver_start(http_server_t *server)
 static http_client_t *_tcpserver_createclient(http_server_t *server)
 {
 	http_client_t * client = httpclient_create(server);
-	client->recvreq = tcpclient_recv;
-	client->sendresp = tcpclient_send;
-	client->flush = tcpclient_flush;
-	client->close = tcpclient_close;
+	client->ops = httpclient_ops;
 	client->ctx = client;
 
 	// Client connection request recieved
@@ -229,7 +234,7 @@ static void _tcpserver_close(http_server_t *server)
 	while (client != NULL)
 	{
 		http_client_t *next = client->next;
-		client->close(client);
+		client->ops->close(client);
 		client = next;
 	}
 

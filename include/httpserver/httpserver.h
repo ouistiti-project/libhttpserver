@@ -273,7 +273,7 @@ void httpserver_destroy(http_server_t *server);
  * create message to be use with parsecgi
  * out of modules
  */
-http_message_t * httpmessage_create();
+http_message_t * httpmessage_create(int chunksize);
 
 /**
  * @brief destroy message created with httpmessage_create

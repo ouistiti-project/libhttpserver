@@ -47,6 +47,7 @@
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
 
+extern httpclient_ops_t *httpclient_ops;
 extern httpserver_ops_t *httpserver_ops;
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -804,10 +805,10 @@ void *httpclient_context(http_client_t *client)
 
 http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
 {
-	http_recv_t previous = client->recvreq;
+	http_recv_t previous = client->ops->recvreq;
 	if (func)
 	{
-		client->recvreq = func;
+		client->ops->recvreq = func;
 		client->ctx = arg;
 	}
 	return previous;
@@ -946,7 +947,7 @@ static int _httpclient_request(http_client_t *client)
 	 */
 	if (client->sockdata->size <= client->sockdata->length)
 		_buffer_reset(client->sockdata);
-	size = client->recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+	size = client->ops->recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
 	if (size > 0)
 	{
 		client->sockdata->length += size;
@@ -1256,13 +1257,13 @@ static int _httpclient_run(http_client_t *client)
 				 * server configuration.
 				 * see http_server_config_t and httpserver_create
 				 */
-				size = client->sendresp(client->ctx, header->offset, header->length);
+				size = client->ops->sendresp(client->ctx, header->offset, header->length);
 				if (size < 0)
 					break;
 				header->offset += size;
 				header->length -= size;
 			}
-			client->sendresp(client->ctx, "\r\n", 2);
+			client->ops->sendresp(client->ctx, "\r\n", 2);
 			if (size < 0)
 			{
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1286,7 +1287,7 @@ static int _httpclient_run(http_client_t *client)
 				while (request->type != MESSAGE_TYPE_HEAD &&
 						request->response->content->length > 0)
 				{
-					size = client->sendresp(client->ctx, request->response->content->offset, request->response->content->length);
+					size = client->ops->sendresp(client->ctx, request->response->content->offset, request->response->content->length);
 					if (size  > 0 && size != request->response->content->length)
 					{
 						request->response->content->length -= size;
@@ -1333,7 +1334,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_COMPLETE:
 		{
-			client->flush(client);
+			client->ops->flush(client);
 			/**
 			 * to stay in keep alive the rules are:
 			 *  - the server has to be configurated;
@@ -1381,7 +1382,7 @@ static int _httpclient_run(http_client_t *client)
 				modctx = next;
 			}
 			client->modctx = NULL;
-			client->close(client);
+			client->ops->close(client);
 		}
 		break;
 	}
@@ -1390,7 +1391,7 @@ static int _httpclient_run(http_client_t *client)
 
 void httpclient_shutdown(http_client_t *client)
 {
-	client->close(client);
+	client->ops->close(client);
 }
 
 /***********************************************************************
