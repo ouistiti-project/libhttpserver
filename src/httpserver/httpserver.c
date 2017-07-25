@@ -314,10 +314,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					 * to use parse_cgi from a module, the functions
 					 * has to run on message without client attached.
 					 */
-					int chunksize = CHUNKSIZE;
-					if (message->client)
-						chunksize = message->client->server->config->chunksize;
-					message->uri = _buffer_create(MAXCHUNKS_URI, chunksize);
+					message->uri = _buffer_create(MAXCHUNKS_URI, message->chunksize);
 				}
 				while (data->offset < (data->data + data->size) && next == PARSE_URI)
 				{
@@ -459,10 +456,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				int length = 0;
 				if (message->headers_storage == NULL)
 				{
-					int chunksize = CHUNKSIZE;
-					if (message->client)
-						chunksize = message->client->server->config->chunksize;
-					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
+					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->chunksize);
 				}
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
@@ -693,10 +687,7 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value)
 {
 	if (message->headers_storage == NULL)
 	{
-		int chunksize = CHUNKSIZE;
-		if (message->client != NULL)
-			chunksize = message->client->server->config->chunksize;
-		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, chunksize);
+		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->chunksize);
 	}
 	_buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
@@ -1804,10 +1795,7 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
 			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 			if (!message->client->session_storage)
 			{
-				int chunksize = CHUNKSIZE;
-				if (message->client)
-					chunksize = message->client->server->config->chunksize;
-				message->client->session_storage = _buffer_create(MAXCHUNKS_SESSION, chunksize);
+				message->client->session_storage = _buffer_create(MAXCHUNKS_SESSION, message->chunksize);
 			}
 			sessioninfo->key = 
 				_buffer_append(message->client->session_storage, key, strlen(key) + 1);
