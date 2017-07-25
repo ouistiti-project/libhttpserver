@@ -94,6 +94,15 @@ typedef enum
 	HTTP_PIPELINE = 0x0100,
 } http_message_version_e;
 
+typedef enum
+{
+	MESSAGE_TYPE_GET,
+	MESSAGE_TYPE_POST,
+	MESSAGE_TYPE_HEAD,
+	MESSAGE_TYPE_PUT,
+	MESSAGE_TYPE_DELETE,
+} http_message_method_e;
+
 typedef int http_message_result_e;
 #define RESULT_200 200
 #define RESULT_400 400

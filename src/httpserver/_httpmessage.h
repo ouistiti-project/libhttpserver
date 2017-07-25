@@ -68,14 +68,7 @@ struct http_message_s
 	http_client_t *client;
 	http_message_t *response;
 	void *connector;
-	enum
-	{
-		MESSAGE_TYPE_GET,
-		MESSAGE_TYPE_POST,
-		MESSAGE_TYPE_HEAD,
-		MESSAGE_TYPE_PUT,
-		MESSAGE_TYPE_DELETE,
-	} type;
+	http_message_method_e type;
 	enum
 	{
 		PARSE_INIT,
