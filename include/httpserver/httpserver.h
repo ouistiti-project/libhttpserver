@@ -482,13 +482,14 @@ int httpclient_connect(http_client_t *client, char *addr, int port);
  * @brief send a request with client
  *
  * @param client the connection that will send the request
- * @param message the request
+ * @param request the request
+ * @param response the response
  *
  * @return ESUCCESS on success EREJECT on error
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-int httpclient_sendrequest(http_client_t *client, http_message_t *message);
+int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_message_t *response);
 
 /**
  * @brief return the receiver and sender context

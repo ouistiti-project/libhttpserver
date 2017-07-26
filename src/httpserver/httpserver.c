@@ -310,11 +310,11 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 #endif
 				else
 				{
+					warn("parse reject method %s", data->offset);
 					data->offset++;
 					message->version = message->client->server->config->version;
 					message->result = RESULT_405;
 					ret = EREJECT;
-					warn("parse reject method %s", data->offset);
 				}
 			}
 			break;
@@ -850,6 +850,7 @@ http_client_t *httpclient_create(http_server_t *server, int chunksize)
 	else
 	{
 		client->ops = httpclient_ops;
+		client->ctx = client;
 	}
 #endif
 	client->callback = client->callbacks;
@@ -873,51 +874,81 @@ int httpclient_connect(http_client_t *client, char *addr, int port)
 	return EREJECT;
 }
 
-int httpclient_sendrequest(http_client_t *client, http_message_t *message)
+int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int size = 0;
-	buffer_t *header = _buffer_create(MAXCHUNKS_HEADER, message->chunksize);
-	char *method = httpmessage_REQUEST(message, "method");
-	_buffer_append(header, method, strlen(method));
-	_buffer_append(header, " ", 1);
-	char *uri = httpmessage_REQUEST(message, "uri");
-	_buffer_append(header, uri, strlen(uri));
-	char *version = httpmessage_REQUEST(message, "version");
+	buffer_t *data = _buffer_create(MAXCHUNKS_HEADER, request->chunksize);
+
+	request->client = client;
+	response->client = client;
+	char *method = httpmessage_REQUEST(request, "method");
+	_buffer_append(data, method, strlen(method));
+	_buffer_append(data, " ", 1);
+	char *uri = httpmessage_REQUEST(request, "uri");
+	_buffer_append(data, uri, strlen(uri));
+	char *version = httpmessage_REQUEST(request, "version");
 	if (version)
 	{
-		_buffer_append(header, " ", 1);
-		_buffer_append(header, version, strlen(version));
+		_buffer_append(data, " ", 1);
+		_buffer_append(data, version, strlen(version));
 	}
-	_buffer_append(header, "\r\n", 2);
-	while (header->length > 0)
+	_buffer_append(data, "\r\n", 2);
+	data->offset = data->data;
+	while (data->length > 0)
 	{
 		/**
 		 * here, it is the call to the sendresp callback from the
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		size = client->ops->sendresp(client->ctx, header->offset, header->length);
+		dbg("send %s", data->offset);
+		size = client->ops->sendresp(client->ctx, data->offset, data->length);
 		if (size < 0)
 			break;
-		header->offset += size;
-		header->length -= size;
+		data->offset += size;
+		data->length -= size;
 	}
-	_buffer_reset(header);
-	_httpmessage_buildheader(message, HTTP11, header);
-	while (header->length > 0)
+	_buffer_reset(data);
+	_httpmessage_buildheader(request, HTTP11, data);
+	data->offset = data->data;
+	while (data->length > 0)
 	{
 		/**
 		 * here, it is the call to the sendresp callback from the
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		size = client->ops->sendresp(client->ctx, header->offset, header->length);
+		size = client->ops->sendresp(client->ctx, data->offset, data->length);
 		if (size < 0)
 			break;
-		header->offset += size;
-		header->length -= size;
+		data->offset += size;
+		data->length -= size;
 	}
 	client->ops->sendresp(client->ctx, "\r\n", 2);
+
+	int ret = ECONTINUE;
+	while (ret == ECONTINUE)
+	{
+		_buffer_reset(data);
+		size = client->ops->recvreq(client->ctx, data->offset, data->size - 1);
+		if (size >= 0)
+		{
+			data->length += size;
+			data->data[data->length] = 0;
+		}
+		else if (size < 0)
+		{
+			if (errno != EAGAIN)
+				break;
+			else
+				continue;
+		}
+		data->offset = data->data;
+		if (response->state == PARSE_INIT)
+			response->state = PARSE_STATUS;
+		ret = _httpmessage_parserequest(response, data);
+	}
+	_buffer_destroy(data);
 	return ESUCCESS;
 }
 #endif
