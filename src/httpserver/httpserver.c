@@ -1046,7 +1046,7 @@ static int _httpclient_request(http_client_t *client)
 	}
 
 	/**
-	 * the receviing may complete the buffer, but the parser has
+	 * the receiving may complete the buffer, but the parser has
 	 * to check the whole buffer.
 	 **/
 	client->sockdata->offset = client->sockdata->data;
