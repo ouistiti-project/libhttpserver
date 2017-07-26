@@ -26,6 +26,7 @@
  *****************************************************************************/
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
 
 #ifndef WIN32
 # include <sys/socket.h>
@@ -73,20 +74,32 @@ extern "C" {
 #endif
 
 #ifdef HTTPCLIENT_FEATURES
-static int tcpclient_connect(void *ctl)
+static int tcpclient_connect(void *ctl, char *addr, int port)
 {
 	http_client_t *client = (http_client_t *)ctl;
 
-	if (client->sock != -1)
+	struct sockaddr_in *saddr;
+
+	client->addr_size = sizeof(*saddr);
+	saddr = (struct sockaddr_in *)&client->addr;
+	saddr->sin_family = AF_INET;
+	saddr->sin_port = htons(port);
+	inet_aton(addr, &saddr->sin_addr);
+
+	if (client->sock != 0)
 		return EREJECT;
 	client->sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (client->sock == -1)
+	{
+		client->sock = 0;
 		return EREJECT;
+	}
 
 	if (connect(client->sock, (struct sockaddr *)&client->addr, client->addr_size) != 0)
 	{
+		err("server connection failed: %s", strerror(errno));
 		close(client->sock);
-		client->sock = -1;
+		client->sock = 0;
 		return EREJECT;
 	}
 	return ESUCCESS;

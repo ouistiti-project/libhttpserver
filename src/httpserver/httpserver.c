@@ -862,15 +862,8 @@ http_client_t *httpclient_create(http_server_t *server, int chunksize)
 #ifdef HTTPCLIENT_FEATURES
 int httpclient_connect(http_client_t *client, char *addr, int port)
 {
-	struct sockaddr_in *saddr;
-
-	saddr = (struct sockaddr_in *)&client->addr;
-	saddr->sin_family = AF_INET;
-	saddr->sin_port = htons(port);
-	saddr->sin_addr.s_addr = inet_aton(addr);
-
 	if (client->ops->connect)
-		return client->ops->connect(client);
+		return client->ops->connect(client, addr, port);
 	return EREJECT;
 }
 

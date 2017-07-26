@@ -44,7 +44,7 @@ typedef struct buffer_s buffer_t;
 typedef struct http_connector_list_s http_connector_list_t;
 typedef struct http_client_modctx_s http_client_modctx_t;
 
-typedef int (*http_connect_t)(void *ctl);
+typedef int (*http_connect_t)(void *ctl, char *addr, int port);
 typedef void (*http_flush_t)(void *ctl);
 typedef void (*http_close_t)(void *ctl);
 typedef struct httpclient_ops_s httpclient_ops_t;
