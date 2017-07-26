@@ -15,6 +15,7 @@ slib-$(SLIB_HTTPSERVER)+=httpserver
 httpserver_SOURCES+=httpserver.c tcpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
 httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
+httpserver_LIBRARY+=pthread
 
 ifneq ($(MAXCHUNKS_HEADER),)
 httpserver_CFLAGS+=-DMAXCHUNKS_HEADER=$(MAXCHUNKS_HEADER)

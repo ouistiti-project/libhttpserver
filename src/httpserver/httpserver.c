@@ -202,6 +202,7 @@ http_message_t * httpmessage_create(int chunksize)
 void httpmessage_request(http_message_t *message, http_message_method_e type, char *resource)
 {
 	message->type = type;
+	message->version = HTTP11;
 	if (resource)
 	{
 		int length = strlen(resource);
@@ -1818,6 +1819,10 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	else if (!strcasecmp(key, "scheme"))
 	{
 		strcpy(value, "http");
+	}
+	else if (!strcasecmp(key, "version"))
+	{
+		strcpy(value, _http_message_version[(message->version & HTTPVERSION_MASK)]);
 	}
 	else if (!strcasecmp(key, "method"))
 	{
