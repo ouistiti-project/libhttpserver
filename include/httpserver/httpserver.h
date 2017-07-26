@@ -96,23 +96,30 @@ typedef enum
 
 typedef enum
 {
-	RESULT_200,
-	RESULT_400,
-	RESULT_404,
-	RESULT_405,
+	MESSAGE_TYPE_GET,
+	MESSAGE_TYPE_POST,
+	MESSAGE_TYPE_HEAD,
+	MESSAGE_TYPE_PUT,
+	MESSAGE_TYPE_DELETE,
+} http_message_method_e;
+
+typedef int http_message_result_e;
+#define RESULT_200 200
+#define RESULT_400 400
+#define RESULT_404 404
+#define RESULT_405 405
 #ifndef HTTP_STATUS_PARTIAL
-	RESULT_101,
-	RESULT_206,
-	RESULT_301,
-	RESULT_302,
-	RESULT_304,
-	RESULT_401,
-	RESULT_414,
-	RESULT_416,
-	RESULT_505,
-	RESULT_511,
+#define RESULT_101 101
+#define RESULT_206 206
+#define RESULT_301 301
+#define RESULT_302 302
+#define RESULT_304 304
+#define RESULT_401 401
+#define RESULT_414 414
+#define RESULT_416 416
+#define RESULT_505 505
+#define RESULT_511 511
 #endif
-} http_message_result_e;
 
 /**
  * @brief callback to manage a request
@@ -274,8 +281,10 @@ void httpserver_destroy(http_server_t *server);
  * 
  * create message to be use with parsecgi
  * out of modules
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-http_message_t * httpmessage_create();
+http_message_t * httpmessage_create(int chunksize);
 
 /**
  * @brief destroy message created with httpmessage_create
@@ -315,6 +324,17 @@ void *httpmessage_private(http_message_t *message, void *data);
  * If result is 0, the function only returns the current result of the message.
  */
 http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result);
+
+/**
+ * @brief create a request message
+ *
+ * @param message the request message to update
+ * @param type 
+ * @param resource the path+query parts of the URI
+ * 
+ * This function is available only if HTTPCLIENT_FEATURES is defined
+ */
+void httpmessage_request(http_message_t *message, http_message_method_e type, char *resource);
 
 /**
  * @brief add a header to the response message
@@ -385,6 +405,8 @@ int httpmessage_lock(http_message_t *message);
  *
  * After ESUCCESS, it is possible to add more data into the content
  * with this same function.
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
  */
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
 
@@ -433,6 +455,31 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value);
 
 /**********************************************************************/
 /**
+ * @brief connect the client to an external server
+ *
+ * @param client the connection that will send the request
+ * @param addr the address of the server
+ * @param port the port of the server
+ *
+ * @return ESUCCESS on success EREJECT on error
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
+ */
+int httpclient_connect(http_client_t *client, char *addr, int port);
+
+/**
+ * @brief send a request with client
+ *
+ * @param client the connection that will send the request
+ * @param message the request
+ *
+ * @return ESUCCESS on success EREJECT on error
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
+ */
+int httpclient_sendrequest(http_client_t *client, http_message_t *message);
+
+/**
  * @brief return the receiver and sender context
  *
  * @param client the connection that is receiving the request
@@ -474,6 +521,13 @@ http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void
  */
 http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
 
+
+/**
+ * @brief shutdown and close the client
+ *
+ * @param client the connection that received the request
+ */
+void httpclient_shutdown(http_client_t *client);
 #ifdef __cplusplus
 }
 #endif

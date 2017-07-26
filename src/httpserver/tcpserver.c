@@ -72,6 +72,29 @@ extern "C" {
 # define dbg(...)
 #endif
 
+#ifdef HTTPCLIENT_FEATURES
+static int tcpclient_connect(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+
+	if (client->sock != -1)
+		return EREJECT;
+	client->sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (client->sock == -1)
+		return EREJECT;
+
+	if (connect(client->sock, (struct sockaddr *)&client->addr, client->addr_size) != 0)
+	{
+		close(client->sock);
+		client->sock = -1;
+		return EREJECT;
+	}
+	return ESUCCESS;
+}
+#else
+#define tcpclient_connect NULL
+#endif
+
 static int tcpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
@@ -106,6 +129,15 @@ static void tcpclient_close(void *ctl)
 	}
 	client->sock = -1;
 }
+
+httpclient_ops_t *httpclient_ops = &(httpclient_ops_t)
+{
+	.connect = tcpclient_connect,
+	.recvreq = tcpclient_recv,
+	.sendresp = tcpclient_send,
+	.flush = tcpclient_flush,
+	.close = tcpclient_close,
+};
 
 static int _tcpserver_start(http_server_t *server)
 {
@@ -208,11 +240,8 @@ static int _tcpserver_start(http_server_t *server)
 
 static http_client_t *_tcpserver_createclient(http_server_t *server)
 {
-	http_client_t * client = httpclient_create(server);
-	client->recvreq = tcpclient_recv;
-	client->sendresp = tcpclient_send;
-	client->flush = tcpclient_flush;
-	client->close = tcpclient_close;
+	http_client_t * client = httpclient_create(server, server->config->chunksize);
+	client->ops = httpclient_ops;
 	client->ctx = client;
 
 	// Client connection request recieved
@@ -229,7 +258,7 @@ static void _tcpserver_close(http_server_t *server)
 	while (client != NULL)
 	{
 		http_client_t *next = client->next;
-		client->close(client);
+		client->ops->close(client);
 		client = next;
 	}
 

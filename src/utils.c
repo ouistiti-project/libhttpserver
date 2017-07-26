@@ -172,29 +172,64 @@ int utils_searchext(char *filepath, char *extlist)
 {
 	int ret = EREJECT;
 	char *fileext = strrchr(filepath,'.');
-	char ext_str[64];
-	ext_str[63] = 0;
+	char *filename = strrchr(filepath,'/');
 	if (fileext != NULL)
 	{
-		strncpy(ext_str, extlist, 63);
-		char *ext = ext_str;
-		char *ext_end = strchr(ext, ',');
-		if (ext_end)
-			*ext_end = 0;
+		char *ext = extlist;
 		while (ext != NULL)
 		{
-			if (!strcmp(ext, fileext) || ext[0] == '*')
+			int i = 0;
+			ret = ESUCCESS;
+			int wildcard = 0;
+			while( *ext != ',' && *ext != '\0')
 			{
-				ret = ESUCCESS;
-				break;
+				if (*ext == '^')
+				{
+					if (fileext != (filename + 1))
+					{
+						ret = EREJECT;
+						ext = strchr(ext, ',');
+						break;
+					}
+					else
+					{
+						ext++;
+						continue;
+					}
+				}
+				if (*ext == '*')
+				{
+					ext++;
+					wildcard = 1;
+					break;
+				}
+				else if (!wildcard)
+				{
+					if (*ext != fileext[i])
+					{
+						ret = EREJECT;
+						ext = strchr(ext, ',');
+						break;
+					}
+					ext++;
+				}
+				else if (*ext == fileext[i])
+				{
+					ext++;
+					wildcard = 0;
+				}
+				i++;
+				if (fileext[i] == '\0')
+					break;
 			}
-			if (ext_end)
-				ext = ext_end + 1;
-			else
+			if (ext == NULL)
 				break;
-			ext_end = strchr(ext, ',');
-			if (ext_end)
-				*ext_end = 0;
+			else if (*ext == '\0')
+				ext = NULL;
+			else
+				ext++;
+			if (ret == ESUCCESS)
+				break;
 		}
 	}
 	return ret;
