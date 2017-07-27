@@ -691,7 +691,8 @@ HTTPMESSAGE_DECL void _httpmessage_fillheaderdb(http_message_t *message)
 		}
 		else if (storage->data[i] == '\0')
 		{
-			_httpmessage_addheader(message, key, value);
+			if (key[0] != 0)
+				_httpmessage_addheader(message, key, value);
 			key = storage->data + i + 1;
 			value = NULL;
 		}
