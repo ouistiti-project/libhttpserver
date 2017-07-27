@@ -65,7 +65,7 @@ struct httpclient_ops_s
 #define CLIENT_ERROR 0x2000
 #define CLIENT_RESPONSEREADY 0x4000
 #define CLIENT_KEEPALIVE 0x8000
-#define CLIENT_MACHINEMASK 0x00FF
+#define CLIENT_MACHINEMASK 0x000F
 #define CLIENT_NEW 0x0000
 #define CLIENT_REQUEST 0x0001
 #define CLIENT_PUSHREQUEST 0x0002
@@ -76,6 +76,7 @@ struct httpclient_ops_s
 #define CLIENT_PARSERERROR 0x0007
 #define CLIENT_COMPLETE 0x0008
 #define CLIENT_EXIT 0x0009
+#define CLIENT_DEAD 0x000A
 struct http_client_s
 {
 	int sock;

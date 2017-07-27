@@ -637,7 +637,6 @@ int httpmessage_content(http_message_t *message, char **data, int *size)
 	return message->content_length + *size;
 }
 
-#ifdef HTTPCLIENT_FEATURES
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
 	static buffer_t tempo;
@@ -653,7 +652,6 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 		message->content = NULL;
 	return ret;
 }
-#endif
 
 http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result)
 {
@@ -976,6 +974,7 @@ static int _httpclient_connect(http_client_t *client)
 	{
 		_httpclient_run(client);
 	} while(!(client->state & CLIENT_STOPPED));
+	client->state = CLIENT_DEAD;
 	dbg("client %p close", client);
 #ifdef DEBUG
 	fflush(stderr);
@@ -1474,7 +1473,6 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_EXIT:
 		{
-			client->state |= CLIENT_STOPPED;
 			http_client_modctx_t *modctx = client->modctx;
 			while (modctx)
 			{
@@ -1488,6 +1486,7 @@ static int _httpclient_run(http_client_t *client)
 			}
 			client->modctx = NULL;
 			client->ops->close(client);
+			client->state |= CLIENT_STOPPED;
 		}
 		break;
 	}
@@ -1519,7 +1518,7 @@ static int _httpserver_connect(http_server_t *server)
 
 		while (client != NULL)
 		{
-			if (client->state & CLIENT_STOPPED)
+			if (client->state == CLIENT_DEAD)
 			{
 #ifdef VTHREAD
 				vthread_join(client->thread, NULL);
