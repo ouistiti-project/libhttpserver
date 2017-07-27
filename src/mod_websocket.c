@@ -50,7 +50,10 @@
 # define SHA1_update(pctx, in, len) \
 	mbedtls_sha1_update((pctx), in, len)
 # define SHA1_finish(out, pctx) \
-	mbedtls_sha1_finish((pctx), out)
+	do { \
+		mbedtls_sha1_finish((pctx), out); \
+		mbedtls_sha1_free((pctx)); \
+	} while(0)
 #else
 typedef struct SHA1_ctx_s{ char *input; int inputlen;} SHA1_ctx;
 # define SHA1_init(pctx)
