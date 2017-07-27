@@ -1,13 +1,13 @@
 ifeq ($(STATIC),y)
 SLIB_HTTPSERVER:=y
-SLIB_URI:=y
-SLIB_WEBSOCKET:=$(WEBSOCKET)
+SLIB_URI:=$(LIBURI)
+SLIB_WEBSOCKET:=$(LIBWEBSOCKET)
 endif
 
 ifeq ($(DYNAMIC),y)
 DLIB_HTTPSERVER:=y
-DLIB_URI:=y
-DLIB_WEBSOCKET:=$(WEBSOCKET)
+DLIB_URI:=$(LIBURI)
+DLIB_WEBSOCKET:=$(LIBWEBSOCKET)
 endif
 
 lib-$(DLIB_HTTPSERVER)+=httpserver
@@ -15,6 +15,7 @@ slib-$(SLIB_HTTPSERVER)+=httpserver
 httpserver_SOURCES+=httpserver.c tcpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
 httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
+httpserver_LIBRARY+=pthread
 
 ifneq ($(MAXCHUNKS_HEADER),)
 httpserver_CFLAGS+=-DMAXCHUNKS_HEADER=$(MAXCHUNKS_HEADER)

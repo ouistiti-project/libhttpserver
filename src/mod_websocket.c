@@ -44,17 +44,27 @@
 # define SHA1_ctx mbedtls_sha1_context
 # define SHA1_init(pctx) \
 	do { \
-		mbedtls_sha1_init(pctx); \
-		mbedtls_sha1_starts(pctx); \
+		mbedtls_sha1_init((pctx)); \
+		mbedtls_sha1_starts((pctx)); \
 	} while(0)
 # define SHA1_update(pctx, in, len) \
-	mbedtls_sha1_update(pctx, in, len)
+	mbedtls_sha1_update((pctx), in, len)
 # define SHA1_finish(out, pctx) \
-	mbedtls_sha1_finish(pctx, out)
-#else
-# define SHA1_compute(in, inlen, out, outlen) \
 	do { \
-		memcpy(out, in, outlen); \
+		mbedtls_sha1_finish((pctx), out); \
+		mbedtls_sha1_free((pctx)); \
+	} while(0)
+#else
+typedef struct SHA1_ctx_s{ char *input; int inputlen;} SHA1_ctx;
+# define SHA1_init(pctx)
+# define SHA1_update(pctx, in, len) \
+	do { \
+		(pctx)->input = in; \
+		(pctx)->inputlen = len; \
+	} while(0)
+# define SHA1_finish(out, pctx) \
+	do { \
+		memcpy(out, (pctx)->input, (pctx)->inputlen); \
 	} while(0)
 #endif
 #if defined(MBEDTLS)

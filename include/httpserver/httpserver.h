@@ -455,6 +455,17 @@ char *httpmessage_SESSION(http_message_t *message, char *key, char *value);
 
 /**********************************************************************/
 /**
+ * @brief create a new client for the server or a client application
+ *
+ * @param server the server which manage the client or NULL for client application
+ * @param chunksize the size of chunked data to collect on the socket
+ *
+ * @return the new client on success or NULL on error
+ *
+ * This function is available only if HTTPCLIENT_FEATURES is defined
+ */
+http_client_t *httpclient_create(http_server_t *server, int chunksize);
+/**
  * @brief connect the client to an external server
  *
  * @param client the connection that will send the request
@@ -471,13 +482,14 @@ int httpclient_connect(http_client_t *client, char *addr, int port);
  * @brief send a request with client
  *
  * @param client the connection that will send the request
- * @param message the request
+ * @param request the request
+ * @param response the response
  *
  * @return ESUCCESS on success EREJECT on error
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-int httpclient_sendrequest(http_client_t *client, http_message_t *message);
+int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_message_t *response);
 
 /**
  * @brief return the receiver and sender context
