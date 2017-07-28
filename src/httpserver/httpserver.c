@@ -571,11 +571,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 	return ret;
 }
 
-HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header)
+HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *header)
 {
-	if (message->headers == NULL)
-		_httpmessage_fillheaderdb(message);
-	dbentry_t *headers = message->headers;
 	http_message_version_e _version = message->version;
 	if (message->version > (version & HTTPVERSION_MASK))
 		_version = (version & HTTPVERSION_MASK);
@@ -583,6 +580,14 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, int versi
 	char *status = _httpmessage_status(message);
 	_buffer_append(header, status, strlen(status));
 	_buffer_append(header, "\r\n", 2);
+	return ESUCCESS;
+}
+
+HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t *header)
+{
+	if (message->headers == NULL)
+		_httpmessage_fillheaderdb(message);
+	dbentry_t *headers = message->headers;
 	while (headers != NULL)
 	{
 		if (!strcmp(headers->key, str_contentlength))
@@ -902,7 +907,8 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		data->length -= size;
 	}
 	_buffer_reset(data);
-	_httpmessage_buildheader(request, HTTP11, data);
+	*(data->offset) = 0;
+	_httpmessage_buildheader(request, data);
 	data->offset = data->data;
 	while (data->length > 0)
 	{
@@ -1354,7 +1360,22 @@ static int _httpclient_run(http_client_t *client)
 		{
 			int size = 0;
 			buffer_t *header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
-			_httpmessage_buildheader(request->response, client->server->config->version, header);
+			_httpmessage_buildresponse(request->response, client->server->config->version, header);
+			while (header->length > 0)
+			{
+				/**
+				 * here, it is the call to the sendresp callback from the
+				 * server configuration.
+				 * see http_server_config_t and httpserver_create
+				 */
+				size = client->ops->sendresp(client->ctx, header->offset, header->length);
+				if (size < 0)
+					break;
+				header->offset += size;
+				header->length -= size;
+			}
+			_buffer_reset(header);
+			_httpmessage_buildheader(request->response, header);
 			while (header->length > 0)
 			{
 				/**
