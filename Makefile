@@ -1,5 +1,14 @@
 include scripts.mk
 
+ifneq ($(MBEDTLS),)
+LIBUTILS=y
+endif
+ifneq ($(WEBSOCKET),)
+LIBUTILS=y
+LIBWEBSOCKET=y
+endif
+export LIBUTILS LIBWEBSOCKET
+
 subdir-y+=src/httpserver
 subdir-y+=include
 subdir-$(MBEDTLS)+=src/mod_mbedtls.mk

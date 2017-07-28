@@ -200,11 +200,20 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 					ret = _mod_websocket_check(ctx, ctx->protocol);
 					if (ret == ESUCCESS)
 						httpmessage_addheader(response, str_protocol, ctx->protocol);
+					else
+					{
+						httpmessage_result(response, RESULT_404);
+						free(ctx->protocol);
+						ctx->protocol = NULL;
+						return ESUCCESS;
+					}
 				}
 			}
 		}
 		if (ret == EREJECT)
 		{
+			if (ctx->protocol)
+				free(ctx->protocol);
 			ctx->protocol = utils_urldecode(httpmessage_REQUEST(request, "uri"));
 			ret = _mod_websocket_check(ctx, ctx->protocol);
 		}
@@ -346,8 +355,10 @@ static void *_websocket_main(void *arg)
 				//ret = read(socket, buffer, 63);
 				if (ret > 0)
 				{
-					ret = websocket_unframed(buffer, ret, buffer, arg);
-					ret = send(client, buffer, ret, MSG_NOSIGNAL);
+					char *out = calloc(1, length);
+					ret = websocket_unframed(buffer, ret, out, arg);
+					ret = send(client, out, ret, MSG_NOSIGNAL);
+					free(out);
 				}
 				free(buffer);
 			}
@@ -391,6 +402,12 @@ static void *_websocket_main(void *arg)
 	return 0;
 }
 
+static websocket_t _wsdefaul_config =
+{
+	.onclose = websocket_close,
+	.onping = websocket_pong,
+	.type = WS_TEXT,
+};
 int default_websocket_run(void *arg, int socket, char *protocol, http_message_t *request)
 {
 	int wssock = _websocket_socket(arg, protocol);
@@ -403,13 +420,7 @@ int default_websocket_run(void *arg, int socket, char *protocol, http_message_t 
 		info.recvreq = httpclient_addreceiver(ctl, NULL, NULL);
 		info.sendresp = httpclient_addsender(ctl, NULL, NULL);
 
-		websocket_t config =
-		{
-			.onclose = websocket_close,
-			.onping = websocket_pong,
-			.type = 0,
-		};
-		websocket_init(&config);
+		websocket_init(&_wsdefaul_config);
 		_websocket_main(&info);
 	}
 	else
