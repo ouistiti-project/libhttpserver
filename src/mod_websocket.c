@@ -224,12 +224,15 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 			httpmessage_addheader(response, str_upgrade, str_websocket);
 			httpmessage_addcontent(response, "none", "", -1);
 			httpmessage_result(response, RESULT_101);
+			dbg("result 101");
 			ret = ECONTINUE;
 		}
 		else
 		{
 			free(ctx->protocol);
 			ctx->protocol = NULL;
+			httpmessage_result(response, RESULT_404);
+			ret = ESUCCESS;
 		}
 	}
 	else
@@ -259,6 +262,7 @@ static void _mod_websocket_freectx(void *arg)
 
 	free(ctx);
 }
+
 void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod_websocket_run_t run, void *runarg)
 {
 	_mod_websocket_t *mod = calloc(1, sizeof(*mod));
@@ -267,7 +271,7 @@ void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod
 	mod->config = config;
 	mod->run = run;
 	mod->runarg = runarg;
-	httpserver_addmod(server, _mod_websocket_getctx, NULL, mod);
+	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod);
 
 	return mod;
 }
