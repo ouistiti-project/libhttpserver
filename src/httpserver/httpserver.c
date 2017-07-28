@@ -516,10 +516,18 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			case PARSE_HEADERNEXT:
 			{
 				/* create key/value entry for each "<key>:<value>\0" string */
-				_httpmessage_fillheaderdb(message);
-				/* reset the buffer to begin the content at the begining of the buffer */
-				_buffer_shrink(data);
-				next = PARSE_CONTENT;
+				if (_httpmessage_fillheaderdb(message) == ESUCCESS)
+				{
+					/* reset the buffer to begin the content at the begining of the buffer */
+					_buffer_shrink(data);
+					next = PARSE_CONTENT;
+				}
+				else
+				{
+					ret = EREJECT;
+					message->result = RESULT_400;
+					warn("request bad header %s", message->headers_storage);
+				}
 			}
 			break;
 			case PARSE_CONTENT:
@@ -677,12 +685,12 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 	return NULL;
 }
 
-HTTPMESSAGE_DECL void _httpmessage_fillheaderdb(http_message_t *message)
+HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 {
 	int i;
 	buffer_t *storage = message->headers_storage;
 	if (storage == NULL)
-		return;
+		return ESUCCESS;
 	char *key = storage->data;
 	char *value = NULL;
 	for (i = 0; i < storage->length; i++)
@@ -696,12 +704,15 @@ HTTPMESSAGE_DECL void _httpmessage_fillheaderdb(http_message_t *message)
 		}
 		else if (storage->data[i] == '\0')
 		{
+			if (value == NULL)
+				return EREJECT;
 			if (key[0] != 0)
 				_httpmessage_addheader(message, key, value);
 			key = storage->data + i + 1;
 			value = NULL;
 		}
 	}
+	return ESUCCESS;
 }
 
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
