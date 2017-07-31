@@ -588,6 +588,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 	char *status = _httpmessage_status(message);
 	_buffer_append(header, status, strlen(status));
 	_buffer_append(header, "\r\n", 2);
+	header->offset = header->data;
 	return ESUCCESS;
 }
 
@@ -890,6 +891,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 
 	request->client = client;
 	response->client = client;
+	httpmessage_addheader(request, "Host", httpmessage_REQUEST(request, "remote_host"));
 	char *method = httpmessage_REQUEST(request, "method");
 	_buffer_append(data, method, strlen(method));
 	_buffer_append(data, " ", 1);
@@ -934,7 +936,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		data->offset += size;
 		data->length -= size;
 	}
-	client->ops->sendresp(client->ctx, "\r\n", 2);
+//	client->ops->sendresp(client->ctx, "\r\n", 2);
 
 	int ret = ECONTINUE;
 	while (ret == ECONTINUE)

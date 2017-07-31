@@ -171,12 +171,13 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 	return ret;
 }
 
-int websocket_framed(char *in, int inlength, char *out, int *outlength, void *arg)
+int websocket_framed(int type, char *in, int inlength, char *out, int *outlength, void *arg)
 {
 	struct frame_s frame;
 	int mtu = 126;
 	uint16_t payloadlen = 0;
 	memset(&frame, 0, sizeof(frame));
+	int length;
 /*
 	if (in[inlength - 1] == 0)
 	{
@@ -185,8 +186,20 @@ int websocket_framed(char *in, int inlength, char *out, int *outlength, void *ar
 	}
 	else
 */
-	if (_config->type == WS_TEXT)
+	if (type == WS_AUTO)
+	{
+		if ((in[inlength - 1] == '\0' && strlen(in) == inlength - 1)
+			|| (in[inlength] == '\0' && strlen(in) == inlength))
+			type = WS_TEXT;
+		else
+			type = WS_BLOB;
+	}
+	length = inlength;
+	if (type == WS_TEXT)
+	{
 		frame.opcode = fo_text;
+		length = strlen(in);
+	}
 	else
 		frame.opcode = fo_binary;
 
@@ -194,15 +207,15 @@ int websocket_framed(char *in, int inlength, char *out, int *outlength, void *ar
 
 	if (_config->mtu)
 		mtu = _config->mtu;
-	if (inlength < 126)
+	if (length < 126)
 	{
-		frame.payloadlen = inlength;
+		frame.payloadlen = length;
 		frame.fin = 1;
 	}
-	else if ((inlength + sizeof(frame) + sizeof(uint16_t)) < 0xFFFF)
+	else if ((length + sizeof(frame) + sizeof(uint16_t)) < 0xFFFF)
 	{
 		frame.payloadlen = 0x7E;
-		payloadlen = htons(inlength);
+		payloadlen = htons(length);
 		frame.fin = 1;
 	}
 	else
@@ -212,14 +225,13 @@ int websocket_framed(char *in, int inlength, char *out, int *outlength, void *ar
 	}
 	memcpy(out, &frame, sizeof(frame));
 	*outlength = sizeof(frame);
-	out += sizeof(frame);
+//	out += sizeof(frame);
 	if (payloadlen)
 	{
-		memcpy(out, &payloadlen, sizeof(payloadlen));
+		memcpy(out + *outlength, &payloadlen, sizeof(payloadlen));
 		*outlength += sizeof(payloadlen);
-		out += sizeof(payloadlen);
 	}
-	memcpy(out, in, inlength);
-	*outlength += inlength;
+	memcpy(out + *outlength, in, length);
+	*outlength += length;
 	return inlength;
 }

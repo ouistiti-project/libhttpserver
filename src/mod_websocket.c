@@ -387,8 +387,8 @@ static void *_websocket_main(void *arg)
 					{
 						ssize_t length;
 						int outlength = 0;
-						length = websocket_framed((char *)buffer, ret, out, &outlength, arg);
-						info->sendresp(info->ctx, (char *)out, outlength);
+						length = websocket_framed(WS_TEXT, (char *)buffer, ret, out, &outlength, arg);
+						outlength = info->sendresp(info->ctx, (char *)out, outlength);
 						size += length;
 					}
 					free(out);

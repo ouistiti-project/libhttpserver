@@ -34,6 +34,8 @@ typedef int (*onclose_t)(void *arg, int status);
 typedef int (*onping_t)(void *arg, char *message);
 
 #define WS_TEXT 153
+#define WS_AUTO -1
+#define WS_BLOB 0
 struct websocket_s
 {
 	int type;
@@ -50,7 +52,7 @@ extern "C"
 
 void websocket_init(websocket_t *config);
 int websocket_unframed(char *in, int inlength, char *out, void *arg);
-int websocket_framed(char *in, int inlength, char *out, int *outlength, void *arg);
+int websocket_framed(int type, char *in, int inlength, char *out, int *outlength, void *arg);
 
 #ifdef __cplusplus
 }
