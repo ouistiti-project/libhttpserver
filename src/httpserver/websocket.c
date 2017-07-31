@@ -89,7 +89,6 @@ void websocket_init(websocket_t *config)
 int websocket_unframed(char *in, int inlength, char *out, void *arg)
 {
 	int i, ret = 0;
-	uint8_t maskingkey[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 	uint64_t payloadlen = 0;
 	char *payload = in;
 	while (inlength > 0)
@@ -118,15 +117,23 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 			payloadlen = frame.payloadlen;
 		if (frame.mask)
 		{
+			uint8_t maskingkey[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 			for (i = 0; i < 4; i++)
 			{
 				maskingkey[i] = payload[i];
 			}
 			payload += sizeof(maskingkey);
+			for (i = 0; i < payloadlen; i++)
+			{
+				out[i] = payload[i] ^ maskingkey[i % 4];
+			}
 		}
-		for (i = 0; i < payloadlen; i++)
+		else
 		{
-			out[i] = payload[i] ^ maskingkey[i % 4];
+			for (i = 0; i < payloadlen; i++)
+			{
+				out[i] = payload[i];
+			}
 		}
 		switch (frame.opcode)
 		{
