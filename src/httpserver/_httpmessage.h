@@ -90,6 +90,7 @@ struct http_message_s
 	http_message_version_e version;
 	buffer_t *headers_storage;
 	dbentry_t *headers;
+	dbentry_t *cookies;
 	void *private;
 	http_message_t *next;
 };
