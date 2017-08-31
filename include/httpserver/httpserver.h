@@ -115,6 +115,7 @@ typedef int http_message_result_e;
 #define RESULT_302 302
 #define RESULT_304 304
 #define RESULT_401 401
+#define RESULT_403 403
 #define RESULT_414 414
 #define RESULT_416 416
 #define RESULT_505 505
