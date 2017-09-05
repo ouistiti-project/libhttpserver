@@ -90,6 +90,7 @@ struct http_message_s
 	http_message_version_e version;
 	buffer_t *headers_storage;
 	dbentry_t *headers;
+	dbentry_t *cookies;
 	void *private;
 	http_message_t *next;
 };
@@ -105,10 +106,11 @@ HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[];
 HTTPMESSAGE_DECL const char *_http_message_version[];
 
 HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize);
-HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header);
+HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *header);
+HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t *header);
 HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key, char *value);
 HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t *data);
-HTTPMESSAGE_DECL void _httpmessage_fillheaderdb(http_message_t *message);
+HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message);
 HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message);
 
 #ifdef _HTTPMESSAGE_

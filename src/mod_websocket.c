@@ -152,11 +152,13 @@ static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *
 static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol)
 {
 	int ret = EREJECT;
+
 	if (protocol)
 	{
 		char *service = ctx->mod->config->services;
 		int length = 0;
 		char *end = service;
+
 		while (end != NULL)
 		{
 			end = strchr(service, ',');
@@ -164,9 +166,9 @@ static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol)
 				length = end - service;
 			else
 				length = strlen(service);
+
 			if (strlen(protocol) == length && !strncmp(protocol, service, length))
 			{
-				dbg("websocket: protocol %s", protocol);
 				ret = ESUCCESS;
 				break;
 			}
@@ -176,6 +178,7 @@ static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol)
 
 	return ret;
 }
+
 static int websocket_connector(void *arg, http_message_t *request, http_message_t *response)
 {
 	int ret = EREJECT;
@@ -184,7 +187,6 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 	if (ctx->protocol == NULL)
 	{
 		char *connection = httpmessage_REQUEST(request, str_connection);
-		_mod_websocket_handshake(ctx, request, response);
 
 		if (strcasestr(connection, str_upgrade))
 		{
@@ -197,30 +199,33 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 				{
 					ctx->protocol = malloc(strlen(protocol) + 1);
 					strcpy(ctx->protocol, protocol);
-					ret = _mod_websocket_check(ctx, ctx->protocol);
-					if (ret == ESUCCESS)
-						httpmessage_addheader(response, str_protocol, ctx->protocol);
+					httpmessage_addheader(response, str_protocol, ctx->protocol);
+				}
+				else
+				{
+					ctx->protocol = utils_urldecode(httpmessage_REQUEST(request, "uri"));
+				}
+				ret = _mod_websocket_check(ctx, ctx->protocol);
+
+				if (ret == ESUCCESS)
+				{
+					ctx->socket = httpmessage_lock(response);
+					_mod_websocket_handshake(ctx, request, response);
+					httpmessage_addheader(response, str_connection, str_upgrade);
+					httpmessage_addheader(response, str_upgrade, str_websocket);
+					httpmessage_addcontent(response, "none", "", -1);
+					httpmessage_result(response, RESULT_101);
+					dbg("result 101");
+					ret = ECONTINUE;
+				}
+				else
+				{
+					httpmessage_result(response, RESULT_404);
+					free(ctx->protocol);
+					ctx->protocol = NULL;
+					ret = ESUCCESS;
 				}
 			}
-		}
-		if (ret == EREJECT)
-		{
-			ctx->protocol = utils_urldecode(httpmessage_REQUEST(request, "uri"));
-			ret = _mod_websocket_check(ctx, ctx->protocol);
-		}
-		if (ret == ESUCCESS)
-		{
-			ctx->socket = httpmessage_lock(response);
-			httpmessage_addheader(response, str_connection, str_upgrade);
-			httpmessage_addheader(response, str_upgrade, str_websocket);
-			httpmessage_addcontent(response, "none", "", -1);
-			httpmessage_result(response, RESULT_101);
-			ret = ECONTINUE;
-		}
-		else
-		{
-			free(ctx->protocol);
-			ctx->protocol = NULL;
 		}
 	}
 	else
@@ -250,6 +255,7 @@ static void _mod_websocket_freectx(void *arg)
 
 	free(ctx);
 }
+
 void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod_websocket_run_t run, void *runarg)
 {
 	_mod_websocket_t *mod = calloc(1, sizeof(*mod));
@@ -258,7 +264,7 @@ void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod
 	mod->config = config;
 	mod->run = run;
 	mod->runarg = runarg;
-	httpserver_addmod(server, _mod_websocket_getctx, NULL, mod);
+	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod);
 
 	return mod;
 }
@@ -346,8 +352,10 @@ static void *_websocket_main(void *arg)
 				//ret = read(socket, buffer, 63);
 				if (ret > 0)
 				{
-					ret = websocket_unframed(buffer, ret, buffer, arg);
-					ret = send(client, buffer, ret, MSG_NOSIGNAL);
+					char *out = calloc(1, length);
+					ret = websocket_unframed(buffer, ret, out, arg);
+					ret = send(client, out, ret, MSG_NOSIGNAL);
+					free(out);
 				}
 				free(buffer);
 			}
@@ -372,8 +380,8 @@ static void *_websocket_main(void *arg)
 					{
 						ssize_t length;
 						int outlength = 0;
-						length = websocket_framed((char *)buffer, ret, out, &outlength, arg);
-						info->sendresp(info->ctx, (char *)out, outlength);
+						length = websocket_framed(WS_TEXT, (char *)buffer, ret, out, &outlength, arg);
+						outlength = info->sendresp(info->ctx, (char *)out, outlength);
 						size += length;
 					}
 					free(out);
@@ -391,6 +399,12 @@ static void *_websocket_main(void *arg)
 	return 0;
 }
 
+static websocket_t _wsdefaul_config =
+{
+	.onclose = websocket_close,
+	.onping = websocket_pong,
+	.type = WS_TEXT,
+};
 int default_websocket_run(void *arg, int socket, char *protocol, http_message_t *request)
 {
 	int wssock = _websocket_socket(arg, protocol);
@@ -403,13 +417,7 @@ int default_websocket_run(void *arg, int socket, char *protocol, http_message_t 
 		info.recvreq = httpclient_addreceiver(ctl, NULL, NULL);
 		info.sendresp = httpclient_addsender(ctl, NULL, NULL);
 
-		websocket_t config =
-		{
-			.onclose = websocket_close,
-			.onping = websocket_pong,
-			.type = 0,
-		};
-		websocket_init(&config);
+		websocket_init(&_wsdefaul_config);
 		_websocket_main(&info);
 	}
 	else

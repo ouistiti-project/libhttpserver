@@ -115,6 +115,7 @@ typedef int http_message_result_e;
 #define RESULT_302 302
 #define RESULT_304 304
 #define RESULT_401 401
+#define RESULT_403 403
 #define RESULT_414 414
 #define RESULT_416 416
 #define RESULT_505 505
@@ -428,6 +429,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
  */
 
 char *httpmessage_SERVER(http_message_t *message, char *key);
+
 /**
  * @brief get value for different attributs of the request
  *
@@ -439,6 +441,16 @@ char *httpmessage_SERVER(http_message_t *message, char *key);
  * @return the value of the attribut or a empty string
  */
 char *httpmessage_REQUEST(http_message_t *message, char *key);
+
+/**
+ * @brief get value of each cookie of the request
+ *
+ * @param message the request message received
+ * @param key the name of the cookie
+ *
+ * @return the value of the attribut or a null pointer
+ */
+char *httpmessage_COOKIE(http_message_t *message, char *key);
 
 /**
  * @brief get value for the session used by the request

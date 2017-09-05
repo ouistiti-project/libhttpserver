@@ -249,11 +249,14 @@ char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext,
 
 	filepath[length] = '\0';
 
-	memset(filestat, 0, sizeof(*filestat));
-	if (stat(filepath, filestat))
+	if (filestat)
 	{
-		free(filepath);
-		return NULL;
+		memset(filestat, 0, sizeof(*filestat));
+		if (stat(filepath, filestat))
+		{
+			free(filepath);
+			return NULL;
+		}
 	}
 	return filepath;
 }

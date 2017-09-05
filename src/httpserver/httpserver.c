@@ -516,10 +516,18 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			case PARSE_HEADERNEXT:
 			{
 				/* create key/value entry for each "<key>:<value>\0" string */
-				_httpmessage_fillheaderdb(message);
-				/* reset the buffer to begin the content at the begining of the buffer */
-				_buffer_shrink(data);
-				next = PARSE_CONTENT;
+				if (_httpmessage_fillheaderdb(message) == ESUCCESS)
+				{
+					/* reset the buffer to begin the content at the begining of the buffer */
+					_buffer_shrink(data);
+					next = PARSE_CONTENT;
+				}
+				else
+				{
+					ret = EREJECT;
+					message->result = RESULT_400;
+					warn("request bad header %s", message->headers_storage);
+				}
 			}
 			break;
 			case PARSE_CONTENT:
@@ -571,11 +579,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 	return ret;
 }
 
-HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, int version, buffer_t *header)
+HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *header)
 {
-	if (message->headers == NULL)
-		_httpmessage_fillheaderdb(message);
-	dbentry_t *headers = message->headers;
 	http_message_version_e _version = message->version;
 	if (message->version > (version & HTTPVERSION_MASK))
 		_version = (version & HTTPVERSION_MASK);
@@ -583,6 +588,15 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, int versi
 	char *status = _httpmessage_status(message);
 	_buffer_append(header, status, strlen(status));
 	_buffer_append(header, "\r\n", 2);
+	header->offset = header->data;
+	return ESUCCESS;
+}
+
+HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t *header)
+{
+	if (message->headers == NULL)
+		_httpmessage_fillheaderdb(message);
+	dbentry_t *headers = message->headers;
 	while (headers != NULL)
 	{
 		if (!strcmp(headers->key, str_contentlength))
@@ -672,12 +686,12 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 	return NULL;
 }
 
-HTTPMESSAGE_DECL void _httpmessage_fillheaderdb(http_message_t *message)
+HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 {
 	int i;
 	buffer_t *storage = message->headers_storage;
 	if (storage == NULL)
-		return;
+		return ESUCCESS;
 	char *key = storage->data;
 	char *value = NULL;
 	for (i = 0; i < storage->length; i++)
@@ -691,12 +705,15 @@ HTTPMESSAGE_DECL void _httpmessage_fillheaderdb(http_message_t *message)
 		}
 		else if (storage->data[i] == '\0')
 		{
+			if (value == NULL)
+				return EREJECT;
 			if (key[0] != 0)
 				_httpmessage_addheader(message, key, value);
 			key = storage->data + i + 1;
 			value = NULL;
 		}
 	}
+	return ESUCCESS;
 }
 
 void httpmessage_addheader(http_message_t *message, char *key, char *value)
@@ -874,6 +891,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 
 	request->client = client;
 	response->client = client;
+	httpmessage_addheader(request, "Host", httpmessage_REQUEST(request, "remote_host"));
 	char *method = httpmessage_REQUEST(request, "method");
 	_buffer_append(data, method, strlen(method));
 	_buffer_append(data, " ", 1);
@@ -902,7 +920,8 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		data->length -= size;
 	}
 	_buffer_reset(data);
-	_httpmessage_buildheader(request, HTTP11, data);
+	*(data->offset) = 0;
+	_httpmessage_buildheader(request, data);
 	data->offset = data->data;
 	while (data->length > 0)
 	{
@@ -917,7 +936,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		data->offset += size;
 		data->length -= size;
 	}
-	client->ops->sendresp(client->ctx, "\r\n", 2);
+//	client->ops->sendresp(client->ctx, "\r\n", 2);
 
 	int ret = ECONTINUE;
 	while (ret == ECONTINUE)
@@ -1354,7 +1373,22 @@ static int _httpclient_run(http_client_t *client)
 		{
 			int size = 0;
 			buffer_t *header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
-			_httpmessage_buildheader(request->response, client->server->config->version, header);
+			_httpmessage_buildresponse(request->response, client->server->config->version, header);
+			while (header->length > 0)
+			{
+				/**
+				 * here, it is the call to the sendresp callback from the
+				 * server configuration.
+				 * see http_server_config_t and httpserver_create
+				 */
+				size = client->ops->sendresp(client->ctx, header->offset, header->length);
+				if (size < 0)
+					break;
+				header->offset += size;
+				header->length -= size;
+			}
+			_buffer_reset(header);
+			_httpmessage_buildheader(request->response, header);
 			while (header->length > 0)
 			{
 				/**
@@ -1791,6 +1825,91 @@ char *httpserver_INFO(http_server_t *server, char *key)
 				host, NI_MAXHOST,
 				0, 0, NI_NUMERICHOST);
 			value = host;
+		}
+	}
+	return value;
+}
+
+char *httpmessage_COOKIE(http_message_t *message, char *key)
+{
+	char *value = NULL;
+	if (message->client == NULL)
+		return NULL;
+	if (message->cookies == NULL)
+	{
+		char *cookie = NULL;
+		/**
+		 * same as httpmessage_REQUEST(message, "Cookie")
+		 * but disallow header access with
+		 * header->key = "#ookie";
+		 **/
+		dbentry_t *header = message->headers;
+		while (header != NULL)
+		{
+			if (!strcasecmp(header->key, "Cookie"))
+			{
+				header->key = "#ookie";
+				cookie = header->value;
+				break;
+			}
+			header = header->next;
+		}
+		if (cookie && cookie[0] != '\0')
+		{
+			while (*cookie == ' ')
+			{
+				cookie++;
+			}
+			char *key = cookie;
+			int length = strlen(cookie) + 1;
+			char *value = NULL;
+			int i;
+			for (i = 0; i < length; i++)
+			{
+				if (cookie[i] == '=' && value == NULL)
+				{
+					cookie[i] = '\0';
+					value = cookie + i + 1;
+					while (*value == ' ')
+					{
+						i++;
+						value++;
+					}
+				}
+				else if (cookie[i] == '\0' || cookie[i] == ';')
+				{
+					if (key[0] != 0 && value != NULL)
+					{
+						dbg("new cookie: %s => %s", key, value);
+						dbentry_t *headerinfo;
+						headerinfo = vcalloc(1, sizeof(dbentry_t));
+						headerinfo->key = key;
+						headerinfo->value = value;
+						headerinfo->next = message->cookies;
+						message->cookies = headerinfo;
+					}
+					key = cookie + i + 1;
+					while (*key == ' ')
+					{
+						i++;
+						key++;
+					}
+					value = NULL;
+				}
+			}
+		}
+	}
+	if (message->cookies != NULL)
+	{
+		dbentry_t *cookie = message->cookies;
+		while (cookie != NULL)
+		{
+			if (!strcasecmp(cookie->key, key))
+			{
+				value = cookie->value;
+				break;
+			}
+			cookie = cookie->next;
 		}
 	}
 	return value;

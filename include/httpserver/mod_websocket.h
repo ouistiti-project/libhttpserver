@@ -42,6 +42,7 @@ struct mod_websocket_s
 {
 	char *services;
 	char *path;
+	char *mode;
 };
 
 void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod_websocket_run_t run, void *runarg);
