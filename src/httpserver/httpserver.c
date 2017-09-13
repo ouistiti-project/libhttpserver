@@ -901,7 +901,6 @@ http_client_t *httpclient_create(http_server_t *server, int chunksize)
 		client->ctx = client;
 	}
 #endif
-	client->callback = client->callbacks;
 	client->sockdata = _buffer_create(1, chunksize);
 
 	return client;
@@ -1074,7 +1073,6 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 				{
 					client->state |= CLIENT_RESPONSEREADY;
 				}
-				client->callback = iterator;
 				request->connector = iterator;
 				break;
 			}

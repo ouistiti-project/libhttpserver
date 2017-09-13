@@ -88,7 +88,6 @@ struct http_client_s
 	void *ctx; /* ctx of recvreq and sendresp functions */
 
 	http_connector_list_t *callbacks;
-	http_connector_list_t *callback;
 	http_message_t *request;
 	http_message_t *request_queue;
 
