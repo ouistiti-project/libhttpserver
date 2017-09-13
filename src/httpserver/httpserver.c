@@ -1512,6 +1512,40 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_COMPLETE:
 		{
+			/**
+			 * flush the input socket to begin the next request
+			 */
+			while (request && request->state < PARSE_END)
+			{
+				int size = 0;
+				/**
+				 * here, it is the call to the recvreq callback from the
+				 * server configuration.
+				 * see http_server_config_t and httpserver_create
+				 */
+				if (client->sockdata->size <= client->sockdata->length)
+					_buffer_reset(client->sockdata);
+				size = client->ops->recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+				if (size > 0)
+				{
+					client->sockdata->length += size;
+					client->sockdata->data[client->sockdata->length] = 0;
+				}
+				else
+				{
+					client->state |= ~CLIENT_KEEPALIVE;
+				}
+
+				/**
+				 * the receiving may complete the buffer, but the parser has
+				 * to check the whole buffer.
+				 **/
+				client->sockdata->offset = client->sockdata->data;
+				_httpmessage_parserequest(request, client->sockdata);
+			}
+			/**
+			 * flush the output socket
+			 */
 			client->ops->flush(client);
 			/**
 			 * to stay in keep alive the rules are:
