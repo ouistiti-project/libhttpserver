@@ -175,7 +175,7 @@ static void _buffer_shrink(buffer_t *buffer)
 	}
 	memcpy(buffer->data, buffer->offset, buffer->length);
 	buffer->data[buffer->length] = '\0';
-	buffer->offset = buffer->data;
+	buffer->offset = buffer->data + buffer->length;
 }
 
 static void _buffer_reset(buffer_t *buffer)
@@ -429,7 +429,6 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				if (data->offset + 10 > data->data + data->size)
 				{
 					_buffer_shrink(data);
-					data->offset = data->data + data->length;
 					break;
 				}
 				char *version = data->offset;
