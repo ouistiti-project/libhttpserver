@@ -1042,7 +1042,17 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 {
 	int ret = ESUCCESS;
 	char *vhost = NULL;
-	http_connector_list_t *iterator;
+	http_connector_list_t *iterator = request->connector;
+
+	if (iterator != NULL)
+	{
+		ret = iterator->func(iterator->arg, request, response);
+		if (ret == ESUCCESS)
+		{
+			client->state |= CLIENT_RESPONSEREADY;
+		}
+		return ret;
+	}
 
 	iterator = client->callbacks;
 	while (iterator != NULL)
@@ -1065,6 +1075,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 					client->state |= CLIENT_RESPONSEREADY;
 				}
 				client->callback = iterator;
+				request->connector = iterator;
 				break;
 			}
 		}
@@ -1203,7 +1214,6 @@ static int _httpclient_request(http_client_t *client)
 
 static int _httpclient_pushrequest(http_client_t *client, http_message_t *request)
 {
-	request->connector = client->callback;
 	http_message_t *iterator = client->request_queue;
 	if (iterator == NULL)
 	{
