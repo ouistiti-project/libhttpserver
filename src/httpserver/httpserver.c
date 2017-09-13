@@ -514,18 +514,43 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_HEADERNEXT:
 			{
-				/* create key/value entry for each "<key>:<value>\0" string */
-				if (_httpmessage_fillheaderdb(message) == ESUCCESS)
-				{
-					/* reset the buffer to begin the content at the begining of the buffer */
-					_buffer_shrink(data);
-					next = PARSE_CONTENT;
-				}
-				else
+				if (_httpmessage_fillheaderdb(message) != ESUCCESS)
 				{
 					ret = EREJECT;
 					message->result = RESULT_400;
 					warn("request bad header %s", message->headers_storage);
+				}
+				else if (message->content_length == 0)
+				{
+					next = PARSE_END;
+					dbg("no content inside request");
+				}
+				else
+				{
+					next = PARSE_PRECONTENT;
+				}
+			}
+			break;
+			case PARSE_PRECONTENT:
+			{
+				if (!(message->state & PARSE_CONTINUE))
+				{
+					int length = data->length - (data->offset - data->data);
+					if (length > 0 && 
+							length < message->content_length &&
+							length < data->size)
+					{
+						/* reset the buffer to begin the content at the begining of the buffer */
+						_buffer_shrink(data);
+						message->state |= PARSE_CONTINUE;
+					}
+					else
+						next = PARSE_CONTENT;
+				}
+				else
+				{
+					next = PARSE_CONTENT;
+					message->state &= ~PARSE_CONTINUE;
 				}
 			}
 			break;
@@ -544,7 +569,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					 * Is possible to use the buffer with the function
 					 *  httpmessage_content
 					 */
-					int length = data->length -(data->offset - data->data);
+					//int length = data->length -(data->offset - data->data);
+					int length = data->length;
 					message->content = data;
 
 					/**
@@ -552,24 +578,30 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					 * is zero. But it is false, the true value is
 					 * Sum(content->length);
 					 */
-					if (message->content_length > 0)
+					if (message->content_length <= length)
 					{
+						data->offset += message->content_length;
+						message->content_length = 0;
+						next = PARSE_END;
+					}
+					else
+					{
+						data->offset += length;
 						message->content_length -= length;
-						if (message->content_length <= 0)
-							next = PARSE_END;
 					}
 				}
 			}
 			break;
 			case PARSE_END:
 			{
+				_buffer_shrink(data);
 				ret = ESUCCESS;
 			}
 			break;
 		}
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
-			if (next < PARSE_HEADERNEXT)
+			if (next <= PARSE_HEADERNEXT)
 				ret = EINCOMPLETE;
 			break;
 		}
