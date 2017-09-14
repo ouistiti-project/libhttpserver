@@ -46,6 +46,7 @@ static const char *_mimetype[] =
 	"text/plain",
 	"text/html",
 	"text/css",
+	"text/json",
 	"application/javascript",
 	"image/png",
 	"image/jpeg",
@@ -67,6 +68,10 @@ static const mime_entry_t *mime_entry[] =
 	&(mime_entry_t){
 		.ext = ".css",
 		.type = MIME_TEXTCSS,
+	},
+	&(mime_entry_t){
+		.ext = ".json",
+		.type = MIME_TEXTJSON,
 	},
 	&(mime_entry_t){
 		.ext = ".js",
@@ -132,10 +137,8 @@ char *utils_urldecode(char *encoded)
 			char *end = strchr(encoded, ';');
 			if (end == NULL)
 			{
-				char encchar[2] = { encoded[0], encoded[1]};
-				int encval = atoi(encchar);
+				int encval = strtol(encoded, &encoded, 16);
 				*offset = (char) encval;
-				encoded += 2;
 				offset++;
 			}
 			else

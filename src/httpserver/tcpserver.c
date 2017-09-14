@@ -261,7 +261,15 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 	// Create new client socket to communicate
 	client->addr_size = sizeof(client->addr);
 	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
+	char hoststr[NI_MAXHOST];
+	char portstr[NI_MAXSERV];
 
+	int rc = getnameinfo((struct sockaddr *)&client->addr, 
+		client->addr_size, hoststr, sizeof(hoststr), portstr, sizeof(portstr), 
+		NI_NUMERICHOST | NI_NUMERICSERV);
+
+	if (rc == 0) 
+		warn("new connection %p from %s %s", client, hoststr, portstr);
 	return client;
 }
 
