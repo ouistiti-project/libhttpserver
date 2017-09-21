@@ -104,7 +104,7 @@ const char *utils_getmime(char *filepath)
 		return NULL;
 	while (mime)
 	{
-		if (utils_searchext(fileext, mime->ext) == ESUCCESS)
+		if (utils_searchexp(fileext, mime->ext) == ESUCCESS)
 		{
 			break;
 		}
@@ -171,69 +171,69 @@ char *utils_urldecode(char *encoded)
 	return decoded;
 }
 
-int utils_searchext(char *filepath, char *extlist)
+int utils_searchexp(char *haystack, char *needleslist)
 {
 	int ret = EREJECT;
-	if (filepath != NULL)
+	if (haystack != NULL)
 	{
-		char *filename = strrchr(filepath,'/');
+		char *filename = strrchr(haystack,'/');
 		if (filename != NULL)
 			filename++;
 		else
-			filename = filepath;
-		char *ext = extlist;
-		while (ext != NULL)
+			filename = haystack;
+		char *needle = needleslist;
+		while (needle != NULL)
 		{
 			int i = 0;
 			ret = ESUCCESS;
 			int wildcard = 0;
-			while( *ext != ',' && *ext != '\0')
+			while( *needle != ',' && *needle != '\0')
 			{
-				if (*ext == '^')
+				if (*needle == '^')
 				{
-					if (filepath != filename)
+					if (haystack != filename)
 					{
 						ret = EREJECT;
-						ext = strchr(ext, ',');
+						needle = strchr(needle, ',');
 						break;
 					}
 					else
 					{
-						ext++;
+						needle++;
 						continue;
 					}
 				}
-				if (*ext == '*')
+				if (*needle == '*')
 				{
-					ext++;
+					needle++;
 					wildcard = 1;
 					break;
 				}
 				else if (!wildcard)
 				{
-					if (*ext != filepath[i])
+					if (*needle != haystack[i])
 					{
 						ret = EREJECT;
-						ext = strchr(ext, ',');
+						needle = strchr(needle, ',');
 						break;
 					}
-					ext++;
+					needle++;
 				}
-				else if (*ext == filepath[i])
+				else if (*needle == haystack[i])
 				{
-					ext++;
+					needle++;
 					wildcard = 0;
 				}
 				i++;
-				if (filepath[i] == '\0')
+				if (haystack[i] == '\0')
 					break;
 			}
-			if (ext == NULL)
+			if (needle == NULL)
 				break;
-			else if (*ext == '\0')
-				ext = NULL;
+			else if (*needle == '\0')
+				needle = NULL;
 			else
-				ext++;
+				needle++;
 			if (ret == ESUCCESS)
 				break;
 		}

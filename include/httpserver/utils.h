@@ -45,6 +45,6 @@ typedef enum
 const char *utils_getmime(char *path);
 
 char *utils_urldecode(char *encoded);
-int utils_searchext(char *filepath, char *extlist);
+int utils_searchexp(char *haystack, char *needleslist);
 char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext, struct stat *filestat);
 #endif
