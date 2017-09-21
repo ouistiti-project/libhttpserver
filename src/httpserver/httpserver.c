@@ -617,6 +617,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 		_version = (version & HTTPVERSION_MASK);
 	_buffer_append(header, _http_message_version[_version], strlen(_http_message_version[_version]));
 	char *status = _httpmessage_status(message);
+	dbg("response %s", status);
 	_buffer_append(header, status, strlen(status));
 	_buffer_append(header, "\r\n", 2);
 	header->offset = header->data;

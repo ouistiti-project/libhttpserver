@@ -174,10 +174,13 @@ char *utils_urldecode(char *encoded)
 int utils_searchext(char *filepath, char *extlist)
 {
 	int ret = EREJECT;
-	char *fileext = strrchr(filepath,'.');
-	char *filename = strrchr(filepath,'/');
-	if (fileext != NULL)
+	if (filepath != NULL)
 	{
+		char *filename = strrchr(filepath,'/');
+		if (filename != NULL)
+			filename++;
+		else
+			filename = filepath;
 		char *ext = extlist;
 		while (ext != NULL)
 		{
@@ -188,7 +191,7 @@ int utils_searchext(char *filepath, char *extlist)
 			{
 				if (*ext == '^')
 				{
-					if (fileext != (filename + 1))
+					if (filepath != filename)
 					{
 						ret = EREJECT;
 						ext = strchr(ext, ',');
@@ -208,7 +211,7 @@ int utils_searchext(char *filepath, char *extlist)
 				}
 				else if (!wildcard)
 				{
-					if (*ext != fileext[i])
+					if (*ext != filepath[i])
 					{
 						ret = EREJECT;
 						ext = strchr(ext, ',');
@@ -216,13 +219,13 @@ int utils_searchext(char *filepath, char *extlist)
 					}
 					ext++;
 				}
-				else if (*ext == fileext[i])
+				else if (*ext == filepath[i])
 				{
 					ext++;
 					wildcard = 0;
 				}
 				i++;
-				if (fileext[i] == '\0')
+				if (filepath[i] == '\0')
 					break;
 			}
 			if (ext == NULL)
