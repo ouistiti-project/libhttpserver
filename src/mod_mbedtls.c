@@ -51,7 +51,7 @@
 #include <mbedtls/x509.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/version.h>
-#if MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR==4
+#if MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR>=4
 #include <mbedtls/net_sockets.h>
 #elif MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR==2
 #include <mbedtls/net.h>
