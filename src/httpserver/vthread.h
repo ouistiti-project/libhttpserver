@@ -12,6 +12,7 @@ typedef void *(*vthread_routine)(void *);
 #ifdef WIN32
 # define vthread_attr_t char
 #else
+# include <pthread.h>
 # define vthread_attr_t pthread_attr_t
 #endif
 
