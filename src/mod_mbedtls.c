@@ -78,6 +78,7 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 typedef struct _mod_mbedtls_s
 {
 	mbedtls_ssl_context ssl;
+	http_client_t *ctl;
 	int state;
 	http_recv_t recvreq;
 	http_send_t sendresp;
@@ -235,6 +236,7 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
 	_mod_mbedtls_config_t *config = (_mod_mbedtls_config_t *)arg;
 
+	ctx->ctl = ctl;
 	ctx->ctx = httpclient_context(ctl);
 	ctx->recvreq = httpclient_addreceiver(ctl, _mod_mbedtls_recv, ctx);
 	ctx->sendresp = httpclient_addsender(ctl, _mod_mbedtls_send, ctx);
@@ -246,6 +248,7 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 	{
 		int ret;
 		ctx->state &= ~RECV_COMPLETE;
+		dbg("TLS Handshake");
 		while((ret = mbedtls_ssl_handshake(&ctx->ssl)) != 0 )
 		{
 			if(ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
@@ -254,8 +257,9 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 		if (ret == 0)
 		{
 			ctx->state |= HANDSHAKE;
-			dbg("TLS Handshake");
 		}
+		else
+			warn("TLS Handshake error");
 	}
 	return ctx;
 }
@@ -267,6 +271,8 @@ static void _mod_mbedtls_freectx(void *vctx)
 	while ((ret = mbedtls_ssl_close_notify(&ctx->ssl)) == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
 	dbg("TLS Close");
 	mbedtls_ssl_free(&ctx->ssl);
+	httpclient_addreceiver(ctx->ctl, ctx->recvreq, ctx->ctx);
+	httpclient_addsender(ctx->ctl, ctx->sendresp, ctx->ctx);
 }
 
 static int _mod_mbedtls_recv(void *vctx, char *data, int size)
