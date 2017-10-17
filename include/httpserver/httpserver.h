@@ -480,17 +480,20 @@ char *httpmessage_COOKIE(http_message_t *message, char *key);
 char *httpmessage_SESSION(http_message_t *message, char *key, char *value);
 
 /**********************************************************************/
+typedef struct httpclient_ops_s httpclient_ops_t;
 /**
  * @brief create a new client for the server or a client application
  *
  * @param server the server which manage the client or NULL for client application
+ * @param fops the collection of operation to use client socket (tcpclient_ops)
  * @param chunksize the size of chunked data to collect on the socket
  *
  * @return the new client on success or NULL on error
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-http_client_t *httpclient_create(http_server_t *server, int chunksize);
+http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize);
+extern httpclient_ops_t *tcpclient_ops;
 /**
  * @brief connect the client to an external server
  *

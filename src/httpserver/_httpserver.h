@@ -84,7 +84,7 @@ struct http_client_s
 	http_server_t *server; /* the server which create the client */
 	vthread_t thread; /* The thread of socket management during the live of the connection */
 
-	httpclient_ops_t *ops;
+	httpclient_ops_t ops;
 	void *ctx; /* ctx of recvreq and sendresp functions */
 
 	http_connector_list_t *callbacks;
@@ -108,7 +108,6 @@ struct http_client_s
 	struct http_client_s *next;
 };
 typedef struct http_client_s http_client_t;
-http_client_t *httpclient_create(http_server_t *server, int chunksize);
 int httpclient_socket(http_client_t *client);
 
 typedef int (*_httpserver_start_t)(http_server_t *server);

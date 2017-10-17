@@ -47,7 +47,6 @@
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
 
-extern httpclient_ops_t *httpclient_ops;
 extern httpserver_ops_t *httpserver_ops;
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -877,10 +876,10 @@ void *httpclient_context(http_client_t *client)
 
 http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
 {
-	http_recv_t previous = client->ops->recvreq;
+	http_recv_t previous = client->ops.recvreq;
 	if (func)
 	{
-		client->ops->recvreq = func;
+		client->ops.recvreq = func;
 		client->ctx = arg;
 	}
 	return previous;
@@ -888,16 +887,16 @@ http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void
 
 http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg)
 {
-	http_send_t previous = client->ops->sendresp;
+	http_send_t previous = client->ops.sendresp;
 	if (func)
 	{
-		client->ops->sendresp = func;
+		client->ops.sendresp = func;
 		client->ctx = arg;
 	}
 	return previous;
 }
 
-http_client_t *httpclient_create(http_server_t *server, int chunksize)
+http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize)
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
 	client->server = server;
@@ -911,13 +910,8 @@ http_client_t *httpclient_create(http_server_t *server, int chunksize)
 			callback = callback->next;
 		}
 	}
-#ifdef HTTPCLIENT_FEATURES
-	else
-	{
-		client->ops = httpclient_ops;
-		client->ctx = client;
-	}
-#endif
+	memcpy(&client->ops, fops, sizeof(client->ops));
+	client->ctx = client;
 	client->sockdata = _buffer_create(1, chunksize);
 
 	return client;
@@ -926,8 +920,8 @@ http_client_t *httpclient_create(http_server_t *server, int chunksize)
 #ifdef HTTPCLIENT_FEATURES
 int httpclient_connect(http_client_t *client, char *addr, int port)
 {
-	if (client->ops->connect)
-		return client->ops->connect(client, addr, port);
+	if (client->ops.connect)
+		return client->ops.connect(client, addr, port);
 	return EREJECT;
 }
 
@@ -960,7 +954,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		 * see http_server_config_t and httpserver_create
 		 */
 		dbg("send %s", data->offset);
-		size = client->ops->sendresp(client->ctx, data->offset, data->length);
+		size = client->ops.sendresp(client->ctx, data->offset, data->length);
 		if (size < 0)
 			break;
 		data->offset += size;
@@ -977,19 +971,18 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		size = client->ops->sendresp(client->ctx, data->offset, data->length);
+		size = client->ops.sendresp(client->ctx, data->offset, data->length);
 		if (size < 0)
 			break;
 		data->offset += size;
 		data->length -= size;
 	}
-//	client->ops->sendresp(client->ctx, "\r\n", 2);
 
 	int ret = ECONTINUE;
 	while (ret == ECONTINUE)
 	{
 		_buffer_reset(data);
-		size = client->ops->recvreq(client->ctx, data->offset, data->size - 1);
+		size = client->ops.recvreq(client->ctx, data->offset, data->size - 1);
 		if (size >= 0)
 		{
 			data->length += size;
@@ -1110,7 +1103,7 @@ static int _httpclient_runconnector(http_client_t *client, http_message_t *reque
 static int _httpclient_request(http_client_t *client)
 {
 	/**
-	 * By default the function has to way more data on the socket
+	 * By default the function has to wait more data on the socket
 	 * before to be call again.
 	 *  ECONTINUE means treatment (here is more data) is needed.
 	 *  EINCOMPLETE means the function needs to be call again ASAP.
@@ -1128,7 +1121,7 @@ static int _httpclient_request(http_client_t *client)
 	 */
 	if (client->sockdata->size <= client->sockdata->length)
 		_buffer_reset(client->sockdata);
-	size = client->ops->recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+	size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
 	if (size > 0)
 	{
 		client->sockdata->length += size;
@@ -1152,7 +1145,6 @@ static int _httpclient_request(http_client_t *client)
 	 **/
 	client->sockdata->offset = client->sockdata->data;
 	ret = _httpmessage_parserequest(client->request, client->sockdata);
-
 	if (ret == EREJECT)
 	{
 		if (client->request->response == NULL)
@@ -1438,7 +1430,7 @@ static int _httpclient_run(http_client_t *client)
 				 * server configuration.
 				 * see http_server_config_t and httpserver_create
 				 */
-				size = client->ops->sendresp(client->ctx, header->offset, header->length);
+				size = client->ops.sendresp(client->ctx, header->offset, header->length);
 				if (size < 0)
 					break;
 				header->offset += size;
@@ -1453,13 +1445,13 @@ static int _httpclient_run(http_client_t *client)
 				 * server configuration.
 				 * see http_server_config_t and httpserver_create
 				 */
-				size = client->ops->sendresp(client->ctx, header->offset, header->length);
+				size = client->ops.sendresp(client->ctx, header->offset, header->length);
 				if (size < 0)
 					break;
 				header->offset += size;
 				header->length -= size;
 			}
-			client->ops->sendresp(client->ctx, "\r\n", 2);
+			client->ops.sendresp(client->ctx, "\r\n", 2);
 			if (size < 0)
 			{
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1483,7 +1475,7 @@ static int _httpclient_run(http_client_t *client)
 				while (request->type != MESSAGE_TYPE_HEAD &&
 						request->response->content->length > 0)
 				{
-					size = client->ops->sendresp(client->ctx, request->response->content->offset, request->response->content->length);
+					size = client->ops.sendresp(client->ctx, request->response->content->offset, request->response->content->length);
 					if (size  > 0 && size != request->response->content->length)
 					{
 						request->response->content->length -= size;
@@ -1545,7 +1537,7 @@ static int _httpclient_run(http_client_t *client)
 				 */
 				if (client->sockdata->size <= client->sockdata->length)
 					_buffer_reset(client->sockdata);
-				size = client->ops->recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+				size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
 				if (size > 0)
 				{
 					client->sockdata->length += size;
@@ -1566,7 +1558,8 @@ static int _httpclient_run(http_client_t *client)
 			/**
 			 * flush the output socket
 			 */
-			client->ops->flush(client);
+			if (client->ops.flush != NULL)
+				client->ops.flush(client);
 			/**
 			 * to stay in keep alive the rules are:
 			 *  - the server has to be configurated;
@@ -1613,7 +1606,7 @@ static int _httpclient_run(http_client_t *client)
 				modctx = next;
 			}
 			client->modctx = NULL;
-			client->ops->close(client);
+			client->ops.close(client);
 			client->state |= CLIENT_STOPPED;
 		}
 		break;
@@ -1623,7 +1616,7 @@ static int _httpclient_run(http_client_t *client)
 
 void httpclient_shutdown(http_client_t *client)
 {
-	client->ops->close(client);
+	client->ops.close(client);
 }
 
 /***********************************************************************

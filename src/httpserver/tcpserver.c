@@ -143,7 +143,7 @@ static void tcpclient_close(void *ctl)
 	client->sock = -1;
 }
 
-httpclient_ops_t *httpclient_ops = &(httpclient_ops_t)
+httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 {
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,
@@ -253,9 +253,7 @@ static int _tcpserver_start(http_server_t *server)
 
 static http_client_t *_tcpserver_createclient(http_server_t *server)
 {
-	http_client_t * client = httpclient_create(server, server->config->chunksize);
-	client->ops = httpclient_ops;
-	client->ctx = client;
+	http_client_t * client = httpclient_create(server, tcpclient_ops, server->config->chunksize);
 
 	// Client connection request recieved
 	// Create new client socket to communicate
@@ -279,7 +277,7 @@ static void _tcpserver_close(http_server_t *server)
 	while (client != NULL)
 	{
 		http_client_t *next = client->next;
-		client->ops->close(client);
+		client->ops.close(client);
 		client = next;
 	}
 
