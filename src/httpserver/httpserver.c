@@ -1325,6 +1325,7 @@ static int _httpclient_run(http_client_t *client)
 				sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
 				if (sret < 1)
 				{
+					warn("timeout");
 					/* timeout */
 					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
@@ -1525,6 +1526,7 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+			client->state &= ~CLIENT_KEEPALIVE;
 		}
 		break;
 		case CLIENT_COMPLETE:
@@ -1534,6 +1536,7 @@ static int _httpclient_run(http_client_t *client)
 			 */
 			while (request && request->state < PARSE_END)
 			{
+				int ret;
 				int size = 0;
 				/**
 				 * here, it is the call to the recvreq callback from the
@@ -1697,6 +1700,7 @@ static int _httpserver_connect(http_server_t *server)
 				dbg("new connection %p", client);
 				http_server_mod_t *mod = server->mod;
 				http_client_modctx_t *currentctx = NULL;
+				ret = 0;
 				while (mod)
 				{
 					http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
@@ -1704,6 +1708,8 @@ static int _httpserver_connect(http_server_t *server)
 					if (mod->func)
 					{
 						modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
+						if (modctx->ctx == NULL)
+							ret = 1;
 					}
 					modctx->freectx = mod->freectx;
 					mod = mod->next;
@@ -1715,14 +1721,17 @@ static int _httpserver_connect(http_server_t *server)
 					}
 					currentctx = modctx;
 				}
-				int flags;
-				flags = fcntl(httpclient_socket(client), F_GETFL, 0);
-				fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
+				if (ret == 0)
+				{
+					int flags;
+					flags = fcntl(httpclient_socket(client), F_GETFL, 0);
+					fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
 
-				client->next = server->clients;
-				server->clients = client;
+					client->next = server->clients;
+					server->clients = client;
 
-				ret = 1;
+					ret = 1;
+				}
 			}
 			else
 			{
