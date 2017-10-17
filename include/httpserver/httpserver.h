@@ -359,6 +359,17 @@ void httpmessage_addheader(http_message_t *message, char *key, char *value);
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length);
 
 /**
+ * @brief append data to content of the response message before sending
+ *
+ * @param message the response message to update
+ * @param content the data of the content
+ * @param length the length of the bitstream of the content
+ * 
+ * @return the storage pointer of the content
+ */
+char *httpmessage_appendcontent(http_message_t *message, char *content, int length);
+
+/**
  * @brief returns the content of the request message
  *
  * @param message the request message

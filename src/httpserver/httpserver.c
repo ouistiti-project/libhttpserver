@@ -820,6 +820,22 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 	return NULL;
 }
 
+char *httpmessage_appendcontent(http_message_t *message, char *content, int length)
+{
+	if (message->content != NULL && content != NULL)
+	{
+		if (length == -1)
+			length = strlen(content);
+		if (length + message->content->length <= message->content->size)
+		{
+			_buffer_append(message->content, content, length);
+			message->content_length += length;
+			return message->content->data;
+		}
+	}
+	return NULL;
+}
+
 int httpmessage_keepalive(http_message_t *message)
 {
 	message->mode |= HTTPMESSAGE_KEEPALIVE;
