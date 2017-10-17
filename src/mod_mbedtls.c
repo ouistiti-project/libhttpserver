@@ -296,13 +296,17 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 		return EINCOMPLETE;
 	}
 
-	do
+#ifdef SOCKET_BLOCKING
+	ret = MBEDTLS_ERR_SSL_WANT_READ;
+	while (ret == MBEDTLS_ERR_SSL_WANT_READ)
+#endif
 	{
 		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
 	}
-	while (ret == MBEDTLS_ERR_SSL_WANT_READ);
 	if (ret < size)
+	{
 		ctx->state |= RECV_COMPLETE;
+	}
 	return ret;
 }
 
