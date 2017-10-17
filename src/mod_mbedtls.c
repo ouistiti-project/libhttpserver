@@ -140,7 +140,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 		{
 			ret =  mbedtls_pk_parse_keyfile(&config->pkey, (const char *) modconfig->pemfile, NULL);
 			if (ret)
-				err("mbedtls_pk_parse_keyfile %d\n", ret);
+				err("mbedtls_pk_parse_keyfile pem %d\n", ret);
 			else
 				is_set_pemkey++;
 		}
@@ -148,7 +148,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 		{
 			ret =  mbedtls_pk_parse_keyfile(&config->pkey, (const char *) modconfig->crtfile, NULL);
 			if (ret)
-				err("mbedtls_pk_parse_keyfile %d\n", ret);
+				err("mbedtls_pk_parse_keyfile crt %d\n", ret);
 			else
 				is_set_pemkey++;
 		}
@@ -259,7 +259,12 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 			ctx->state |= HANDSHAKE;
 		}
 		else
+		{
 			warn("TLS Handshake error");
+			mbedtls_ssl_free(&ctx->ssl);
+			free(ctx);
+			ctx = NULL;
+		}
 	}
 	return ctx;
 }
