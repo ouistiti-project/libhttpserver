@@ -96,11 +96,14 @@ typedef enum
 
 typedef enum
 {
+	MESSAGE_TYPE_UNKNOWN,
 	MESSAGE_TYPE_GET,
 	MESSAGE_TYPE_POST,
 	MESSAGE_TYPE_HEAD,
+#ifndef HTTP_METHOD_PARTIAL
 	MESSAGE_TYPE_PUT,
 	MESSAGE_TYPE_DELETE,
+#endif
 } http_message_method_e;
 
 typedef int http_message_result_e;

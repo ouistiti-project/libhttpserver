@@ -115,6 +115,18 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message);
 HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message);
 
 #ifdef _HTTPMESSAGE_
+HTTPMESSAGE_DECL const char *_http_message_method[] =
+{
+	"unknown",
+	"GET",
+	"POST",
+	"HEAD",
+#ifndef HTTP_METHOD_PARTIAL
+	"PUT",
+	"DELETE",
+#endif
+};
+
 HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[] =
 {
 #if defined(RESULT_100)

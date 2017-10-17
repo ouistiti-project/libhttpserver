@@ -2044,28 +2044,7 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, "method"))
 	{
-		switch (message->type)
-		{
-			case MESSAGE_TYPE_GET:
-				value = "GET";
-			break;
-			case MESSAGE_TYPE_POST:
-				value = "POST";
-			break;
-			case MESSAGE_TYPE_HEAD:
-				value = "HEAD";
-			break;
-#ifndef HTTP_METHOD_PARTIAL
-			case MESSAGE_TYPE_PUT:
-				value = "PUT";
-			break;
-			case MESSAGE_TYPE_DELETE:
-				value = "DELETE";
-			break;
-#endif
-			default:
-			break;
-		}
+		value = _http_message_method[message->type];
 	}
 	else if (!strcasecmp(key, "content"))
 	{
