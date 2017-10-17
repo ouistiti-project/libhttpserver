@@ -246,7 +246,7 @@ static void *_mod_websocket_getctx(void *arg, http_client_t *ctl, struct sockadd
 	ctx->mod = mod;
 	httpclient_addconnector(ctl, mod->vhost, websocket_connector, ctx);
 
-	return NULL;
+	return ctx;
 }
 
 static void _mod_websocket_freectx(void *arg)
