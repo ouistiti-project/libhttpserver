@@ -382,7 +382,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					{
 						if (message->query == NULL)
 							message->query = message->uri->data + message->uri->length;
-						dbg("new request for %s", message->uri->data);
+						dbg("new request %s %s", _http_message_method[message->type], message->uri->data);
 					}
 					else
 					{
@@ -427,7 +427,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				 **/
 				if (data->offset + 10 > data->data + data->size)
 				{
-					_buffer_shrink(data);
+					//_buffer_shrink(data);
 					break;
 				}
 				char *version = data->offset;
@@ -484,7 +484,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						 **/
 						if (length == 0 && !(message->state & PARSE_CONTINUE))
 						{
-							next = PARSE_HEADERNEXT;
+							next = PARSE_POSTHEADER;
 						}
 						else
 						{
@@ -511,7 +511,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				}
 			}
 			break;
-			case PARSE_HEADERNEXT:
+			case PARSE_POSTHEADER:
 			{
 				if (_httpmessage_fillheaderdb(message) != ESUCCESS)
 				{
@@ -534,17 +534,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			{
 				if (!(message->state & PARSE_CONTINUE))
 				{
-					int length = data->length - (data->offset - data->data);
-					if (length > 0 && 
-							length < message->content_length &&
-							length < data->size)
-					{
-						/* reset the buffer to begin the content at the begining of the buffer */
-						_buffer_shrink(data);
-						message->state |= PARSE_CONTINUE;
-					}
-					else
-						next = PARSE_CONTENT;
+					message->state |= PARSE_CONTINUE;
 				}
 				else
 				{
@@ -593,18 +583,19 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_END:
 			{
-				_buffer_shrink(data);
 				ret = ESUCCESS;
 			}
 			break;
 		}
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
-			if (next <= PARSE_HEADERNEXT)
+			if (next < PARSE_CONTENT)
 				ret = EINCOMPLETE;
 			break;
 		}
 		message->state = (message->state & ~PARSE_MASK) | next;
+		if (ret == EREJECT)
+			message->state = PARSE_END;
 	} while (ret == ECONTINUE);
 	return ret;
 }
@@ -802,7 +793,6 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		{
 			httpmessage_addheader(message, (char *)str_contenttype, type);
 		}
-		message->state = PARSE_CONTENT;
 	}
 	if (content != NULL)
 	{
@@ -1119,8 +1109,10 @@ static int _httpclient_request(http_client_t *client)
 	 * server configuration.
 	 * see http_server_config_t and httpserver_create
 	 */
-	if (client->sockdata->size <= client->sockdata->length)
+	if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
 		_buffer_reset(client->sockdata);
+	else
+		_buffer_shrink(client->sockdata);
 	size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
 	if (size > 0)
 	{
@@ -1171,7 +1163,7 @@ static int _httpclient_request(http_client_t *client)
 	 * depending of the server. It may be dangerous, a hacker can send
 	 * a request with a very big header.
 	 */
-	if ((client->request->state & PARSE_MASK) >= PARSE_CONTENT)
+	if ((client->request->state & PARSE_MASK) > PARSE_POSTHEADER)
 	{
 		if (client->request->response == NULL)
 			client->request->response = _httpmessage_create(client, client->request, client->server->config->chunksize);
