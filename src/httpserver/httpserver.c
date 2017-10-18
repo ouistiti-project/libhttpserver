@@ -684,9 +684,20 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	if (message->state == PARSE_INIT)
 		message->state = PARSE_STATUS;
 	int ret = _httpmessage_parserequest(message, &tempo);
-	*size = tempo.length;
+	*size = tempo.length - (tempo.offset - tempo.data);
+	if (*size > 0)
+		_buffer_shrink(&tempo);
+	if ((message->state & PARSE_MASK) > PARSE_PRECONTENT)
+		ret = ECONTINUE;
 	if (message->state == PARSE_END)
+	{
+		if (*size > 0)
+		{
+			warn("end with size %d not 0", *size);
+			*size = 0;
+		}
 		message->content = NULL;
+	}
 	return ret;
 }
 
