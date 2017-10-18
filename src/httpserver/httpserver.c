@@ -796,7 +796,7 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
 
 	char *content_type = httpmessage_REQUEST(message, (char *)str_contenttype);
-	if (content_type && content_type[0] != '\0')
+	if (content_type && content_type[0] == '\0')
 	{
 		if (type == NULL)
 		{
