@@ -621,7 +621,8 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t 
 	dbentry_t *headers = message->headers;
 	while (headers != NULL)
 	{
-		if (!strcmp(headers->key, str_contentlength))
+		if ((message->content_length > 0) &&
+			(!strcmp(headers->key, str_contentlength)))
 		{
 			headers = headers->next;
 			continue;
