@@ -792,11 +792,7 @@ HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key,
 
 char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
 {
-	if (message->content == NULL && content != NULL)
-		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
-
-	char *content_type = httpmessage_REQUEST(message, (char *)str_contenttype);
-	if (content_type && content_type[0] == '\0')
+	if (message->content == NULL)
 	{
 		if (type == NULL)
 		{
@@ -807,6 +803,9 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 			httpmessage_addheader(message, (char *)str_contenttype, type);
 		}
 	}
+	if (message->content == NULL && content != NULL)
+		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
+
 	if (content != NULL)
 	{
 		if (length == -1)
