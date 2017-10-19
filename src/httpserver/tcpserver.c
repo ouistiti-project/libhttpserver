@@ -117,8 +117,19 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 
 static int tcpclient_send(void *ctl, char *data, int length)
 {
+	int ret;
 	http_client_t *client = (http_client_t *)ctl;
-	int ret = send(client->sock, data, length, MSG_NOSIGNAL);
+	struct timeval *ptimeout = NULL;
+	struct timeval timeout;
+	fd_set wfds;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 10;
+	ptimeout = &timeout;
+	FD_ZERO(&wfds);
+	FD_SET(client->sock, &wfds);
+	ret = select(client->sock + 1, NULL, &wfds, NULL, ptimeout);
+	if (ret > 0)
+		ret = send(client->sock, data, length, MSG_NOSIGNAL);
 	return ret;
 }
 
