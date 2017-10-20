@@ -198,6 +198,7 @@ void mod_mbedtls_destroy(void *mod)
 
 	mbedtls_dhm_free(&config->dhm);
 	mbedtls_x509_crt_free(&config->srvcert);
+	mbedtls_x509_crt_free(&config->cachain);
 	mbedtls_pk_free(&config->pkey);
 	mbedtls_ctr_drbg_free(&config->ctr_drbg);
 	mbedtls_entropy_free(&config->entropy);
@@ -278,6 +279,7 @@ static void _mod_mbedtls_freectx(void *vctx)
 	mbedtls_ssl_free(&ctx->ssl);
 	httpclient_addreceiver(ctx->ctl, ctx->recvreq, ctx->ctx);
 	httpclient_addsender(ctx->ctl, ctx->sendresp, ctx->ctx);
+	free(ctx);
 }
 
 static int _mod_mbedtls_recv(void *vctx, char *data, int size)
