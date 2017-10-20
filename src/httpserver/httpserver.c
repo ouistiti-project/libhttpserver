@@ -1018,6 +1018,13 @@ static void _httpclient_destroy(http_client_t *client)
 		free(callback);
 		callback = next;
 	}
+	dbentry_t *session = client->session;
+	while (session)
+	{
+		dbentry_t *next = session->next;
+		free(session);
+		session = next;
+	}
 	if (client->sockdata)
 		_buffer_destroy(client->sockdata);
 	if (client->request)
@@ -1849,6 +1856,14 @@ void httpserver_disconnect(http_server_t *server)
 	{
 		server->run = 0;
 #ifdef VTHREAD
+		http_client_t *client = server->clients;
+		while (client != NULL)
+		{
+			http_client_t *clientnext = client->next;
+			vthread_join(client->thread, NULL);
+			_httpclient_destroy(client);
+			client = clientnext;
+		}
 		vthread_join(server->thread, NULL);
 		server->thread = 0;
 #endif
@@ -1857,6 +1872,7 @@ void httpserver_disconnect(http_server_t *server)
 
 void httpserver_destroy(http_server_t *server)
 {
+	httpserver_disconnect(server);
 	http_connector_list_t *callback = server->callbacks;
 	while (callback)
 	{
