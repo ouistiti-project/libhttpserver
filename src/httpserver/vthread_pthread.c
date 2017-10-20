@@ -83,6 +83,7 @@ int vthread_join(vthread_t thread, void **value_ptr)
 	{
 		pthread_cancel(thread->pthread);
 		ret = pthread_join(thread->pthread, value_ptr);
+		free(thread);
 	}
 	return ret;
 }
