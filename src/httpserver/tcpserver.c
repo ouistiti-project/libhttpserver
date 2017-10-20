@@ -119,17 +119,11 @@ static int tcpclient_send(void *ctl, char *data, int length)
 {
 	int ret;
 	http_client_t *client = (http_client_t *)ctl;
-	struct timeval *ptimeout = NULL;
-	struct timeval timeout;
-	fd_set wfds;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 10;
-	ptimeout = &timeout;
-	FD_ZERO(&wfds);
-	FD_SET(client->sock, &wfds);
-	ret = select(client->sock + 1, NULL, &wfds, NULL, ptimeout);
+	ret = httpclient_wait(client, 1);
 	if (ret > 0)
 		ret = send(client->sock, data, length, MSG_NOSIGNAL);
+	if (ret < 0 && errno == EAGAIN)
+		warn("no place to send");
 	return ret;
 }
 

@@ -1238,6 +1238,45 @@ static int _httpclient_pushrequest(http_client_t *client, http_message_t *reques
 	return (request->result != RESULT_200)? EREJECT:ESUCCESS;
 }
 
+int httpclient_wait(http_client_t *client, int sending)
+{
+	int ret = client->sock;
+#if defined(VTHREAD) && !defined(BLOCK_SOCKET)
+	struct timeval *ptimeout = NULL;
+	struct timeval timeout;
+	fd_set fds;
+	fd_set *rfds = NULL, *wfds = NULL;
+	if (client->server->config->keepalive)
+	{
+		if (sending)
+		{
+			timeout.tv_sec = 0;
+			timeout.tv_usec = 100;
+		}
+		else
+		{
+			timeout.tv_sec = client->server->config->keepalive;
+			timeout.tv_usec = 0;
+		}
+		ptimeout = &timeout;
+	}
+	FD_ZERO(&fds);
+	FD_SET(client->sock, &fds);
+	if (sending)
+		wfds = &fds;
+	else
+		rfds = &fds;
+	ret = select(client->sock + 1, rfds, wfds, NULL, ptimeout);
+	if (ret < 1)
+	{
+		/* timeout */
+		client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+		client->state &= ~CLIENT_KEEPALIVE;
+	}
+#endif
+	return ret;
+}
+
 static int _httpclient_run(http_client_t *client)
 {
 	http_message_t *request = NULL;
@@ -1267,30 +1306,10 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else
 				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
-#ifdef VTHREAD
 			if (request_ret == ECONTINUE)
 			{
-				int sret;
-				struct timeval *ptimeout = NULL;
-				struct timeval timeout;
-				fd_set rfds;
-				if (client->server->config->keepalive)
-				{
-					timeout.tv_sec = client->server->config->keepalive;
-					timeout.tv_usec = 0;
-					ptimeout = &timeout;
-				}
-				FD_ZERO(&rfds);
-				FD_SET(client->sock, &rfds);
-				sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
-				if (sret < 1)
-				{
-					/* timeout */
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-					client->state &= ~CLIENT_KEEPALIVE;
-				}
+				httpclient_wait(client, 0);
 			}
-#endif
 		}
 		break;
 		case CLIENT_REQUEST:
@@ -1303,31 +1322,10 @@ static int _httpclient_run(http_client_t *client)
 			{
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
 			}
-#ifdef VTHREAD
 			else if (request_ret == ECONTINUE)
 			{
-				int sret;
-				struct timeval *ptimeout = NULL;
-				struct timeval timeout;
-				fd_set rfds;
-				if (client->server->config->keepalive)
-				{
-					timeout.tv_sec = client->server->config->keepalive;
-					timeout.tv_usec = 0;
-					ptimeout = &timeout;
-				}
-				FD_ZERO(&rfds);
-				FD_SET(client->sock, &rfds);
-				sret = select(client->sock + 1, &rfds, NULL, NULL, ptimeout);
-				if (sret < 1)
-				{
-					warn("timeout");
-					/* timeout */
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-					client->state &= ~CLIENT_KEEPALIVE;
-				}
+				httpclient_wait(client,0);
 			}
-#endif
 		}
 		break;
 		case CLIENT_PUSHREQUEST:
@@ -1752,7 +1750,9 @@ static int _httpserver_connect(http_server_t *server)
 						else
 						{
 							if (!vthread_exist(client->thread))
+							{
 								client->state |= CLIENT_STOPPED;
+							}
 							vthread_yield(client->thread);
 						}
 #endif
@@ -1878,6 +1878,7 @@ void httpserver_destroy(http_server_t *server)
 	WSACleanup();
 #endif
 }
+/***********************************************************************/
 
 static char default_value[8] = {0};
 static char host[NI_MAXHOST], service[NI_MAXSERV];
@@ -2041,7 +2042,7 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, "method"))
 	{
-		value = _http_message_method[message->type];
+		value = (char *)_http_message_method[message->type];
 	}
 	else if (!strcasecmp(key, "content"))
 	{
