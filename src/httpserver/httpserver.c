@@ -330,7 +330,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					 */
 					message->uri = _buffer_create(MAXCHUNKS_URI, message->chunksize);
 				}
-				while (data->offset < (data->data + data->size) && next == PARSE_URI)
+				while (data->offset < (data->data + data->length) && next == PARSE_URI)
 				{
 					switch (*data->offset)
 					{
@@ -425,7 +425,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				 * Move the rest to the beginning and request
 				 * more data.
 				 **/
-				if (data->offset + 10 > data->data + data->size)
+				if (data->offset + 10 > data->data + data->length)
 				{
 					//_buffer_shrink(data);
 					break;
@@ -472,7 +472,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->chunksize);
 				}
 				/* store header line as "<key>:<value>\0" */
-				while (data->offset < (data->data + data->size) && next == PARSE_HEADER)
+				while (data->offset < (data->data + data->length) && next == PARSE_HEADER)
 				{
 					switch (*data->offset)
 					{
@@ -1125,7 +1125,7 @@ static int _httpclient_request(http_client_t *client)
 		_buffer_reset(client->sockdata);
 	else
 		_buffer_shrink(client->sockdata);
-	size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+	size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
 	if (size > 0)
 	{
 		client->sockdata->length += size;
@@ -1539,7 +1539,7 @@ static int _httpclient_run(http_client_t *client)
 				 */
 				if (client->sockdata->size <= client->sockdata->length)
 					_buffer_reset(client->sockdata);
-				size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length);
+				size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
 				if (size > 0)
 				{
 					client->sockdata->length += size;
