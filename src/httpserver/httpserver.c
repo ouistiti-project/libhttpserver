@@ -1274,11 +1274,17 @@ int httpclient_wait(http_client_t *client, int sending)
 	else
 		rfds = &fds;
 	ret = select(client->sock + 1, rfds, wfds, NULL, ptimeout);
-	if (ret < 1)
+	if (ret == 0)
 	{
-		/* timeout */
-		client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
-		client->state &= ~CLIENT_KEEPALIVE;
+		ret = -1;
+		errno = EAGAIN;
+	}
+	else if (ret > 0)
+	{
+		if (FD_ISSET(client->sock, &fds))
+			ret = client->sock;
+		else
+			ret = -1;
 	}
 #endif
 	return ret;
@@ -1315,7 +1321,12 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
 			if (request_ret == ECONTINUE)
 			{
-				httpclient_wait(client, 0);
+				if (httpclient_wait(client, 0) < 0)
+				{
+					/* timeout */
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state &= ~CLIENT_KEEPALIVE;
+				}
 			}
 		}
 		break;
@@ -1331,7 +1342,12 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (request_ret == ECONTINUE)
 			{
-				httpclient_wait(client,0);
+				if (httpclient_wait(client, 0) < 0)
+				{
+					/* timeout */
+					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state &= ~CLIENT_KEEPALIVE;
+				}
 			}
 		}
 		break;
