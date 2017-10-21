@@ -955,8 +955,14 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		dbg("send %s", data->offset);
-		size = client->ops.sendresp(client->ctx, data->offset, data->length);
+		size = httpclient_wait(client, 1);
+		if (size > 0)
+		{
+			dbg("send %s", data->offset);
+			size = client->ops.sendresp(client->ctx, data->offset, data->length);
+		}
+		if (size == EINCOMPLETE)
+			continue;
 		if (size < 0)
 			break;
 		data->offset += size;
@@ -973,7 +979,13 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		size = client->ops.sendresp(client->ctx, data->offset, data->length);
+		size = httpclient_wait(client, 1);
+		if (size > 0)
+		{
+			size = client->ops.sendresp(client->ctx, data->offset, data->length);
+		}
+		if (size == EINCOMPLETE)
+			continue;
 		if (size < 0)
 			break;
 		data->offset += size;
@@ -990,13 +1002,10 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			data->length += size;
 			data->data[data->length] = 0;
 		}
-		else if (size < 0)
-		{
-			if (errno != EAGAIN)
-				break;
-			else
-				continue;
-		}
+		else if (size == EINCOMPLETE)
+			continue;
+		else
+			break;
 		data->offset = data->data;
 		if (response->state == PARSE_INIT)
 			response->state = PARSE_STATUS;
@@ -1138,17 +1147,10 @@ static int _httpclient_request(http_client_t *client)
 		client->sockdata->length += size;
 		client->sockdata->data[client->sockdata->length] = 0;
 	}
-	else if (size < 0)
-	{
-		if (errno != EAGAIN)
-			return EREJECT;
-		else
-			return ECONTINUE;
-	}
-	else if (size == 0) /* socket shutdown */
-	{
+	else if (size == EINCOMPLETE)
+		return ECONTINUE;
+	else
 		return EREJECT;
-	}
 
 	/**
 	 * the receiving may complete the buffer, but the parser has
@@ -1276,7 +1278,7 @@ int httpclient_wait(http_client_t *client, int sending)
 	ret = select(client->sock + 1, rfds, wfds, NULL, ptimeout);
 	if (ret == 0)
 	{
-		ret = -1;
+		ret = -EINCOMPLETE;
 		errno = EAGAIN;
 	}
 	else if (ret > 0)
@@ -1284,8 +1286,10 @@ int httpclient_wait(http_client_t *client, int sending)
 		if (FD_ISSET(client->sock, &fds))
 			ret = client->sock;
 		else
-			ret = -1;
+			ret = EREJECT;
 	}
+	else
+		ret = EREJECT;
 #endif
 	return ret;
 }
@@ -1456,7 +1460,9 @@ static int _httpclient_run(http_client_t *client)
 				 * see http_server_config_t and httpserver_create
 				 */
 				size = client->ops.sendresp(client->ctx, header->offset, header->length);
-				if (size < 0)
+				if (size == EINCOMPLETE)
+					continue;
+				if (size == EREJECT)
 					break;
 				header->offset += size;
 				header->length -= size;
@@ -1471,13 +1477,19 @@ static int _httpclient_run(http_client_t *client)
 				 * see http_server_config_t and httpserver_create
 				 */
 				size = client->ops.sendresp(client->ctx, header->offset, header->length);
-				if (size < 0)
+				if (size == EINCOMPLETE)
+					continue;
+				if (size == EREJECT)
 					break;
 				header->offset += size;
 				header->length -= size;
 			}
-			client->ops.sendresp(client->ctx, "\r\n", 2);
-			if (size < 0)
+			do
+			{
+				size = client->ops.sendresp(client->ctx, "\r\n", 2);
+			}
+			while (size == EINCOMPLETE);
+			if (size == EREJECT)
 			{
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			}
@@ -1506,6 +1518,8 @@ static int _httpclient_run(http_client_t *client)
 						request->response->content->length -= size;
 						request->response->content->offset += size;
 					}
+					else if (size == EINCOMPLETE)
+						continue;
 					else
 						break;
 				}
@@ -1568,7 +1582,7 @@ static int _httpclient_run(http_client_t *client)
 					client->sockdata->length += size;
 					client->sockdata->data[client->sockdata->length] = 0;
 				}
-				else
+				else if (size != EINCOMPLETE)
 				{
 					client->state |= ~CLIENT_KEEPALIVE;
 				}

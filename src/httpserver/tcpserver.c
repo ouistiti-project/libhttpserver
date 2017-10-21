@@ -112,6 +112,13 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	int ret = recv(client->sock, data, length, MSG_NOSIGNAL);
+	if (ret < 0)
+	{
+		if (errno == EAGAIN)
+			ret = EINCOMPLETE;
+		else
+			ret = EREJECT;
+	}
 	return ret;
 }
 
@@ -119,11 +126,14 @@ static int tcpclient_send(void *ctl, char *data, int length)
 {
 	int ret;
 	http_client_t *client = (http_client_t *)ctl;
-	ret = httpclient_wait(client, 1);
-	if (ret > 0)
-		ret = send(client->sock, data, length, MSG_NOSIGNAL);
-	if (ret < 0 && errno == EAGAIN)
-		warn("no place to send");
+	ret = send(client->sock, data, length, MSG_NOSIGNAL);
+	if (ret < 0)
+	{
+		if (errno == EAGAIN)
+			ret = EINCOMPLETE;
+		else
+			ret = EREJECT;
+	}
 	return ret;
 }
 

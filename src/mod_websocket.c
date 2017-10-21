@@ -265,7 +265,7 @@ void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod
 	mod->run = run;
 	mod->runarg = runarg;
 	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod);
-
+	warn("websocket support %s %s", mod->config->path, mod->config->services);
 	return mod;
 }
 
@@ -382,6 +382,10 @@ static void *_websocket_main(void *arg)
 						int outlength = 0;
 						length = websocket_framed(WS_TEXT, (char *)buffer, ret, out, &outlength, arg);
 						outlength = info->sendresp(info->ctx, (char *)out, outlength);
+						if (outlength == EINCOMPLETE)
+							continue;
+						if (outlength == EREJECT)
+							break;
 						size += length;
 					}
 					free(out);

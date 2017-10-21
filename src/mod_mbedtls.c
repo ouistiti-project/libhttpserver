@@ -210,11 +210,9 @@ static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
 	int ret = ctx->recvreq(ctx->ctx, (char *)data, size);
-	if (ret < 0  && errno == EAGAIN)
-	{
+	if (ret == EINCOMPLETE)
 		ret = MBEDTLS_ERR_SSL_WANT_READ;
-	}
-	else if (ret < 0)
+	else if (ret == EREJECT)
 		ret = MBEDTLS_ERR_NET_RECV_FAILED;
 	return ret;
 }
@@ -223,11 +221,11 @@ static int _mod_mbedtls_write(void *arg, unsigned char *data, int size)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
 	int ret = ctx->sendresp(ctx->ctx, (char *)data, size);
-	if (ret < 0  && errno == EAGAIN)
+	if (ret == EINCOMPLETE)
 	{
 		ret = MBEDTLS_ERR_SSL_WANT_WRITE;
 	}
-	else if (ret < 0)
+	else if (ret == EREJECT)
 		ret = MBEDTLS_ERR_NET_SEND_FAILED;
 	return ret;
 }
@@ -286,18 +284,6 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
-	if (ctx->state & RECV_COMPLETE)
-	{
-		/**
-		 * if returns 0, the function means socket closed
-		 * if we need to wait the next request (KeepAlive) the return has to be a
-		 * read on NONBLOCK socket without data : return -1 and errno = EAGAIN
-		 */
-		ctx->state &= ~RECV_COMPLETE;
-		errno = EAGAIN;
-		return EINCOMPLETE;
-	}
-
 #ifdef SOCKET_BLOCKING
 	ret = MBEDTLS_ERR_SSL_WANT_READ;
 	while (ret == MBEDTLS_ERR_SSL_WANT_READ)
@@ -305,9 +291,11 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 	{
 		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
 	}
-	if (ret < size)
+	if (ret == MBEDTLS_ERR_SSL_WANT_READ)
+		ret = EINCOMPLETE;
+	else if (ret < 0)
 	{
-		ctx->state |= RECV_COMPLETE;
+		ret = EREJECT;
 	}
 	return ret;
 }
@@ -317,5 +305,9 @@ static int _mod_mbedtls_send(void *vctx, char *data, int size)
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	ret = mbedtls_ssl_write(&ctx->ssl, (unsigned char *)data, size);
+	if (ret == MBEDTLS_ERR_SSL_WANT_WRITE)
+		ret = EINCOMPLETE;
+	else if (ret < 0)
+		ret = EREJECT;
 	return ret;
 }
