@@ -137,7 +137,19 @@ char *utils_urldecode(char *encoded)
 			char *end = strchr(encoded, ';');
 			if (end == NULL)
 			{
-				int encval = strtol(encoded, &encoded, 16);
+				int encval = 0;
+				int i;
+				for (i = 0; i < 2; i++)
+				{
+					encval = encval << 4;
+					if (*encoded < 0x40)
+						encval += (*encoded - 0x30);
+					else if (*encoded < 0x47)
+						encval += (*encoded - 0x41 + 10);
+					else if (*encoded < 0x67)
+						encval += (*encoded - 0x61 + 10);
+					encoded ++;
+				}
 				*offset = (char) encval;
 				offset++;
 			}
