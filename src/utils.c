@@ -243,7 +243,11 @@ int utils_searchexp(char *haystack, char *needleslist)
 			if (needle == NULL)
 				break;
 			else if (*needle == '\0')
+			{
+				if (!wildcard && *needle != haystack[i + 1])
+					ret = EREJECT;
 				needle = NULL;
+			}
 			else
 				needle++;
 			if (ret == ESUCCESS)
