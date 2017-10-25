@@ -2062,7 +2062,36 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 {
 	if (message->client == NULL)
 		return NULL;
-	return httpserver_INFO(message->client->server, key);
+	char *value = default_value;
+	memset(default_value, 0, sizeof(default_value));
+
+	if (!strcasecmp(key, "port"))
+	{
+		struct sockaddr_in sin;
+		socklen_t len = sizeof(sin);
+		if (getsockname(message->client->sock, (struct sockaddr *)&sin, &len) == 0)
+		{
+			getnameinfo((struct sockaddr *) &sin, len,
+				0, 0,
+				service, NI_MAXSERV, NI_NUMERICSERV);
+			value = service;
+		}
+	}
+	else if (!strcasecmp(key, "addr"))
+	{
+		struct sockaddr_in sin;
+		socklen_t len = sizeof(sin);
+		if (getsockname(message->client->sock, (struct sockaddr *)&sin, &len) == 0)
+		{
+			getnameinfo((struct sockaddr *) &sin, len,
+				host, NI_MAXHOST,
+				0, 0, NI_NUMERICHOST);
+													value = host;
+		}
+	}
+	else
+		value = httpserver_INFO(message->client->server, key);
+	return value;
 }
 
 char *httpmessage_REQUEST(http_message_t *message, char *key)
