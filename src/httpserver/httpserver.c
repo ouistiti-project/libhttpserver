@@ -195,7 +195,13 @@ static void _buffer_destroy(buffer_t *buffer)
 #ifdef HTTPCLIENT_FEATURES
 http_message_t * httpmessage_create(int chunksize)
 {
-       return _httpmessage_create(NULL, NULL, chunksize);
+	http_message_t *client = _httpmessage_create(NULL, NULL, chunksize);
+	return client;
+}
+
+void httpmessage_destroy(http_message_t *message)
+{
+	_httpmessage_destroy(message);
 }
 
 void httpmessage_request(http_message_t *message, http_message_method_e type, char *resource)
@@ -245,10 +251,10 @@ HTTPMESSAGE_DECL void _httpmessage_reset(http_message_t *message)
 		_buffer_reset(message->headers_storage);
 }
 
-void httpmessage_destroy(http_message_t *message)
+HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 {
 	if (message->response)
-		httpmessage_destroy(message->response);
+		_httpmessage_destroy(message->response);
 	if (message->uri)
 		_buffer_destroy(message->uri);
 	if (message->content)
@@ -1037,7 +1043,7 @@ static void _httpclient_destroy(http_client_t *client)
 	if (client->sockdata)
 		_buffer_destroy(client->sockdata);
 	if (client->request)
-		httpmessage_destroy(client->request);
+		_httpmessage_destroy(client->request);
 	if (client->session_storage)
 		vfree(client->session_storage);
 	vfree(client);
@@ -1626,7 +1632,7 @@ static int _httpclient_run(http_client_t *client)
 			if (client->request_queue)
 			{
 				http_message_t *next = client->request_queue->next;
-				httpmessage_destroy(client->request_queue);
+				_httpmessage_destroy(client->request_queue);
 				client->request_queue = next;
 			}
 		}
