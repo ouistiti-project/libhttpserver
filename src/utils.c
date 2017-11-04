@@ -198,9 +198,11 @@ int utils_searchexp(char *haystack, char *needleslist)
 		{
 			int i = 0;
 			ret = ESUCCESS;
+			needle --;
 			int wildcard = 0;
-			while( *needle != ',' && *needle != '\0')
+			do
 			{
+				needle++;
 				if (*needle == '^')
 				{
 					if (haystack != filename)
@@ -211,13 +213,11 @@ int utils_searchexp(char *haystack, char *needleslist)
 					}
 					else
 					{
-						needle++;
 						continue;
 					}
 				}
 				if (*needle == '*')
 				{
-					needle++;
 					wildcard = 1;
 					break;
 				}
@@ -229,17 +229,15 @@ int utils_searchexp(char *haystack, char *needleslist)
 						needle = strchr(needle, ',');
 						break;
 					}
-					needle++;
 				}
 				else if (*needle == haystack[i])
 				{
-					needle++;
 					wildcard = 0;
 				}
 				i++;
 				if (haystack[i] == '\0')
 					break;
-			}
+			} while( *needle != ',' && *needle != '\0');
 			if (needle == NULL)
 				break;
 			else if (*needle == '\0')
