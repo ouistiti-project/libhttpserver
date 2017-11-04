@@ -43,6 +43,7 @@
 typedef struct buffer_s buffer_t;
 typedef struct http_connector_list_s http_connector_list_t;
 typedef struct http_client_modctx_s http_client_modctx_t;
+typedef struct http_message_method_s http_message_method_t;
 
 typedef int (*http_connect_t)(void *ctl, char *addr, int port);
 typedef void (*http_flush_t)(void *ctl);
@@ -133,7 +134,17 @@ struct http_server_s
 	http_server_config_t *config;
 	http_server_mod_t *mod;
 	httpserver_ops_t *ops;
+	http_message_method_t *methods;
 };
+
+typedef enum
+{
+	MESSAGE_TYPE_GET,
+	MESSAGE_TYPE_POST,
+	MESSAGE_TYPE_HEAD,
+} _http_message_method_e;
+
+static void _httpserver_addmethod(http_server_t *server, const char *key, _http_message_method_e id);
 
 #endif
 

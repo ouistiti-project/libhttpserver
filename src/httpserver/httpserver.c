@@ -80,6 +80,14 @@ struct http_client_modctx_s
 	http_client_modctx_t *next;
 };
 
+struct http_message_method_s
+{
+	const char *key;
+	short id;
+	short properties;
+	http_message_method_t *next;
+};
+
 static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
@@ -91,6 +99,10 @@ static http_server_config_t defaultconfig = {
 	.keepalive = 1,
 	.version = HTTP10,
 };
+
+const char *str_get = "GET";
+const char *str_post = "POST";
+const char *str_head = "HEAD";
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
@@ -201,12 +213,15 @@ http_message_t * httpmessage_create(int chunksize)
 
 void httpmessage_destroy(http_message_t *message)
 {
+	if (message-> method)
+		free(message->method);
 	_httpmessage_destroy(message);
 }
 
-void httpmessage_request(http_message_t *message, http_message_method_e type, char *resource)
+void httpmessage_request(http_message_t *message, const char *method, char *resource)
 {
-	message->type = type;
+	message->method = calloc(1, sizeof(*message->method));
+	message->method->key = method;
 	message->version = HTTP11;
 	if (resource)
 	{
@@ -232,7 +247,7 @@ HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, htt
 		{
 			parent->response = message;
 
-			message->type = parent->type;
+			message->method = parent->method;
 			message->client = parent->client;
 			message->version = parent->version;
 			message->result = parent->result;
@@ -282,39 +297,22 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 		{
 			case PARSE_INIT:
 			{
-				if (!strncasecmp(data->offset,"GET ",4))
+				http_message_method_t *method = message->client->server->methods;
+				while (method != NULL)
 				{
-					message->type = MESSAGE_TYPE_GET;
-					data->offset += 4;
-					next = PARSE_URI;
+					int length = strlen(method->key);
+					if (!strncasecmp(data->offset, method->key, length) &&
+						data->offset[length] == ' ')
+					{
+						message->method = method;
+						data->offset += length + 1;
+						next = PARSE_URI;
+						break;
+					}
+					method = method->next;
 				}
-				else if (!strncasecmp(data->offset,"POST ",5))
-				{
-					message->type = MESSAGE_TYPE_POST;
-					data->offset += 5;
-					next = PARSE_URI;
-				}
-				else if (!strncasecmp(data->offset,"HEAD ",5))
-				{
-					message->type = MESSAGE_TYPE_HEAD;
-					data->offset += 5;
-					next = PARSE_URI;
-				}
-#ifndef HTTP_METHOD_PARTIAL
-				else if (!strncasecmp(data->offset,"PUT ",4))
-				{
-					message->type = MESSAGE_TYPE_PUT;
-					data->offset += 4;
-					next = PARSE_URI;
-				}
-				else if (!strncasecmp(data->offset,"DELETE ",7))
-				{
-					message->type = MESSAGE_TYPE_DELETE;
-					data->offset += 7;
-					next = PARSE_URI;
-				}
-#endif
-				else
+
+				if (method == NULL)
 				{
 					warn("parse reject method %s", data->offset);
 					data->offset++;
@@ -388,7 +386,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					{
 						if (message->query == NULL)
 							message->query = message->uri->data + message->uri->length;
-						dbg("new request %s %s", _http_message_method[message->type], message->uri->data);
+						dbg("new request %s %s", message->method->key, message->uri->data);
 					}
 					else
 					{
@@ -1515,7 +1513,7 @@ static int _httpclient_run(http_client_t *client)
 			if (request->response->content)
 			{
 				request->response->content->offset = request->response->content->data;
-				while (request->type != MESSAGE_TYPE_HEAD &&
+				while (request->method->id != MESSAGE_TYPE_HEAD &&
 						request->response->content->length > 0)
 				{
 					size = client->ops.sendresp(client->ctx, request->response->content->offset, request->response->content->length);
@@ -1835,6 +1833,9 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	else
 		server->config = &defaultconfig;
 	server->ops = httpserver_ops;
+	_httpserver_addmethod(server, str_get, MESSAGE_TYPE_GET);
+	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
+	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
 
 #ifdef WIN32
 	WSADATA wsaData = {0};
@@ -1846,6 +1847,41 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		return NULL;
 	}
 	return server;
+}
+
+static void _httpserver_addmethod(http_server_t *server, const char *key, _http_message_method_e id)
+{
+	http_message_method_t *method;
+	method = vcalloc(1, sizeof(*method));
+	method->key = key;
+	method->id = id;
+	method->next = server->methods;
+	server->methods = method;
+}
+
+void httpserver_addmethod(http_server_t *server, const char *key, short properties)
+{
+	short id = 0;
+	http_message_method_t *method = server->methods;
+	while (method != NULL)
+	{
+		id = method->id;
+		if (!strcmp(method->key, key))
+		{
+			break;
+		}
+		method = method->next;
+	}
+	if (method == NULL)
+	{
+		method = vcalloc(1, sizeof(*method));
+		method->key = key;
+		method->id = id + 1;
+		method->next = server->methods;
+		server->methods = method;
+	}
+	if (properties > method->properties)
+		method->properties = properties;
 }
 
 void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg)
@@ -2123,7 +2159,8 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	}
 	else if (!strcasecmp(key, "method"))
 	{
-		value = (char *)_http_message_method[message->type];
+		if (message->method)
+			value = (char *)message->method->key;
 	}
 	else if (!strcasecmp(key, "content"))
 	{

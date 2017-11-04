@@ -68,9 +68,8 @@ struct http_message_s
 	http_client_t *client;
 	http_message_t *response;
 	void *connector;
-	http_message_method_e type;
-	enum
-	{
+	http_message_method_t *method;
+	enum {
 		PARSE_INIT,
 		PARSE_URI,
 		PARSE_VERSION,
@@ -82,7 +81,8 @@ struct http_message_s
 		PARSE_END,
 		PARSE_MASK = 0x00FF,
 		PARSE_CONTINUE = 0x0100,
-	} state;
+	}
+	state;
 	int chunksize;
 	buffer_t *content;
 	int content_length;
@@ -115,19 +115,9 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message);
 HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message);
 
-#ifdef _HTTPMESSAGE_
-HTTPMESSAGE_DECL const char *_http_message_method[] =
-{
-	"unknown",
-	"GET",
-	"POST",
-	"HEAD",
-#ifndef HTTP_METHOD_PARTIAL
-	"PUT",
-	"DELETE",
-#endif
-};
+typedef struct http_message_method_s http_message_method_t;
 
+#ifdef _HTTPMESSAGE_
 HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[] =
 {
 #if defined(RESULT_100)
