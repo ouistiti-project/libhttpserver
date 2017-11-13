@@ -1961,9 +1961,16 @@ void httpserver_destroy(http_server_t *server)
 	http_server_mod_t *mod = server->mod;
 	while (mod)
 	{
-		http_server_mod_t  *next = mod->next;
+		http_server_mod_t *next = mod->next;
 		vfree(mod);
 		mod = next;
+	}
+	http_message_method_t *method = server->methods;
+	while (method)
+	{
+		http_message_method_t *next = method->next;
+		vfree(method);
+		method = next;
 	}
 	vfree(server);
 #ifdef WIN32
