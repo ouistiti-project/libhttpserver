@@ -81,7 +81,11 @@ int vthread_join(vthread_t thread, void **value_ptr)
 	int ret = 0;
 	if (thread->pthread)
 	{
-		pthread_cancel(thread->pthread);
+#if defined(HAVE_PTHREAD_YIELD)
+		pthread_yield();
+#elif defined(HAVE_SCHED_YIELD)
+		sched_yield();
+#endif
 		ret = pthread_join(thread->pthread, value_ptr);
 		free(thread);
 	}
