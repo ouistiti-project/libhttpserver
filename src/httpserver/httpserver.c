@@ -2191,6 +2191,7 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
 		value = host;
 	}
+#if defined NETDB_REMOTEINFO
 	else if (!strncasecmp(key, "remote_", 7))
 	{
 		if (message->client == NULL)
@@ -2204,6 +2205,7 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 		if (!strcasecmp(key + 7, "port"))
 			value = service;
 	}
+#endif
 	else
 	{
 		dbentry_t *header = message->headers;
