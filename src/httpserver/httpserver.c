@@ -1689,11 +1689,13 @@ static int _httpserver_connect(http_server_t *server)
 
 		while (client != NULL)
 		{
-			if (client->state == CLIENT_DEAD)
+			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 			{
+				dbg("server try join %p", client);
 #ifdef VTHREAD
 				vthread_join(client->thread, NULL);
 #endif
+				dbg("client %p died", client);
 
 				http_client_t *client2 = server->clients;
 				if (client == server->clients)
@@ -1725,6 +1727,8 @@ static int _httpserver_connect(http_server_t *server)
 				maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
 				client = client->next;
 			}
+			else
+				client = client->next;
 		}
 		struct timeval *ptimeout = NULL;
 		struct timeval timeout;
