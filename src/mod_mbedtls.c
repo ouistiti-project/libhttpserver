@@ -51,6 +51,7 @@
 #include <mbedtls/x509.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/version.h>
+#include <mbedtls/error.h>
 #if MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR>=4
 #include <mbedtls/net_sockets.h>
 #elif MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR==2
@@ -259,7 +260,9 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 		}
 		else
 		{
-			warn("TLS Handshake error");
+			char error[256];
+			mbedtls_strerror(ret, error, 256);
+			warn("TLS Handshake error %X %s", ret, error);
 			mbedtls_ssl_free(&ctx->ssl);
 			free(ctx);
 			ctx = NULL;
