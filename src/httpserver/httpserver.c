@@ -680,6 +680,7 @@ int httpmessage_content(http_message_t *message, char **data, int *size)
 
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
+	buffer_t *content = message->content;
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
@@ -697,11 +698,10 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	{
 		if (*size > 0)
 		{
-			warn("end with size %d not 0", *size);
 			*size = 0;
 		}
-		message->content = NULL;
 	}
+	message->content = content;
 	return ret;
 }
 
@@ -808,7 +808,9 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 		}
 	}
 	if (message->content == NULL && content != NULL)
+	{
 		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
+	}
 
 	if (content != NULL)
 	{
