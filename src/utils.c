@@ -116,12 +116,9 @@ void utils_addmime(const char *ext, const char*mime)
 const char *utils_getmime(char *filepath)
 {
 	mime_entry_t *mime = (mime_entry_t *)mime_entry;
-	char *fileext = strrchr(filepath,'.');
-	if (fileext == NULL)
-		return NULL;
 	while (mime)
 	{
-		if (utils_searchexp(fileext, mime->ext) == ESUCCESS)
+		if (utils_searchexp(filepath, mime->ext) == ESUCCESS)
 		{
 			break;
 		}
@@ -205,68 +202,83 @@ int utils_searchexp(const char *haystack, const char *needleslist)
 	int ret = EREJECT;
 	if (haystack != NULL)
 	{
-		char *filename = strrchr(haystack,'/');
-		if (filename != NULL)
-			filename++;
-		else
-			filename = (char *)haystack;
+		int i = -1;
 		char *needle = (char *)needleslist;
 		while (needle != NULL)
 		{
-			int i = 0;
-			ret = ESUCCESS;
-			needle --;
-			int wildcard = 0;
+			i = -1;
+			ret = ECONTINUE;
+			int wildcard = 1;
+			if (*needle == '^')
+			{
+				wildcard = 0;
+			}
+			char *needle_entry = needle;
 			do
 			{
-				needle++;
-				if (*needle == '^')
-				{
-					if (haystack != filename)
-					{
-						ret = EREJECT;
-						needle = strchr(needle, ',');
-						break;
-					}
-					else
-					{
-						continue;
-					}
-				}
 				if (*needle == '*')
 				{
 					wildcard = 1;
-					break;
+					needle++;
 				}
-				else if (!wildcard)
+				i++;
+				if (!wildcard)
 				{
-					if (*needle != haystack[i])
+					needle++;
+					if (*needle == ',' || *needle == '\0')
 					{
+						if (haystack[i] != '\0')
+							ret = EREJECT;
+						else
+							ret = ESUCCESS;
+						break;
+					}
+					else if (*needle != haystack[i] && *needle != '*')
+					{
+						needle = needle_entry;
 						ret = EREJECT;
-						needle = strchr(needle, ',');
+						if (*needle == '^')
+						{
+							break;
+						}
+					}
+					else if (*needle == haystack[i])
+					{
+						ret = ESUCCESS;
+					}
+				}
+				else
+				{
+					needle_entry = needle;
+					ret = ESUCCESS;
+					if (*needle == haystack[i])
+					{
+						wildcard = 0;
+					}
+					else if (*needle == ',' || *needle == '\0')
+					{
+						wildcard = 0;
 						break;
 					}
 				}
-				else if (*needle == haystack[i])
-				{
-					wildcard = 0;
-				}
-				i++;
-				if (haystack[i] == '\0')
-					break;
-			} while( *needle != ',' && *needle != '\0');
-			if (needle == NULL)
-				break;
-			else if (*needle == '\0')
-			{
-				if (!wildcard && *needle != haystack[i + 1])
-					ret = EREJECT;
-				needle = NULL;
 			}
-			else
+			while(haystack[i] != '\0');
+			if (*needle == '*')
+			{
+				ret = ESUCCESS;
 				needle++;
+			}
+			//dbg("searchexp %d %c %c", ret, *needle, haystack[i]);
 			if (ret == ESUCCESS)
-				break;
+			{
+				if (*needle == ',' || *needle == '\0')
+					break;
+				else
+					ret = EREJECT;
+			}
+			needle = strchr(needle, ',');
+			if (needle != NULL)
+				needle++;
 		}
 	}
 	return ret;
@@ -297,3 +309,53 @@ char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext,
 	}
 	return filepath;
 }
+
+#ifdef TEST
+int main()
+{
+	int ret = 0;
+	ret = utils_searchexp("toto.js", ".txt,.js,.css");
+	warn(" 1 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("toto.js", ".txt,.json,.css");
+	warn(" 2 ret %d/EREJECT", ret);
+	ret = utils_searchexp("toto.json", ".txt,.js,.css");
+	warn(" 3 ret %d/EREJECT", ret);
+	ret = utils_searchexp("toto.json", ".txt,.json,.css");
+	warn(" 4 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("toto.json", ".txt,.css,.json");
+	warn(" 5 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("toto.json", ".txt,.css,.js*");
+	warn(" 6 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("toto.js", ".txt,.css,.js*");
+	warn(" 7 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("toto.json", "^.json,.css");
+	warn(" 8 ret %d/EREJECT", ret);
+	ret = utils_searchexp("public/toto.json", ".json,.css");
+	warn(" 9 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("public/toto.json", "public/*.json,public/*.css");
+	warn("10 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("test/public/toto.json", "public/*.json,public/*.css");
+	warn("11 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("public/toto.json", "^public/*.json,^public/*.css");
+	warn("12 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("test/public/toto.json", "^public/*.json,^public/*.css");
+	warn("13 ret %d/EREJECT", ret);
+	ret = utils_searchexp("public/", "public/*,public/*.css");
+	warn("14 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("public/", ".json,.css");
+	warn("15 ret %d/EREJECT", ret);
+	ret = utils_searchexp("public/", ".json,.css,*");
+	warn("16 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("public/toto.jpg", ".json,.css,*");
+	warn("17 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("public/to.to.jpg", ".json,.css,*");
+	warn("18 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("test/public/toto.min.js", "public/*.js,public/*.css");
+	warn("19 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("test/public/toto.min.css", "public/*.js,public/*.css");
+	warn("20 ret %d/ESUCCESS", ret);
+	ret = utils_searchexp("test/public/toto.css.none", "public/*.js,public/*.css");
+	warn("21 ret %d/EREJECT", ret);
+	return 0;
+}
+#endif
