@@ -53,52 +53,69 @@ static const char *_mimetype[] =
 	"application/octet-stream",
 };
 
-typedef struct mime_entry_s
+typedef struct mime_entry_s mime_entry_t;
+struct mime_entry_s
 {
-	char *ext;
-	utils_mimetype_enum type;
-} mime_entry_t;
-
-static const mime_entry_t *mime_entry[] =
-{
-	&(mime_entry_t){
-		.ext = ".html,.xhtml,.htm",
-		.type = MIME_TEXTHTML,
-	},
-	&(mime_entry_t){
-		.ext = ".css",
-		.type = MIME_TEXTCSS,
-	},
-	&(mime_entry_t){
-		.ext = ".json",
-		.type = MIME_TEXTJSON,
-	},
-	&(mime_entry_t){
-		.ext = ".js",
-		.type = MIME_APPLICATIONJAVASCRIPT,
-	},
-	&(mime_entry_t){
-		.ext = ".text",
-		.type = MIME_TEXTPLAIN,
-	},
-	&(mime_entry_t){
-		.ext = ".png",
-		.type = MIME_IMAGEPNG,
-	},
-	&(mime_entry_t){
-		.ext = ".jpg",
-		.type = MIME_IMAGEJPEG,
-	},
-	&(mime_entry_t){
-		.ext = "*",
-		.type = MIME_APPLICATIONOCTETSTREAM,
-	},
-	NULL
+	const char *ext;
+	const char *mime;
+	mime_entry_t *next;
 };
+
+static const mime_entry_t *mime_entry =
+&(mime_entry_t){
+	.ext = ".text",
+	.mime = "text/plain",
+	.next = 
+&(mime_entry_t){
+	.ext = ".html,.xhtml,.htm",
+	.mime = "text/html",
+	.next =
+&(mime_entry_t){
+	.ext = ".css",
+	.mime = "text/css",
+	.next =
+&(mime_entry_t){
+	.ext = ".json",
+	.mime = "text/json",
+	.next =
+&(mime_entry_t){
+	.ext = ".js",
+	.mime = "application/javascript",
+	.next =
+&(mime_entry_t){
+	.ext = ".png",
+	.mime = "image/png",
+	.next =
+&(mime_entry_t){
+	.ext = ".jpg",
+	.mime = "image/jpeg",
+	.next =
+&(mime_entry_t){
+	.ext = "*",
+	.mime = "application/octet-stream",
+	.next = NULL
+}}}}}}}};
+
+void utils_addmime(const char *ext, const char*mime)
+{
+	mime_entry_t *entry = calloc(1, sizeof(*entry));
+	entry->ext = ext;
+	entry->mime = mime;
+	mime_entry_t *last = (mime_entry_t *)mime_entry;
+	if (last)
+	{
+		while (last->next) last = last->next;
+		last->next = entry;
+	}
+	else
+	{
+		mime_entry = last;
+	}
+}
 
 const char *utils_getmime(char *filepath)
 {
-	mime_entry_t *mime = (mime_entry_t *)mime_entry[0];
+	mime_entry_t *mime = (mime_entry_t *)mime_entry;
 	char *fileext = strrchr(filepath,'.');
 	if (fileext == NULL)
 		return NULL;
@@ -108,10 +125,10 @@ const char *utils_getmime(char *filepath)
 		{
 			break;
 		}
-		mime++;
+		mime = mime->next;
 	}
 	if (mime)
-		return _mimetype[mime->type];
+		return mime->mime;
 	return NULL;
 }
 
@@ -183,7 +200,7 @@ char *utils_urldecode(char *encoded)
 	return decoded;
 }
 
-int utils_searchexp(char *haystack, char *needleslist)
+int utils_searchexp(const char *haystack, const char *needleslist)
 {
 	int ret = EREJECT;
 	if (haystack != NULL)
@@ -192,8 +209,8 @@ int utils_searchexp(char *haystack, char *needleslist)
 		if (filename != NULL)
 			filename++;
 		else
-			filename = haystack;
-		char *needle = needleslist;
+			filename = (char *)haystack;
+		char *needle = (char *)needleslist;
 		while (needle != NULL)
 		{
 			int i = 0;
