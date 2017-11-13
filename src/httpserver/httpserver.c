@@ -1782,7 +1782,11 @@ static int _httpserver_connect(http_server_t *server)
 				while (client != NULL)
 				{
 					http_client_t *next = client->next;
-					if (FD_ISSET(httpclient_socket(client), &rfds) || FD_ISSET(httpclient_socket(client), &wfds))
+					if (httpclient_socket(client) < 0)
+					{
+						client->state |= CLIENT_STOPPED;
+					}
+					else if (FD_ISSET(httpclient_socket(client), &rfds) || FD_ISSET(httpclient_socket(client), &wfds))
 					{
 #ifndef VTHREAD
 						client->state |= CLIENT_RUNNING;
