@@ -410,6 +410,18 @@ int httpmessage_keepalive(http_message_t *message);
 int httpmessage_lock(http_message_t *message);
 
 /**
+ * @brief return the protection of the message
+ * 
+ * if the message is protected, an authentication should be done.
+ * 
+ * @param message the request to test
+ * 
+ * @return 0 for unprotected message, or -1 for forbidden message,
+ * otherwise a value > 0 
+ */
+int httpmessage_isprotected(http_message_t *message);
+
+/**
  * @brief create response for data stream
  *
  * @param message the response message to update

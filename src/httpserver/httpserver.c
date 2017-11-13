@@ -853,6 +853,13 @@ int httpmessage_lock(http_message_t *message)
 	return httpclient_socket(message->client);
 }
 
+int httpmessage_isprotected(http_message_t *message)
+{
+	if (message->method == NULL)
+		return -1;
+	else
+		return message->method->properties;
+}
 /***********************************************************************
  * http_client
  */
