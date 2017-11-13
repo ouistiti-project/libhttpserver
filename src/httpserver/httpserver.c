@@ -1942,18 +1942,7 @@ void httpserver_disconnect(http_server_t *server)
 	if (server->thread)
 	{
 		server->run = 0;
-#ifdef VTHREAD
-		http_client_t *client = server->clients;
-		while (client != NULL)
-		{
-			http_client_t *clientnext = client->next;
-			vthread_join(client->thread, NULL);
-			_httpclient_destroy(client);
-			client = clientnext;
-		}
-		vthread_join(server->thread, NULL);
-		server->thread = 0;
-#endif
+		server->ops->close(server);
 	}
 }
 
