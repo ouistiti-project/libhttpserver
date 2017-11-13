@@ -6,7 +6,18 @@ endif
 ifneq ($(WEBSOCKET),)
 LIBUTILS=y
 LIBWEBSOCKET=y
-endif
+LIBB64_DIR:=libb64
+
+ifeq ($(MBEDTLS),)
+ifneq ($(wildcard $(LIBB64_DIR)/Makefile),)
+subdir-y:=$(LIBB64_DIR)
+
+libb64_dir:=$(realpath $(LIBB64_DIR))
+export CFLAGS+=-I$(libb64_dir)/include/
+export LDFLAGS+=-L$(libb64_dir)/src -L$(libb64_dir)/src
+endif #LIBB64
+endif #MBEDTLS
+endif #WEBSOCKET
 export LIBUTILS LIBWEBSOCKET
 
 subdir-y+=src/httpserver
