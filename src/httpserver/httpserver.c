@@ -1696,6 +1696,7 @@ static int _httpserver_connect(http_server_t *server)
 				dbg("server try join %p", client);
 #ifdef VTHREAD
 				vthread_join(client->thread, NULL);
+				client->thread = NULL;
 #endif
 				dbg("client %p died", client);
 
@@ -1945,6 +1946,10 @@ void httpserver_disconnect(http_server_t *server)
 	{
 		server->run = 0;
 		server->ops->close(server);
+#ifdef VTHREAD
+		vthread_join(server->thread, NULL);
+		server->thread = NULL;
+#endif
 	}
 }
 
