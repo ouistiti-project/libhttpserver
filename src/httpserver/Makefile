@@ -15,7 +15,6 @@ slib-$(SLIB_HTTPSERVER)+=httpserver
 httpserver_SOURCES+=httpserver.c tcpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
 httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
-httpserver_LIBRARY+=pthread
 
 ifneq ($(MAXCHUNKS_HEADER),)
 httpserver_CFLAGS+=-DMAXCHUNKS_HEADER=$(MAXCHUNKS_HEADER)
@@ -29,6 +28,8 @@ endif
 
 ifeq ($(VTHREAD_TYPE),)
 VTHREAD_TYPE:=fork
+elifeq ($(VTHREAD_TYPE),pthread)
+httpserver_LIBRARY-$(VTHREAD)+=pthread
 endif
 httpserver_SOURCES-$(VTHREAD)+=vthread_$(VTHREAD_TYPE).c
 httpserver_CFLAGS-$(VTHREAD)+=-DVTHREAD
@@ -51,6 +52,4 @@ websocket_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
 ifeq ($(WIN32),1)
 httpserver_LDFLAGS+=-lws2_32
-elifeq ($(VTHREAD_TYPE),pthread)
-httpserver_LDFLAGS-$(VTHREAD)+=-lpthread
 endif
