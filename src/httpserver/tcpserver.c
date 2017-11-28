@@ -301,12 +301,7 @@ static void _tcpserver_close(http_server_t *server)
 		client->ops.close(client);
 		client = next;
 	}
-
-#ifndef WIN32
-	close(server->sock);
-#else
-	closesocket(server->sock);
-#endif
+	shutdown(server->sock, SHUT_RDWR);
 }
 
 //httpserver_ops_t *tcpops = &(httpserver_ops_t)
