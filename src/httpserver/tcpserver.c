@@ -275,6 +275,11 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 	// Create new client socket to communicate
 	client->addr_size = sizeof(client->addr);
 	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
+	if (client->sock == -1)
+	{
+		httpclient_destroy(client);
+		return NULL;
+	}
 	char hoststr[NI_MAXHOST];
 	char portstr[NI_MAXSERV];
 

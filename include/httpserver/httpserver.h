@@ -507,6 +507,14 @@ typedef struct httpclient_ops_s httpclient_ops_t;
  */
 http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize);
 extern httpclient_ops_t *tcpclient_ops;
+
+/**
+ * @brief delete the client object
+ * 
+ * @param client the connection that will send the request
+ */
+void httpclient_destroy(http_client_t *client);
+
 /**
  * @brief connect the client to an external server
  *

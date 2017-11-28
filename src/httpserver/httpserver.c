@@ -866,6 +866,59 @@ int httpmessage_isprotected(http_message_t *message)
  * http_client
  */
 
+http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize)
+{
+	http_client_t *client = vcalloc(1, sizeof(*client));
+	client->server = server;
+
+	if (server)
+	{
+		http_connector_list_t *callback = server->callbacks;
+		while (callback != NULL)
+		{
+			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg);
+			callback = callback->next;
+		}
+	}
+	memcpy(&client->ops, fops, sizeof(client->ops));
+	client->ctx = client;
+	client->sockdata = _buffer_create(1, chunksize);
+
+	return client;
+}
+
+static void _httpclient_destroy(http_client_t *client)
+{
+	http_connector_list_t *callback = client->callbacks;
+	while (callback != NULL)
+	{
+		http_connector_list_t *next = callback->next;
+		if (callback->vhost)
+			free(callback->vhost);
+		free(callback);
+		callback = next;
+	}
+	dbentry_t *session = client->session;
+	while (session)
+	{
+		dbentry_t *next = session->next;
+		free(session);
+		session = next;
+	}
+	if (client->sockdata)
+		_buffer_destroy(client->sockdata);
+	if (client->request)
+		_httpmessage_destroy(client->request);
+	if (client->session_storage)
+		vfree(client->session_storage);
+	vfree(client);
+}
+
+void httpclient_destroy(http_client_t *client)
+{
+	_httpclient_destroy(client);
+}
+
 void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg)
 {
 	http_connector_list_t *callback;
@@ -909,27 +962,6 @@ http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *
 		client->ctx = arg;
 	}
 	return previous;
-}
-
-http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize)
-{
-	http_client_t *client = vcalloc(1, sizeof(*client));
-	client->server = server;
-
-	if (server)
-	{
-		http_connector_list_t *callback = server->callbacks;
-		while (callback != NULL)
-		{
-			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg);
-			callback = callback->next;
-		}
-	}
-	memcpy(&client->ops, fops, sizeof(client->ops));
-	client->ctx = client;
-	client->sockdata = _buffer_create(1, chunksize);
-
-	return client;
 }
 
 #ifdef HTTPCLIENT_FEATURES
@@ -1029,33 +1061,6 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 }
 #endif
 
-static void _httpclient_destroy(http_client_t *client)
-{
-	http_connector_list_t *callback = client->callbacks;
-	while (callback != NULL)
-	{
-		http_connector_list_t *next = callback->next;
-		if (callback->vhost)
-			free(callback->vhost);
-		free(callback);
-		callback = next;
-	}
-	dbentry_t *session = client->session;
-	while (session)
-	{
-		dbentry_t *next = session->next;
-		free(session);
-		session = next;
-	}
-	if (client->sockdata)
-		_buffer_destroy(client->sockdata);
-	if (client->request)
-		_httpmessage_destroy(client->request);
-	if (client->session_storage)
-		vfree(client->session_storage);
-	vfree(client);
-}
-
 static int _httpclient_connect(http_client_t *client)
 {
 
@@ -1065,7 +1070,7 @@ static int _httpclient_connect(http_client_t *client)
 	{
 		_httpclient_run(client);
 	} while(!(client->state & CLIENT_STOPPED));
-	client->state = CLIENT_DEAD;
+	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 	dbg("client %p close", client);
 #ifdef DEBUG
 	fflush(stderr);
@@ -1942,20 +1947,19 @@ void httpserver_connect(http_server_t *server)
 
 void httpserver_disconnect(http_server_t *server)
 {
-	if (server->thread)
-	{
-		server->run = 0;
-		server->ops->close(server);
-#ifdef VTHREAD
-		vthread_join(server->thread, NULL);
-		server->thread = NULL;
-#endif
-	}
+	server->run = 0;
+	server->ops->close(server);
 }
 
 void httpserver_destroy(http_server_t *server)
 {
-	httpserver_disconnect(server);
+#ifdef VTHREAD
+	if (server->thread)
+	{
+		vthread_join(server->thread, NULL);
+		server->thread = NULL;
+	}
+#endif
 	http_connector_list_t *callback = server->callbacks;
 	while (callback)
 	{
