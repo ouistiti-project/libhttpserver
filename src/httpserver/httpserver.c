@@ -1278,7 +1278,7 @@ int httpclient_wait(http_client_t *client, int sending)
 		if (sending)
 		{
 			timeout.tv_sec = 0;
-			timeout.tv_usec = 100;
+			timeout.tv_usec = 1000;
 		}
 		else
 		{
@@ -1296,7 +1296,7 @@ int httpclient_wait(http_client_t *client, int sending)
 	ret = select(client->sock + 1, rfds, wfds, NULL, ptimeout);
 	if (ret == 0)
 	{
-		ret = -EINCOMPLETE;
+		ret = EINCOMPLETE;
 		errno = EAGAIN;
 	}
 	else if (ret > 0)
@@ -1304,10 +1304,16 @@ int httpclient_wait(http_client_t *client, int sending)
 		if (FD_ISSET(client->sock, &fds))
 			ret = client->sock;
 		else
+		{
+			err("httpclient_wait bad socket (%d)", client->sock);
 			ret = EREJECT;
+		}
 	}
 	else
+	{
+		dbg("httpclient_wait error (%d %s)", errno, strerror(errno));
 		ret = EREJECT;
+	}
 #endif
 	return ret;
 }
