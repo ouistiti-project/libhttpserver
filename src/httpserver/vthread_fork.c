@@ -79,6 +79,8 @@ int vthread_exist(vthread_t thread)
 	int ret = 0;
 	int pid;
 	pid = waitpid(thread->pid, &ret, WNOHANG);
+	if (pid == -1)
+		return 0;
 	return (pid != thread->pid);
 }
 
