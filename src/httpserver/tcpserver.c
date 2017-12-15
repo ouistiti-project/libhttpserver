@@ -288,7 +288,7 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 		NI_NUMERICHOST | NI_NUMERICSERV);
 
 	if (rc == 0) 
-		warn("new connection %p from %s %s", client, hoststr, portstr);
+		warn("new connection %p from %s %d", client, hoststr, server->config->port);
 	return client;
 }
 

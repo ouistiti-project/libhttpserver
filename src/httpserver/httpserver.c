@@ -63,6 +63,7 @@ struct http_connector_list_s
 	http_connector_t func;
 	void *arg;
 	struct http_connector_list_s *next;
+	const char *name;
 };
 
 struct http_server_mod_s
@@ -386,7 +387,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					{
 						if (message->query == NULL)
 							message->query = message->uri->data + message->uri->length;
-						dbg("new request %s %s", message->method->key, message->uri->data);
+						dbg("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 					}
 					else
 					{
@@ -876,7 +877,7 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 		http_connector_list_t *callback = server->callbacks;
 		while (callback != NULL)
 		{
-			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg);
+			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg, callback->name);
 			callback = callback->next;
 		}
 	}
@@ -919,7 +920,7 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
-void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg)
+void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg, const char *name)
 {
 	http_connector_list_t *callback;
 
@@ -932,6 +933,7 @@ void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_
 	}
 
 	callback->func = func;
+	callback->name = name;
 	callback->arg = funcarg;
 	callback->next = client->callbacks;
 	client->callbacks = callback;
@@ -1618,6 +1620,8 @@ static int _httpclient_run(http_client_t *client)
 				client->sockdata->offset = client->sockdata->data;
 				_httpmessage_parserequest(request, client->sockdata);
 			}
+			http_connector_list_t *callback = request->connector;
+			warn("response to %p from connector \"%s\" result %d", client, callback->name, request->response->result);
 			/**
 			 * flush the output socket
 			 */
@@ -1766,7 +1770,6 @@ static int _httpserver_connect(http_server_t *server)
 				http_client_t *client = server->ops->createclient(server);
 				if (client == NULL)
 					continue;
-				dbg("new connection %p", client);
 				http_server_mod_t *mod = server->mod;
 				http_client_modctx_t *currentctx = NULL;
 				ret = 0;

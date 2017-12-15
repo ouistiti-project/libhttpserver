@@ -557,9 +557,10 @@ void *httpclient_context(http_client_t *client);
  * @param vhost the HOST name on which the connector has to response, NULL for default host
  * @param func the callback to callback
  * @param funcarg the first parameter to send to the callback
+ * @param name the name of the module which add the connector
  */
 
-void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg);
+void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg, const char *name);
 
 /**
  * @brief add a request receiver callback

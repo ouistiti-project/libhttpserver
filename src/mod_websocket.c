@@ -244,7 +244,7 @@ static void *_mod_websocket_getctx(void *arg, http_client_t *ctl, struct sockadd
 
 	_mod_websocket_ctx_t *ctx = calloc(1, sizeof(*ctx));
 	ctx->mod = mod;
-	httpclient_addconnector(ctl, mod->vhost, websocket_connector, ctx);
+	httpclient_addconnector(ctl, mod->vhost, websocket_connector, ctx, "websocket");
 
 	return ctx;
 }
