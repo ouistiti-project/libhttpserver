@@ -1354,7 +1354,7 @@ static int _httpclient_run(http_client_t *client)
 				if (httpclient_wait(client, 0) < 0)
 				{
 					/* timeout */
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
 				}
 			}
@@ -1375,7 +1375,7 @@ static int _httpclient_run(http_client_t *client)
 				if (httpclient_wait(client, 0) < 0)
 				{
 					/* timeout */
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
 				}
 			}
@@ -1719,7 +1719,7 @@ static int _httpserver_connect(http_server_t *server)
 			}
 			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 			{
-				dbg("client %p died", client);
+				warn("client %p died", client);
 
 				http_client_t *client2 = server->clients;
 				if (client == server->clients)
@@ -2167,7 +2167,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 			getnameinfo((struct sockaddr *) &sin, len,
 				host, NI_MAXHOST,
 				0, 0, NI_NUMERICHOST);
-													value = host;
+			value = host;
 		}
 	}
 	else
