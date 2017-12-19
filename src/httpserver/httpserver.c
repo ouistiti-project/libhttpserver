@@ -1877,10 +1877,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
 	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
 
-#ifdef WIN32
-	WSADATA wsaData = {0};
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
-#endif
 	if (server->ops->start(server))
 	{
 		free(server);
@@ -2001,9 +1997,6 @@ void httpserver_destroy(http_server_t *server)
 		method = next;
 	}
 	vfree(server);
-#ifdef WIN32
-	WSACleanup();
-#endif
 }
 /***********************************************************************/
 
