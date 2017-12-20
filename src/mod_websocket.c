@@ -211,8 +211,8 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 				{
 					ctx->socket = httpmessage_lock(response);
 					_mod_websocket_handshake(ctx, request, response);
-					httpmessage_addheader(response, str_connection, str_upgrade);
-					httpmessage_addheader(response, str_upgrade, str_websocket);
+					httpmessage_addheader(response, str_connection, (char *)str_upgrade);
+					httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
 					httpmessage_addcontent(response, "none", "", -1);
 					httpmessage_result(response, RESULT_101);
 					dbg("result 101");

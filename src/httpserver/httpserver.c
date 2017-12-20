@@ -755,7 +755,7 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	return ESUCCESS;
 }
 
-void httpmessage_addheader(http_message_t *message, char *key, char *value)
+void httpmessage_addheader(http_message_t *message, const char *key, char *value)
 {
 	if (message->headers_storage == NULL)
 	{
@@ -801,11 +801,11 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 	{
 		if (type == NULL)
 		{
-			httpmessage_addheader(message, (char *)str_contenttype, "text/plain");
+			httpmessage_addheader(message, str_contenttype, "text/plain");
 		}
 		else if (strcmp(type, "none"))
 		{
-			httpmessage_addheader(message, (char *)str_contenttype, type);
+			httpmessage_addheader(message, str_contenttype, type);
 		}
 	}
 	if (message->content == NULL && content != NULL)
@@ -2002,7 +2002,7 @@ void httpserver_destroy(http_server_t *server)
 
 static char default_value[8] = {0};
 static char host[NI_MAXHOST], service[NI_MAXSERV];
-char *httpserver_INFO(http_server_t *server, char *key)
+char *httpserver_INFO(http_server_t *server, const char *key)
 {
 	char *value = default_value;
 	memset(default_value, 0, sizeof(default_value));
@@ -2047,7 +2047,7 @@ char *httpserver_INFO(http_server_t *server, char *key)
 	return value;
 }
 
-char *httpmessage_COOKIE(http_message_t *message, char *key)
+char *httpmessage_COOKIE(http_message_t *message, const char *key)
 {
 	char *value = NULL;
 	if (message->client == NULL)
@@ -2132,7 +2132,7 @@ char *httpmessage_COOKIE(http_message_t *message, char *key)
 	return value;
 }
 
-char *httpmessage_SERVER(http_message_t *message, char *key)
+char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
 	if (message->client == NULL)
 		return NULL;
@@ -2168,7 +2168,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	return value;
 }
 
-char *httpmessage_REQUEST(http_message_t *message, char *key)
+char *httpmessage_REQUEST(http_message_t *message, const char *key)
 {
 	char *value = default_value;
 	if (!strcasecmp(key, "uri"))
@@ -2241,7 +2241,7 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	return value;
 }
 
-char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
+char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 {
 	dbentry_t *sessioninfo;
 	if (message->client == NULL)
