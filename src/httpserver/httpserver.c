@@ -69,6 +69,7 @@ struct http_connector_list_s
 struct http_server_mod_s
 {
 	void *arg;
+	const char *name;
 	http_getctx_t func;
 	http_freectx_t freectx;
 	http_server_mod_t *next;
@@ -1920,12 +1921,13 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		method->properties = properties;
 }
 
-void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg)
+void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg, const char *name)
 {
 	http_server_mod_t *mod = vcalloc(1, sizeof(*mod));
 	mod->func = modf;
 	mod->freectx = unmodf;
 	mod->arg = arg;
+	mod->name = name;
 	mod->next = server->mod;
 	server->mod = mod;
 }
