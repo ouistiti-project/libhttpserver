@@ -150,8 +150,9 @@ static void tcpclient_close(void *ctl)
 	if (client->sock > -1)
 	{
 		shutdown(client->sock, SHUT_RDWR);
+		warn("client %p shutdown", client);
 #ifndef WIN32
-		close(client->sock);
+//		close(client->sock);
 #else
 		closesocket(client->sock);
 #endif
@@ -172,6 +173,10 @@ static int _tcpserver_start(http_server_t *server)
 {
 	int status;
 
+#ifdef WIN32
+	WSADATA wsaData = {0};
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
 	if (server->config->addr == NULL)
 	{
 #ifdef IPV6
@@ -288,7 +293,7 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 		NI_NUMERICHOST | NI_NUMERICSERV);
 
 	if (rc == 0) 
-		warn("new connection %p from %s %s", client, hoststr, portstr);
+		warn("new connection %p from %s %d", client, hoststr, server->config->port);
 	return client;
 }
 
@@ -302,6 +307,9 @@ static void _tcpserver_close(http_server_t *server)
 		client = next;
 	}
 	shutdown(server->sock, SHUT_RDWR);
+#ifdef WIN32
+	WSACleanup();
+#endif
 }
 
 //httpserver_ops_t *tcpops = &(httpserver_ops_t)

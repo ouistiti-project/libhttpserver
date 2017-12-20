@@ -63,11 +63,13 @@ struct http_connector_list_s
 	http_connector_t func;
 	void *arg;
 	struct http_connector_list_s *next;
+	const char *name;
 };
 
 struct http_server_mod_s
 {
 	void *arg;
+	const char *name;
 	http_getctx_t func;
 	http_freectx_t freectx;
 	http_server_mod_t *next;
@@ -386,7 +388,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					{
 						if (message->query == NULL)
 							message->query = message->uri->data + message->uri->length;
-						dbg("new request %s %s", message->method->key, message->uri->data);
+						dbg("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 					}
 					else
 					{
@@ -754,7 +756,7 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	return ESUCCESS;
 }
 
-void httpmessage_addheader(http_message_t *message, char *key, char *value)
+void httpmessage_addheader(http_message_t *message, const char *key, char *value)
 {
 	if (message->headers_storage == NULL)
 	{
@@ -800,11 +802,11 @@ char *httpmessage_addcontent(http_message_t *message, char *type, char *content,
 	{
 		if (type == NULL)
 		{
-			httpmessage_addheader(message, (char *)str_contenttype, "text/plain");
+			httpmessage_addheader(message, str_contenttype, "text/plain");
 		}
 		else if (strcmp(type, "none"))
 		{
-			httpmessage_addheader(message, (char *)str_contenttype, type);
+			httpmessage_addheader(message, str_contenttype, type);
 		}
 	}
 	if (message->content == NULL && content != NULL)
@@ -876,7 +878,7 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 		http_connector_list_t *callback = server->callbacks;
 		while (callback != NULL)
 		{
-			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg);
+			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg, callback->name);
 			callback = callback->next;
 		}
 	}
@@ -919,7 +921,7 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
-void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg)
+void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg, const char *name)
 {
 	http_connector_list_t *callback;
 
@@ -932,6 +934,7 @@ void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_
 	}
 
 	callback->func = func;
+	callback->name = name;
 	callback->arg = funcarg;
 	callback->next = client->callbacks;
 	client->callbacks = callback;
@@ -1352,7 +1355,7 @@ static int _httpclient_run(http_client_t *client)
 				if (httpclient_wait(client, 0) < 0)
 				{
 					/* timeout */
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
 				}
 			}
@@ -1373,7 +1376,7 @@ static int _httpclient_run(http_client_t *client)
 				if (httpclient_wait(client, 0) < 0)
 				{
 					/* timeout */
-					client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					client->state &= ~CLIENT_KEEPALIVE;
 				}
 			}
@@ -1618,6 +1621,8 @@ static int _httpclient_run(http_client_t *client)
 				client->sockdata->offset = client->sockdata->data;
 				_httpmessage_parserequest(request, client->sockdata);
 			}
+			http_connector_list_t *callback = request->connector;
+			warn("response to %p from connector \"%s\" result %d", client, callback->name, request->response->result);
 			/**
 			 * flush the output socket
 			 */
@@ -1715,7 +1720,7 @@ static int _httpserver_connect(http_server_t *server)
 			}
 			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 			{
-				dbg("client %p died", client);
+				warn("client %p died", client);
 
 				http_client_t *client2 = server->clients;
 				if (client == server->clients)
@@ -1766,7 +1771,6 @@ static int _httpserver_connect(http_server_t *server)
 				http_client_t *client = server->ops->createclient(server);
 				if (client == NULL)
 					continue;
-				dbg("new connection %p", client);
 				http_server_mod_t *mod = server->mod;
 				http_client_modctx_t *currentctx = NULL;
 				ret = 0;
@@ -1874,10 +1878,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
 	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
 
-#ifdef WIN32
-	WSADATA wsaData = {0};
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
-#endif
 	if (server->ops->start(server))
 	{
 		free(server);
@@ -1921,12 +1921,13 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		method->properties = properties;
 }
 
-void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg)
+void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg, const char *name)
 {
 	http_server_mod_t *mod = vcalloc(1, sizeof(*mod));
 	mod->func = modf;
 	mod->freectx = unmodf;
 	mod->arg = arg;
+	mod->name = name;
 	mod->next = server->mod;
 	server->mod = mod;
 }
@@ -1998,15 +1999,12 @@ void httpserver_destroy(http_server_t *server)
 		method = next;
 	}
 	vfree(server);
-#ifdef WIN32
-	WSACleanup();
-#endif
 }
 /***********************************************************************/
 
 static char default_value[8] = {0};
 static char host[NI_MAXHOST], service[NI_MAXSERV];
-char *httpserver_INFO(http_server_t *server, char *key)
+char *httpserver_INFO(http_server_t *server, const char *key)
 {
 	char *value = default_value;
 	memset(default_value, 0, sizeof(default_value));
@@ -2051,7 +2049,7 @@ char *httpserver_INFO(http_server_t *server, char *key)
 	return value;
 }
 
-char *httpmessage_COOKIE(http_message_t *message, char *key)
+char *httpmessage_COOKIE(http_message_t *message, const char *key)
 {
 	char *value = NULL;
 	if (message->client == NULL)
@@ -2136,7 +2134,7 @@ char *httpmessage_COOKIE(http_message_t *message, char *key)
 	return value;
 }
 
-char *httpmessage_SERVER(http_message_t *message, char *key)
+char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
 	if (message->client == NULL)
 		return NULL;
@@ -2164,7 +2162,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 			getnameinfo((struct sockaddr *) &sin, len,
 				host, NI_MAXHOST,
 				0, 0, NI_NUMERICHOST);
-													value = host;
+			value = host;
 		}
 	}
 	else
@@ -2172,7 +2170,7 @@ char *httpmessage_SERVER(http_message_t *message, char *key)
 	return value;
 }
 
-char *httpmessage_REQUEST(http_message_t *message, char *key)
+char *httpmessage_REQUEST(http_message_t *message, const char *key)
 {
 	char *value = default_value;
 	if (!strcasecmp(key, "uri"))
@@ -2245,7 +2243,7 @@ char *httpmessage_REQUEST(http_message_t *message, char *key)
 	return value;
 }
 
-char *httpmessage_SESSION(http_message_t *message, char *key, char *value)
+char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 {
 	dbentry_t *sessioninfo;
 	if (message->client == NULL)

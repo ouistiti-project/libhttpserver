@@ -76,6 +76,8 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 #define HANDSHAKE 0x01
 #define RECV_COMPLETE 0x02
 
+static const char str_mbedtls[] = "tls";
+
 typedef struct _mod_mbedtls_s
 {
 	mbedtls_ssl_context ssl;
@@ -189,7 +191,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 			err("mbedtls_dhm_parse_dhmfile %d\n", ret);
 	}
 
-	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config);
+	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config, str_mbedtls);
 	return config;
 }
 

@@ -123,12 +123,12 @@ struct _mod_websocket_ctx_s
 	int socket;
 };
 
-static char *str_connection = "Connection";
-static char *str_upgrade = "Upgrade";
-static char *str_websocket = "websocket";
-static char *str_protocol = "Sec-WebSocket-Protocol";
-static char *str_accept = "Sec-WebSocket-Accept";
-static char *str_key = "Sec-WebSocket-Key";
+static const char str_connection[] = "Connection";
+static const char str_upgrade[] = "Upgrade";
+static const char str_websocket[] = "websocket";
+static const char str_protocol[] = "Sec-WebSocket-Protocol";
+static const char str_accept[] = "Sec-WebSocket-Accept";
+static const char str_key[] = "Sec-WebSocket-Key";
 
 static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *request, http_message_t *response)
 {
@@ -211,8 +211,8 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 				{
 					ctx->socket = httpmessage_lock(response);
 					_mod_websocket_handshake(ctx, request, response);
-					httpmessage_addheader(response, str_connection, str_upgrade);
-					httpmessage_addheader(response, str_upgrade, str_websocket);
+					httpmessage_addheader(response, str_connection, (char *)str_upgrade);
+					httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
 					httpmessage_addcontent(response, "none", "", -1);
 					httpmessage_result(response, RESULT_101);
 					dbg("result 101");
@@ -244,7 +244,7 @@ static void *_mod_websocket_getctx(void *arg, http_client_t *ctl, struct sockadd
 
 	_mod_websocket_ctx_t *ctx = calloc(1, sizeof(*ctx));
 	ctx->mod = mod;
-	httpclient_addconnector(ctl, mod->vhost, websocket_connector, ctx);
+	httpclient_addconnector(ctl, mod->vhost, websocket_connector, ctx, str_websocket);
 
 	return ctx;
 }
@@ -264,7 +264,7 @@ void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod
 	mod->config = config;
 	mod->run = run;
 	mod->runarg = runarg;
-	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod);
+	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod, str_websocket);
 	warn("websocket support %s %s", mod->config->path, mod->config->services);
 	return mod;
 }
