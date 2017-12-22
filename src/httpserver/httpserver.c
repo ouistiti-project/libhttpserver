@@ -2160,6 +2160,12 @@ char *httpmessage_SERVER(http_message_t *message, const char *key)
 			value = service;
 		}
 	}
+	else if (!strcasecmp(key, "name"))
+	{
+		value = httpmessage_REQUEST(message, "Host");
+		if (value == NULL)
+			value = message->client->server->config->hostname;
+	}
 	else if (!strcasecmp(key, "addr"))
 	{
 		struct sockaddr_in sin;
