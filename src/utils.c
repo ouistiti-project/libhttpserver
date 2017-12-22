@@ -96,6 +96,8 @@ static const mime_entry_t *mime_entry =
 	.next = NULL
 }}}}}}}};
 
+static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case);
+
 void utils_addmime(const char *ext, const char*mime)
 {
 	mime_entry_t *entry = calloc(1, sizeof(*entry));
@@ -118,7 +120,7 @@ const char *utils_getmime(char *filepath)
 	mime_entry_t *mime = (mime_entry_t *)mime_entry;
 	while (mime)
 	{
-		if (utils_searchexp(filepath, mime->ext) == ESUCCESS)
+		if (_utils_searchexp(filepath, mime->ext, 1) == ESUCCESS)
 		{
 			break;
 		}
@@ -199,6 +201,11 @@ char *utils_urldecode(char *encoded)
 
 int utils_searchexp(const char *haystack, const char *needleslist)
 {
+	return _utils_searchexp(haystack, needleslist, 0);
+}
+
+static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case)
+{
 	int ret = EREJECT;
 	if (haystack != NULL)
 	{
@@ -222,18 +229,25 @@ int utils_searchexp(const char *haystack, const char *needleslist)
 					needle++;
 				}
 				i++;
+				char hay = haystack[i];
+				// lowercase
+				if (ignore_case && hay > 0x40 && hay < 0x5b)
+					hay += 0x20;
 				if (!wildcard)
 				{
 					needle++;
+					char lneedle = *needle;
+					if (ignore_case && lneedle > 0x40 && lneedle < 0x5b)
+						lneedle += 0x20;
 					if (*needle == ',' || *needle == '\0')
 					{
-						if (haystack[i] != '\0')
+						if (hay != '\0')
 							ret = EREJECT;
 						else
 							ret = ESUCCESS;
 						break;
 					}
-					else if (*needle != haystack[i] && *needle != '*')
+					else if (lneedle != hay && *needle != '*')
 					{
 						needle = needle_entry;
 						ret = EREJECT;
@@ -242,16 +256,19 @@ int utils_searchexp(const char *haystack, const char *needleslist)
 							break;
 						}
 					}
-					else if (*needle == haystack[i])
+					else if (lneedle == hay)
 					{
 						ret = ESUCCESS;
 					}
 				}
 				else
 				{
+					char lneedle = *needle;
+					if (ignore_case && lneedle > 0x40 && lneedle < 0x5b)
+						lneedle += 0x20;
 					needle_entry = needle;
 					ret = ESUCCESS;
-					if (*needle == haystack[i])
+					if (lneedle == hay)
 					{
 						wildcard = 0;
 					}
