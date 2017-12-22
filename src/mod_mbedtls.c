@@ -166,6 +166,10 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 	}
 
 	char *pers = httpserver_INFO(server, "name");
+	if (! pers)
+	{
+		pers = (char *)str_mbedtls;
+	}
 	if (pers)
 	{
 		ret = mbedtls_ctr_drbg_seed(&config->ctr_drbg, mbedtls_entropy_func, &config->entropy,
