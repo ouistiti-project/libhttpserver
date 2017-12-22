@@ -1553,7 +1553,9 @@ static int _httpclient_run(http_client_t *client)
 				_buffer_reset(request->response->content);
 			}
 			if (client->state & CLIENT_RESPONSEREADY)
+			{
 				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+			}
 			else if (client->state & CLIENT_LOCKED)
 			{
 				int ret = _httpclient_runconnector(client, request, request->response);
@@ -1583,7 +1585,9 @@ static int _httpclient_run(http_client_t *client)
 			if (request->response->version == HTTP09)
 				client->state = CLIENT_RESPONSECONTENT | (client->state & ~CLIENT_MACHINEMASK);
 			else
+			{
 				client->state = CLIENT_RESPONSEHEADER | (client->state & ~CLIENT_MACHINEMASK);
+			}
 			client->state &= ~CLIENT_KEEPALIVE;
 		}
 		break;
@@ -1622,7 +1626,10 @@ static int _httpclient_run(http_client_t *client)
 				_httpmessage_parserequest(request, client->sockdata);
 			}
 			http_connector_list_t *callback = request->connector;
-			warn("response to %p from connector \"%s\" result %d", client, callback->name, request->response->result);
+			const char *name = "server";
+			if (callback)
+				name = callback->name;
+			warn("response to %p from connector \"%s\" result %d", client, name, request->response->result);
 			/**
 			 * flush the output socket
 			 */
