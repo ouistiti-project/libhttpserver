@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include "httpserver/httpserver.h"
 #include "httpserver/utils.h"
@@ -320,6 +321,7 @@ char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext,
 		memset(filestat, 0, sizeof(*filestat));
 		if (stat(filepath, filestat))
 		{
+			dbg("stat error on %s : %s", filepath, strerror(errno));
 			free(filepath);
 			return NULL;
 		}
