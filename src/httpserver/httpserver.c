@@ -891,6 +891,18 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 
 static void _httpclient_destroy(http_client_t *client)
 {
+	http_client_modctx_t *modctx = client->modctx;
+	while (modctx)
+	{
+		http_client_modctx_t *next = modctx->next;
+		if (modctx->freectx)
+		{
+			modctx->freectx(modctx->ctx);
+		}
+		free(modctx);
+		modctx = next;
+	}
+	client->modctx = NULL;
 	http_connector_list_t *callback = client->callbacks;
 	while (callback != NULL)
 	{
@@ -1217,7 +1229,7 @@ static int _httpclient_request(http_client_t *client)
 				err("Result error may return ESUCCESS");
 #endif
 			client->request->response->result = RESULT_404;
-			warn("request not found %s", client->request->uri->data);
+			warn("request not found %s from %p", client->request->uri->data, client);
 		}
 	}
 	/**
@@ -1669,18 +1681,6 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_EXIT:
 		{
-			http_client_modctx_t *modctx = client->modctx;
-			while (modctx)
-			{
-				http_client_modctx_t *next = modctx->next;
-				if (modctx->freectx)
-				{
-					modctx->freectx(modctx->ctx);
-				}
-				free(modctx);
-				modctx = next;
-			}
-			client->modctx = NULL;
 			client->ops.close(client);
 			client->state |= CLIENT_STOPPED;
 		}
@@ -1778,9 +1778,9 @@ static int _httpserver_connect(http_server_t *server)
 				http_client_t *client = server->ops->createclient(server);
 				if (client == NULL)
 					continue;
+				ret = 0;
 				http_server_mod_t *mod = server->mod;
 				http_client_modctx_t *currentctx = NULL;
-				ret = 0;
 				while (mod)
 				{
 					http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
@@ -1811,6 +1811,11 @@ static int _httpserver_connect(http_server_t *server)
 					server->clients = client;
 
 					ret = 1;
+				}
+				else
+				{
+					httpclient_shutdown(client);
+					_httpclient_destroy(client);
 				}
 			}
 			else
