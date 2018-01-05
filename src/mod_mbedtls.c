@@ -268,7 +268,7 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 		{
 			char error[256];
 			mbedtls_strerror(ret, error, 256);
-			warn("TLS Handshake error %X %s", ret, error);
+			warn("TLS Handshake error %X %s", -ret, error);
 			mbedtls_ssl_free(&ctx->ssl);
 			free(ctx);
 			ctx = NULL;
@@ -281,6 +281,11 @@ static void _mod_mbedtls_freectx(void *vctx)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
+	if (vctx == NULL)
+	{
+		dbg("mbedtls: close from error on Handshake");
+		return;
+	}
 	while ((ret = mbedtls_ssl_close_notify(&ctx->ssl)) == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
 	dbg("TLS Close");
 	mbedtls_ssl_free(&ctx->ssl);
