@@ -90,12 +90,15 @@ static const mime_entry_t *mime_entry =
 &(mime_entry_t){
 	.ext = ".jpg",
 	.mime = "image/jpeg",
-	.next =
+	.next = NULL
+}}}}}}};
+
+static const mime_entry_t *mime_default =
 &(mime_entry_t){
 	.ext = "*",
 	.mime = "application/octet-stream",
 	.next = NULL
-}}}}}}}};
+};
 
 static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case);
 
@@ -129,7 +132,7 @@ const char *utils_getmime(char *filepath)
 	}
 	if (mime)
 		return mime->mime;
-	return NULL;
+	return mime_default->mime;
 }
 
 char *str_location = "Location";
