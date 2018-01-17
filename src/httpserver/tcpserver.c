@@ -119,6 +119,7 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 			ret = EINCOMPLETE;
 		else
 			ret = EREJECT;
+		//err("client %p recv error %s %d", client, strerror(errno), ret);
 	}
 	return ret;
 }
@@ -144,15 +145,35 @@ static void tcpclient_flush(void *ctl)
 	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 }
 
-static void tcpclient_close(void *ctl)
+static void tcpclient_disconnect(void *ctl)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	if (client->sock > -1)
 	{
+		/**
+		 * the client must receive information about the closing,
+		 * but the rest of this software needs to be aware too.
+		 * The real closing is done outside.
+		 */
 		shutdown(client->sock, SHUT_RDWR);
 		warn("client %p shutdown", client);
+	}
+}
+
+static void tcpclient_destroy(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+	if (client->sock > -1)
+	{
+		/**
+		 * Every body is aware about the closing.
+		 * And the socket is really closed now.
+		 * The socket must be close to free the
+		 * file descriptor of the kernel.
+		 */
+		warn("client %p close", client);
 #ifndef WIN32
-//		close(client->sock);
+		close(client->sock);
 #else
 		closesocket(client->sock);
 #endif
@@ -166,7 +187,8 @@ httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.recvreq = tcpclient_recv,
 	.sendresp = tcpclient_send,
 	.flush = tcpclient_flush,
-	.close = tcpclient_close,
+	.disconnect = tcpclient_disconnect,
+	.destroy = tcpclient_destroy,
 };
 
 static int _tcpserver_start(http_server_t *server)
@@ -282,6 +304,7 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
 	if (client->sock == -1)
 	{
+		err("tcpserver accept error %s", strerror(errno));
 		httpclient_destroy(client);
 		return NULL;
 	}
@@ -303,10 +326,14 @@ static void _tcpserver_close(http_server_t *server)
 	while (client != NULL)
 	{
 		http_client_t *next = client->next;
-		client->ops.close(client);
+		client->ops.disconnect(client);
+		client->ops.destroy(client);
 		client = next;
 	}
-	shutdown(server->sock, SHUT_RDWR);
+	if (server->sock > 0)
+		shutdown(server->sock, SHUT_RDWR);
+	warn("server %p close", server);
+	server->sock = -1;
 #ifdef WIN32
 	WSACleanup();
 #endif

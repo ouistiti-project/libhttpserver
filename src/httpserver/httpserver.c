@@ -891,6 +891,8 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 
 static void _httpclient_destroy(http_client_t *client)
 {
+	if (client->sock > 0)
+		client->ops.destroy(client);
 	http_client_modctx_t *modctx = client->modctx;
 	while (modctx)
 	{
@@ -1180,10 +1182,21 @@ static int _httpclient_request(http_client_t *client)
 		client->sockdata->length += size;
 		client->sockdata->data[client->sockdata->length] = 0;
 	}
-	else if (size == EINCOMPLETE)
-		return ECONTINUE;
-	else
+	else if (size == 0)
+	{
+		err("client %p shutdown from outside", client);
 		return EREJECT;
+	}
+	else if (size == EINCOMPLETE)
+	{
+		dbg("client %p recv EAGAIN", client);
+		return ECONTINUE;
+	}
+	else
+	{
+		err("client %p recv error %s", client, strerror(errno));
+		return EREJECT;
+	}
 
 	/**
 	 * the receiving may complete the buffer, but the parser has
@@ -1627,7 +1640,7 @@ static int _httpclient_run(http_client_t *client)
 				}
 				else if (size != EINCOMPLETE)
 				{
-					client->state |= ~CLIENT_KEEPALIVE;
+					client->state &= ~CLIENT_KEEPALIVE;
 				}
 
 				/**
@@ -1681,19 +1694,26 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_EXIT:
 		{
-			client->ops.close(client);
+			client->ops.disconnect(client);
 			client->state |= CLIENT_STOPPED;
 		}
 		break;
 	}
+	/**
+	 * When the connector manages it-self the socket,
+	 * it possible to leave this thread without shutdown the socket.
+	 * Be careful to not add action on the socket after this point
+	 */
+	//client->ops.destroy(client);
 	return 0;
 }
 
 void httpclient_shutdown(http_client_t *client)
 {
-	client->ops.close(client);
+	client->ops.disconnect(client);
 }
 
+#define TEST1
 /***********************************************************************
  * http_server
  */

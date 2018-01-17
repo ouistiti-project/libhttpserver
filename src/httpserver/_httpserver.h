@@ -47,7 +47,8 @@ typedef struct http_message_method_s http_message_method_t;
 
 typedef int (*http_connect_t)(void *ctl, char *addr, int port);
 typedef void (*http_flush_t)(void *ctl);
-typedef void (*http_close_t)(void *ctl);
+typedef void (*http_disconnect_t)(void *ctl);
+typedef void (*http_destroy_t)(void *ctl);
 typedef struct httpclient_ops_s httpclient_ops_t;
 
 struct httpclient_ops_s
@@ -56,7 +57,8 @@ struct httpclient_ops_s
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */
 	http_flush_t flush; /* callback to flush the socket */
-	http_close_t close; /* callback to close the socket */
+	http_disconnect_t disconnect; /* callback to close the socket */
+	http_destroy_t destroy; /* callback to close the socket */
 };
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
