@@ -119,7 +119,7 @@ void utils_addmime(const char *ext, const char*mime)
 	}
 }
 
-const char *utils_getmime(char *filepath)
+const char *utils_getmime(const char *filepath)
 {
 	mime_entry_t *mime = (mime_entry_t *)mime_entry;
 	while (mime)
@@ -137,7 +137,7 @@ const char *utils_getmime(char *filepath)
 
 char *str_location = "Location";
 
-char *utils_urldecode(char *encoded)
+char *utils_urldecode(const char *encoded)
 {
 	if (encoded == NULL)
 		return NULL;
@@ -305,7 +305,8 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	return ret;
 }
 
-char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext, struct stat *filestat)
+char *utils_buildpath(const char *docroot, const char *path_info, 
+			const char *filename, const char *ext, struct stat *filestat)
 {
 	char *filepath;
 	int length;

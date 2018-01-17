@@ -756,7 +756,7 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	return ESUCCESS;
 }
 
-void httpmessage_addheader(http_message_t *message, const char *key, char *value)
+void httpmessage_addheader(http_message_t *message, const char *key, const char *value)
 {
 	if (message->headers_storage == NULL)
 	{
@@ -796,7 +796,7 @@ HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key,
 	}
 }
 
-char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length)
+char *httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
 {
 	if (message->content == NULL)
 	{

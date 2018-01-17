@@ -348,7 +348,7 @@ void httpmessage_request(http_message_t *message, const char *method, char *reso
  * @param key the name of the header to set
  * @param value the value to set
  */
-void httpmessage_addheader(http_message_t *message, const char *key, char *value);
+void httpmessage_addheader(http_message_t *message, const char *key, const char *value);
 
 /**
  * @brief add the content to the response message
@@ -360,7 +360,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, char *value
  * 
  * @return the storage pointer of the content
  */
-char *httpmessage_addcontent(http_message_t *message, char *type, char *content, int length);
+char *httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length);
 
 /**
  * @brief append data to content of the response message before sending

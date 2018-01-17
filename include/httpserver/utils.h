@@ -42,9 +42,10 @@ typedef enum
 	MIME_IMAGEJPEG,
 	MIME_APPLICATIONOCTETSTREAM,
 } utils_mimetype_enum;
-const char *utils_getmime(char *path);
+const char *utils_getmime(const char *path);
 
-char *utils_urldecode(char *encoded);
+char *utils_urldecode(const char *encoded);
 int utils_searchexp(const char *haystack, const char *needleslist);
-char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext, struct stat *filestat);
+char *utils_buildpath(const char *docroot, const char *path_info,
+					const char *filename, const char *ext, struct stat *filestat);
 #endif
