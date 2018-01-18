@@ -891,8 +891,8 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 
 static void _httpclient_destroy(http_client_t *client)
 {
-	if (client->sock > 0)
-		client->ops.destroy(client);
+	client->ops.destroy(client);
+
 	http_client_modctx_t *modctx = client->modctx;
 	while (modctx)
 	{
@@ -1087,6 +1087,12 @@ static int _httpclient_connect(http_client_t *client)
 	{
 		_httpclient_run(client);
 	} while(!(client->state & CLIENT_STOPPED));
+	/**
+	 * When the connector manages it-self the socket,
+	 * it possible to leave this thread without shutdown the socket.
+	 * Be careful to not add action on the socket after this point
+	 */
+	client->ops.destroy(client);
 	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 	dbg("client %p close", client);
 #ifdef DEBUG
@@ -1184,7 +1190,7 @@ static int _httpclient_request(http_client_t *client)
 	}
 	else if (size == 0)
 	{
-		err("client %p shutdown from outside", client);
+		err("client %p shutdown from outside 0x%X", client, client->state);
 		return EREJECT;
 	}
 	else if (size == EINCOMPLETE)
@@ -1339,7 +1345,7 @@ int httpclient_wait(http_client_t *client, int sending)
 	}
 	else
 	{
-		dbg("httpclient_wait error (%d %s)", errno, strerror(errno));
+		err("httpclient_wait error (%d %s)", errno, strerror(errno));
 		ret = EREJECT;
 	}
 #endif
@@ -1373,6 +1379,11 @@ static int _httpclient_run(http_client_t *client)
 			{
 				client->state = CLIENT_PUSHREQUEST | (client->state & ~CLIENT_MACHINEMASK);
 			}
+			else if (request_ret == EREJECT)
+			{
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				client->state &= ~CLIENT_KEEPALIVE;
+			}
 			else
 				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
 			if (request_ret == ECONTINUE)
@@ -1394,7 +1405,8 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (request_ret == EREJECT)
 			{
-				client->state = CLIENT_COMPLETE | (client->state & ~CLIENT_MACHINEMASK);
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				client->state &= ~CLIENT_KEEPALIVE;
 			}
 			else if (request_ret == ECONTINUE)
 			{
@@ -1699,12 +1711,6 @@ static int _httpclient_run(http_client_t *client)
 		}
 		break;
 	}
-	/**
-	 * When the connector manages it-self the socket,
-	 * it possible to leave this thread without shutdown the socket.
-	 * Be careful to not add action on the socket after this point
-	 */
-	//client->ops.destroy(client);
 	return 0;
 }
 
@@ -1713,15 +1719,86 @@ void httpclient_shutdown(http_client_t *client)
 	client->ops.disconnect(client);
 }
 
-#define TEST1
 /***********************************************************************
  * http_server
  */
+static int _httpserver_setmod(http_server_t *server, http_client_t *client)
+{
+	int ret = ESUCCESS;
+	http_server_mod_t *mod = server->mod;
+	http_client_modctx_t *currentctx = NULL;
+	while (mod)
+	{
+		http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
+
+		if (mod->func)
+		{
+			modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
+			if (modctx->ctx == NULL)
+				ret = EREJECT;
+		}
+		modctx->freectx = mod->freectx;
+		mod = mod->next;
+		if (client->modctx == NULL)
+			client->modctx = modctx;
+		else
+		{
+			currentctx->next = modctx;
+		}
+		currentctx = modctx;
+	}
+	return ret;
+}
+
+static int _httpserver_checkclients(http_server_t *server)
+{
+	int ret = 0;
+	http_client_t *client = server->clients;
+	while (client != NULL)
+	{
+#ifdef VTHREAD
+		if ((!vthread_exist(client->thread)) ||
+			((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD))
+#else
+		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
+#endif
+		{
+			warn("client %p died", client);
+#ifdef VTHREAD
+			vthread_join(client->thread, NULL);
+#endif
+
+			http_client_t *client2 = server->clients;
+			if (client == server->clients)
+			{
+				server->clients = client->next;
+				client2 = server->clients;
+			}
+			else
+			{
+				while (client2->next != client) client2 = client2->next;
+				client2->next = client->next;
+				client2 = client2->next;
+			}
+			_httpclient_destroy(client);
+			client = client2;
+		}
+		else
+		{
+			ret++;
+			client = client->next;
+		}
+	}
+	return ret;
+}
+
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = 0;
 	int maxfd = 0;
 	fd_set rfds, wfds, efds;
+	int nbclients = 0;
+	int maxclients = 0;
 
 	server->run = 1;
 	while(server->run)
@@ -1734,55 +1811,24 @@ static int _httpserver_connect(http_server_t *server)
 		maxfd = server->sock;
 		http_client_t *client = server->clients;
 
+		struct timeval *ptimeout = NULL;
+#ifndef VTHREAD
+		client = server->clients;
 		while (client != NULL)
 		{
-			if (client->state & CLIENT_STOPPED)
+			if (httpclient_socket(client) > 0)
 			{
-				dbg("server try join %p", client);
-#ifdef VTHREAD
-				vthread_join(client->thread, NULL);
-				client->thread = NULL;
-#endif
-				client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-			}
-			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
-			{
-				warn("client %p died", client);
-
-				http_client_t *client2 = server->clients;
-				if (client == server->clients)
-				{
-					server->clients = client->next;
-					client2 = server->clients;
-				}
-				else
-				{
-					while (client2->next != client) client2 = client2->next;
-					client2->next = client->next;
-					client2 = client2->next;
-				}
-				_httpclient_destroy(client);
-				client = client2;
-			}
-			else if (httpclient_socket(client) > 0)
-			{
-#ifndef VTHREAD
 				if ((client->state & CLIENT_MACHINEMASK) != CLIENT_REQUEST)
 				{
 					FD_SET(httpclient_socket(client), &wfds);
 				}
 				else
 					FD_SET(httpclient_socket(client), &rfds);
-#else
-				FD_SET(httpclient_socket(client), &rfds);
-#endif
 				maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
-				client = client->next;
 			}
-			else
-				client = client->next;
+			client = client->next;
 		}
-		struct timeval *ptimeout = NULL;
+
 		struct timeval timeout;
 		if (server->config->keepalive)
 		{
@@ -1790,104 +1836,102 @@ static int _httpserver_connect(http_server_t *server)
 			timeout.tv_usec = 0;
 			ptimeout = &timeout;
 		}
-		ret = select(maxfd +1, &rfds, &wfds, &efds, ptimeout);
-		if (ret > 0)
-		{
-			if (FD_ISSET(server->sock, &rfds))
-			{
-				http_client_t *client = server->ops->createclient(server);
-				if (client == NULL)
-					continue;
-				ret = 0;
-				http_server_mod_t *mod = server->mod;
-				http_client_modctx_t *currentctx = NULL;
-				while (mod)
-				{
-					http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
+#else
+		_httpserver_checkclients(server);
+#endif
 
-					if (mod->func)
-					{
-						modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
-						if (modctx->ctx == NULL)
-							ret = 1;
-					}
-					modctx->freectx = mod->freectx;
-					mod = mod->next;
-					if (client->modctx == NULL)
-						client->modctx = modctx;
-					else
-					{
-						currentctx->next = modctx;
-					}
-					currentctx = modctx;
-				}
-				if (ret == 0)
+		ret = select(maxfd +1, &rfds, &wfds, &efds, ptimeout);
+
+		int count = 0;
+		count = _httpserver_checkclients(server);
+		maxclients = (maxclients > count)? maxclients: count;
+		dbg("nb clients %d / %d", maxclients, nbclients);
+
+		if (ret < 0 && errno == EINTR)
+		{
+			err("select error %s", strerror(errno));
+			errno = 0;
+			continue;
+		}
+		else if (ret == 0)
+		{
+#ifndef VTHREAD
+			/**
+			 * TODO: this code has to be checked and explained
+			 */
+			client = server->clients;
+			while (client != NULL)
+			{
+				client->state &= ~CLIENT_KEEPALIVE;
+				_httpclient_run(client);
+				client = client->next;
+			}
+#endif
+			continue;
+		}
+		else if ((ret > 0) && (FD_ISSET(server->sock, &rfds)))
+		{
+			ret--;
+			http_client_t *client = NULL;
+			do
+			{
+				client = server->ops->createclient(server);
+				if (client == NULL)
 				{
+					if (errno == EINTR)
+					{
+#ifdef VTHREAD
+						_httpserver_checkclients(server);
+#endif
+					}
+					ret = -1;
+				}
+				else if (_httpserver_setmod(server, client) == ESUCCESS)
+				{
+#ifndef BLOCK_SOCKET
 					int flags;
 					flags = fcntl(httpclient_socket(client), F_GETFL, 0);
 					fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
-
+#endif
+#ifdef VTHREAD
+					vthread_attr_t attr;
+					client->state &= ~CLIENT_STOPPED;
+					client->state |= CLIENT_STARTED;
+					vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
+#endif
 					client->next = server->clients;
 					server->clients = client;
 
-					ret = 1;
+					nbclients++;
 				}
 				else
 				{
 					httpclient_shutdown(client);
 					_httpclient_destroy(client);
 				}
-			}
-			else
-			{
-				client = server->clients;
-				while (client != NULL)
-				{
-					http_client_t *next = client->next;
-					if (httpclient_socket(client) < 0)
-					{
-						client->state |= CLIENT_STOPPED;
-					}
-					else if (FD_ISSET(httpclient_socket(client), &rfds) || FD_ISSET(httpclient_socket(client), &wfds))
-					{
-#ifndef VTHREAD
-						client->state |= CLIENT_RUNNING;
-						_httpclient_run(client);
-#else
-						if (!(client->state & (CLIENT_STARTED | CLIENT_RUNNING)))
-						{
-							vthread_attr_t attr;
-							client->state &= ~CLIENT_STOPPED;
-							client->state |= CLIENT_STARTED;
-							vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
-						}
-						else
-						{
-							if (!vthread_exist(client->thread))
-							{
-								client->state |= CLIENT_STOPPED;
-							}
-							vthread_yield(client->thread);
-						}
-#endif
-					}
-					client = next;
-				}
-			}
+				vthread_yield(server->thread);
+			} while (client != NULL);
 		}
 #ifndef VTHREAD
-		/**
-		 * TODO: this code has to be checked and explained
-		 */
-		else if (ret == 0)
+		if (ret > 0)
 		{
 			client = server->clients;
 			while (client != NULL)
 			{
 				http_client_t *next = client->next;
-				client->state &= ~CLIENT_KEEPALIVE;
-				_httpclient_run(client);
+				if (httpclient_socket(client) < 0)
+				{
+					client->state |= CLIENT_STOPPED;
+				}
+				else if (FD_ISSET(httpclient_socket(client), &rfds) || FD_ISSET(httpclient_socket(client), &wfds))
+				{
+					client->state |= CLIENT_RUNNING;
+					_httpclient_run(client);
+					ret--;
+				}
 				client = next;
+				if (ret == 0)
+					break;
 			}
 		}
 #endif
@@ -1910,11 +1954,17 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
 	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
 
+	nice(-4);
+
 	if (server->ops->start(server))
 	{
 		free(server);
 		return NULL;
 	}
+	int flags;
+	flags = fcntl(server->sock, F_GETFL, 0);
+	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);
+
 	return server;
 }
 

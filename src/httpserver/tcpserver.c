@@ -163,7 +163,7 @@ static void tcpclient_disconnect(void *ctl)
 static void tcpclient_destroy(void *ctl)
 {
 	http_client_t *client = (http_client_t *)ctl;
-	if (client->sock > -1)
+	if (client->sock > 0)
 	{
 		/**
 		 * Every body is aware about the closing.
@@ -298,13 +298,18 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 {
 	http_client_t * client = httpclient_create(server, tcpclient_ops, server->config->chunksize);
 
+	if (server->sock < 0)
+		return NULL;
 	// Client connection request recieved
 	// Create new client socket to communicate
 	client->addr_size = sizeof(client->addr);
 	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
 	if (client->sock == -1)
 	{
-		err("tcpserver accept error %s", strerror(errno));
+		if (errno != EINTR)
+		{
+			err("tcpserver accept error %s", strerror(errno));
+		}
 		httpclient_destroy(client);
 		return NULL;
 	}
