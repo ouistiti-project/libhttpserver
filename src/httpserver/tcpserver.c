@@ -38,6 +38,7 @@
 # include <netinet/tcp.h>
 # include <arpa/inet.h>
 # include <netdb.h>
+# include <fcntl.h>
 
 #else
 
@@ -212,6 +213,8 @@ static int _tcpserver_start(http_server_t *server)
 			return -1;
 		}
 
+		if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
+				warn("setsockopt(TCP_NODELAY) failed");
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
@@ -282,6 +285,9 @@ static int _tcpserver_start(http_server_t *server)
 	if (!status)
 	{
 		status = listen(server->sock, server->config->maxclients);
+
+		if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
+				warn("setsockopt(TCP_DEFER_ACCEPT) failed");
 	}
 	if (status)
 	{
@@ -322,6 +328,11 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 
 	if (rc == 0) 
 		warn("new connection %p from %s %d", client, hoststr, server->config->port);
+#ifndef BLOCK_SOCKET
+	int flags;
+	flags = fcntl(httpclient_socket(client), F_GETFL, 0);
+	fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK | O_CLOEXEC);
+#endif
 	return client;
 }
 

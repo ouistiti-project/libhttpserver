@@ -1888,11 +1888,6 @@ static int _httpserver_connect(http_server_t *server)
 				}
 				else if (_httpserver_setmod(server, client) == ESUCCESS)
 				{
-#ifndef BLOCK_SOCKET
-					int flags;
-					flags = fcntl(httpclient_socket(client), F_GETFL, 0);
-					fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
-#endif
 #ifdef VTHREAD
 					vthread_attr_t attr;
 					client->state &= ~CLIENT_STOPPED;
@@ -1909,7 +1904,6 @@ static int _httpserver_connect(http_server_t *server)
 					httpclient_shutdown(client);
 					_httpclient_destroy(client);
 				}
-				vthread_yield(server->thread);
 			} while (client != NULL);
 		}
 #ifndef VTHREAD
