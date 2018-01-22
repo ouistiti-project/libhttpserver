@@ -53,3 +53,5 @@ websocket_CFLAGS-$(DEBUG)+=-g -DDEBUG
 ifeq ($(WIN32),1)
 httpserver_LDFLAGS+=-lws2_32
 endif
+
+httpserver_LDFLAGS-$(DEBUG)+=-lrt

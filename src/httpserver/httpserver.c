@@ -38,6 +38,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 
 #include "valloc.h"
 #include "vthread.h"
@@ -1386,6 +1388,12 @@ static int _httpclient_run(http_client_t *client)
 			_httpclient_pushrequest(client, client->request);
 		}
 	}
+
+#ifdef DEBUG
+	struct timespec spec;
+	clock_gettime(CLOCK_MONOTONIC, &spec);
+	dbg("\tclient %p state %X at %d:%d", client, client->state, spec.tv_sec, spec.tv_nsec);
+#endif
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
