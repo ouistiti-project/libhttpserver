@@ -1988,6 +1988,18 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
 	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
 
+	struct rlimit rlim;
+	getrlimit(RLIMIT_NOFILE, &rlim);
+	/**
+	 * need a file descriptors:
+	 *  - for the server socket
+	 *  - for each client socket
+	 *  - for each file to send
+	 *  - for stdin stdout stderr
+	 */
+	rlim.rlim_cur = (server->config->maxclients) * 2 + 5;
+	setrlimit(RLIMIT_NOFILE, &rlim);
+
 	nice(-4);
 
 	if (server->ops->start(server))
