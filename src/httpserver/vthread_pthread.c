@@ -36,6 +36,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "httpserver/httpserver.h"
 #include "valloc.h"
 #include "vthread.h"
 
@@ -56,7 +57,7 @@ struct vthread_s
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {
-	int ret = 0;
+	int ret = ESUCCESS;
 	vthread_t vthread;
 	vthread = vcalloc(1, sizeof(struct vthread_s));
 	if (attr == NULL)
@@ -66,7 +67,9 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	pthread_attr_init(attr);
 	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE);
 
-	ret = pthread_create(&(vthread->pthread), attr, start_routine, arg);
+	if (pthread_create(&(vthread->pthread), attr, start_routine, arg) < 0)
+		ret = EREJECT;
+
 #if defined(HAVE_PTHREAD_YIELD)
 	pthread_yield();
 #elif defined(HAVE_SCHED_YIELD)

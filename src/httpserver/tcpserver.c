@@ -213,6 +213,8 @@ static int _tcpserver_start(http_server_t *server)
 			return -1;
 		}
 
+		if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
+				warn("setsockopt(TCP_DEFER_ACCEPT) failed");
 		if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(TCP_NODELAY) failed");
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
@@ -284,10 +286,7 @@ static int _tcpserver_start(http_server_t *server)
 
 	if (!status)
 	{
-		status = listen(server->sock, server->config->maxclients);
-
-		if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
-				warn("setsockopt(TCP_DEFER_ACCEPT) failed");
+		status = listen(server->sock, SOMAXCONN);//server->config->maxclients);
 	}
 	if (status)
 	{

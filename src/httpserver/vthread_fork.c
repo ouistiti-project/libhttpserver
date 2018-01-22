@@ -35,6 +35,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 
+#include "httpserver/httpserver.h"
 #include "valloc.h"
 #include "vthread.h"
 
@@ -59,7 +60,7 @@ static void handler(int sig, siginfo_t *si, void *arg)
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {
-	int ret = 0;
+	int ret = ESUCCESS;
 	vthread_t vthread;
 
 	struct sigaction action;
@@ -69,13 +70,37 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	sigaction(SIGCHLD, &action, NULL);
 	vthread = vcalloc(1, sizeof(struct vthread_s));
 
-	if ((vthread->pid = fork()) == 0)
+	if (vthread && (vthread->pid = fork()) == 0)
 	{
+#ifdef TIME_PROFILER
+		struct timeval date1, date2;
+		gettimeofday(&date1, NULL);
+#endif
 		ret = (int)start_routine(arg);
-		exit(ret);
+#ifdef TIME_PROFILER
+		gettimeofday(&date2, NULL);
+		date2.tv_sec -= date1.tv_sec;
+		if (date2.tv_usec > date1.tv_usec)
+			date2.tv_usec -= date1.tv_usec;
+		else
+		{
+			date2.tv_sec += 1;
+			date2.tv_usec = date1.tv_usec - date2.tv_usec;
+		}
+		printf("time %d:%d\n", date2.tv_sec, date2.tv_usec);
+#endif
+ 		exit(ret);
 	}
-	sched_yield();
-	*thread = vthread;
+	else if ( (vthread == NULL) || (vthread->pid == -1))
+	{
+		err("fork error %s", strerror(errno));
+		ret = EREJECT;
+	}
+	else
+	{
+		sched_yield();
+		*thread = vthread;
+	}
 	return ret;
 }
 

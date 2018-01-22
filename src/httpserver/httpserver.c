@@ -1318,10 +1318,11 @@ int httpclient_wait(http_client_t *client, int sending)
 {
 	int ret = client->sock;
 #if defined(VTHREAD) && !defined(BLOCK_SOCKET)
-	struct timeval *ptimeout = NULL;
-	struct timeval timeout;
 	fd_set fds;
 	fd_set *rfds = NULL, *wfds = NULL;
+
+	struct timeval *ptimeout = NULL;
+	struct timeval timeout;
 	if (client->server->config->keepalive)
 	{
 		if (sending)
@@ -1336,6 +1337,7 @@ int httpclient_wait(http_client_t *client, int sending)
 		}
 		ptimeout = &timeout;
 	}
+
 	FD_ZERO(&fds);
 	FD_SET(client->sock, &fds);
 	if (sending)
@@ -1807,6 +1809,9 @@ static int _httpserver_checkclients(http_server_t *server)
 		{
 			ret++;
 			client = client->next;
+#ifdef VTHREAD
+			vthread_yield(server->thread);
+#endif
 		}
 	}
 	return ret;
@@ -1814,7 +1819,7 @@ static int _httpserver_checkclients(http_server_t *server)
 
 static int _httpserver_connect(http_server_t *server)
 {
-	int ret = 0;
+	int ret = ESUCCESS;
 	int maxfd = 0;
 	fd_set rfds, wfds, efds;
 	int nbclients = 0;
@@ -1860,20 +1865,15 @@ static int _httpserver_connect(http_server_t *server)
 		_httpserver_checkclients(server);
 #endif
 
-		ret = select(maxfd +1, &rfds, &wfds, &efds, ptimeout);
+		int nbselect;
+		nbselect = select(maxfd +1, &rfds, &wfds, &efds, ptimeout);
 
 		int count = 0;
 		count = _httpserver_checkclients(server);
 		maxclients = (maxclients > count)? maxclients: count;
-		dbg("nb clients %d / %d", maxclients, nbclients);
+		dbg("nb clients %d / %d / %d", count, maxclients, nbclients);
 
-		if (ret < 0 && errno == EINTR)
-		{
-			err("select error %s", strerror(errno));
-			errno = 0;
-			continue;
-		}
-		else if (ret == 0)
+		if (nbselect == 0 || (count + 1) > server->config->maxclients)
 		{
 #ifndef VTHREAD
 			/**
@@ -1887,11 +1887,20 @@ static int _httpserver_connect(http_server_t *server)
 				client = client->next;
 			}
 #endif
+		vthread_yield(server->thread);
 			continue;
 		}
-		else if ((ret > 0) && (FD_ISSET(server->sock, &rfds)))
+		else if (nbselect < 0)
 		{
-			ret--;
+			if (errno != EINTR)
+				err("select error %s", strerror(errno));
+			else if (errno != EAGAIN)
+				errno = 0;
+			continue;
+		}
+		else if ((nbselect > 0) && (FD_ISSET(server->sock, &rfds)))
+		{
+			nbselect--;
 			http_client_t *client = NULL;
 			do
 			{
@@ -1905,29 +1914,38 @@ static int _httpserver_connect(http_server_t *server)
 #endif
 					}
 					ret = -1;
+					continue;
 				}
-				else if (_httpserver_setmod(server, client) == ESUCCESS)
+				else
 				{
+					ret = _httpserver_setmod(server, client);
 #ifdef VTHREAD
-					vthread_attr_t attr;
-					client->state &= ~CLIENT_STOPPED;
-					client->state |= CLIENT_STARTED;
-					vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
+					if (ret == ESUCCESS)
+					{
+						vthread_attr_t attr;
+						client->state &= ~CLIENT_STOPPED;
+						client->state |= CLIENT_STARTED;
+						ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
+					}
 #endif
+				}
+				if (ret == ESUCCESS)
+				{
 					client->next = server->clients;
 					server->clients = client;
 
 					nbclients++;
+					count++;
 				}
 				else
 				{
 					httpclient_shutdown(client);
 					_httpclient_destroy(client);
 				}
-			} while (client != NULL);
+			} while (client != NULL && count < server->config->maxclients);
 		}
 #ifndef VTHREAD
-		if (ret > 0)
+		if (nbselect > 0)
 		{
 			client = server->clients;
 			while (client != NULL)
@@ -1941,10 +1959,10 @@ static int _httpserver_connect(http_server_t *server)
 				{
 					client->state |= CLIENT_RUNNING;
 					_httpclient_run(client);
-					ret--;
+					nbselect--;
 				}
 				client = next;
-				if (ret == 0)
+				if (nbselect == 0)
 					break;
 			}
 		}
