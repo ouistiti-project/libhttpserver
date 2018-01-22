@@ -64,16 +64,9 @@ extern "C" {
 
 #endif
 
+#include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-# define dbg(...)
-#endif
 
 #ifdef HTTPCLIENT_FEATURES
 static int tcpclient_connect(void *ctl, char *addr, int port)

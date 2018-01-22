@@ -91,19 +91,12 @@ typedef struct SHA1_ctx_s{ char *input; int inputlen;} SHA1_ctx;
 	}while(0)		 
 #endif
 
+#include "httpserver/log.h"
 #include "httpserver/httpserver.h"
 #include "httpserver/uri.h"
 #include "httpserver/mod_websocket.h"
 #include "httpserver/utils.h"
 #include "httpserver/websocket.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-#define dbg(...)
-#endif
 
 typedef struct _mod_websocket_s _mod_websocket_t;
 typedef struct _mod_websocket_ctx_s _mod_websocket_ctx_t;

@@ -44,20 +44,13 @@
 #include "valloc.h"
 #include "vthread.h"
 #include "dbentry.h"
+#include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
 
 extern httpserver_ops_t *httpserver_ops;
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-# define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-# define dbg(...)
-#endif
 
 struct http_connector_list_s
 {

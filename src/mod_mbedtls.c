@@ -62,16 +62,10 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 #else
 #error MBEDTLS not found
 #endif
+
+#include "log.h"
 #include "httpserver.h"
 #include "mod_mbedtls.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-#define dbg(...)
-#endif
 
 #define HANDSHAKE 0x01
 #define RECV_COMPLETE 0x02

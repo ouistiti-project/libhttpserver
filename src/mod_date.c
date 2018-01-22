@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "log.h"
 #include "httpserver.h"
 #include "mod_date.h"
 

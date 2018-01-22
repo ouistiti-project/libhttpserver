@@ -36,17 +36,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#include "httpserver/httpserver.h"
+#include "log.h"
+#include "httpserver.h"
 #include "valloc.h"
 #include "vthread.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-# define dbg(...)
-#endif
 
 struct vthread_s
 {

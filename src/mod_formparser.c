@@ -34,6 +34,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "log.h"
 #include "httpserver.h"
 #include "httpserver/dbentry.h"
 #include "mod_form_urlencoded.h"
