@@ -760,6 +760,17 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	return ESUCCESS;
 }
 
+HTTPMESSAGE_DECL int _httpmessage_runconnector(http_message_t *request, http_message_t *response)
+{
+	int ret = EREJECT;
+	http_connector_list_t *connector = request->connector;
+	if (connector && connector->func)
+	{
+		ret = connector->func(connector->arg, request, response);
+	}
+	return ret;
+}
+
 void httpmessage_addheader(http_message_t *message, const char *key, const char *value)
 {
 	if (message->headers_storage == NULL)
@@ -873,6 +884,7 @@ int httpmessage_isprotected(http_message_t *message)
 /***********************************************************************
  * http_client
  */
+static void _httpclient_destroy(http_client_t *client);
 
 http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize)
 {
@@ -893,6 +905,11 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 	memcpy(&client->ops, fops, sizeof(client->ops));
 	client->ctx = client;
 	client->sockdata = _buffer_create(1, chunksize);
+	if (client->sockdata == NULL)
+	{
+		_httpclient_destroy(client);
+		client = NULL;
+	}
 
 	return client;
 }
@@ -1124,16 +1141,6 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	char *vhost = NULL;
 	http_connector_list_t *iterator = request->connector;
 
-	if (iterator != NULL)
-	{
-		ret = iterator->func(iterator->arg, request, response);
-		if (ret == ESUCCESS)
-		{
-			client->state |= CLIENT_RESPONSEREADY;
-		}
-		return ret;
-	}
-
 	iterator = client->callbacks;
 	while (iterator != NULL)
 	{
@@ -1163,14 +1170,6 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	return ret;
 }
 
-static int _httpclient_runconnector(http_client_t *client, http_message_t *request, http_message_t *response)
-{
-	http_connector_list_t *connector = request->connector;
-	if (connector && connector->func)
-		return connector->func(connector->arg, request, response);
-	return EREJECT;
-}
-
 static int _httpclient_request(http_client_t *client)
 {
 	/**
@@ -1182,8 +1181,6 @@ static int _httpclient_request(http_client_t *client)
 	 */
 	int ret = ECONTINUE;
 	int size = 0;
-	if (client->request == NULL)
-		client->request = _httpmessage_create(client, NULL, client->server->config->chunksize);
 
 	/**
 	 * here, it is the call to the recvreq callback from the
@@ -1252,7 +1249,14 @@ static int _httpclient_request(http_client_t *client)
 	{
 		if (client->request->response == NULL)
 			client->request->response = _httpmessage_create(client, client->request, client->server->config->chunksize);
-		ret = _httpclient_checkconnector(client, client->request, client->request->response);
+		if (client->request->connector == NULL)
+			ret = _httpclient_checkconnector(client, client->request, client->request->response);
+		else
+			ret = _httpmessage_runconnector(client->request, client->request->response);
+		if (ret == ESUCCESS)
+		{
+			client->state |= CLIENT_RESPONSEREADY;
+		}
 		if (ret == EREJECT)
 		{
 #ifdef DEBUG
@@ -1377,6 +1381,8 @@ static int _httpclient_run(http_client_t *client)
 		(client->server->config->version >= (HTTP11 | HTTP_PIPELINE))) || 
 		((client->state & CLIENT_MACHINEMASK) < CLIENT_PUSHREQUEST))
 	{
+		if (client->request == NULL)
+			client->request = _httpmessage_create(client, NULL, client->server->config->chunksize);
 		request_ret = _httpclient_request(client);
 		if (request_ret == ESUCCESS)
 		{
@@ -1476,7 +1482,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_PARSER1:
 		{
-			int ret = _httpclient_runconnector(client, request, request->response);
+			int ret = _httpmessage_runconnector(request, request->response);
 			if (ret == EREJECT)
 			{
 				client->state = CLIENT_PARSERERROR | (client->state & ~CLIENT_MACHINEMASK);
@@ -1496,7 +1502,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_PARSER2:
 		{
-			int ret = _httpclient_runconnector(client, request, request->response);
+			int ret = _httpmessage_runconnector(request, request->response);
 			if (ret == EREJECT)
 			{
 				/**
@@ -1615,7 +1621,7 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (client->state & CLIENT_LOCKED)
 			{
-				int ret = _httpclient_runconnector(client, request, request->response);
+				int ret = _httpmessage_runconnector(request, request->response);
 				if (ret == ECONTINUE)
 					size = 1;
 				else if (ret == EREJECT)
