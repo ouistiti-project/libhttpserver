@@ -52,7 +52,7 @@ extern httpserver_ops_t *httpserver_ops;
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+# define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #else
 # define dbg(...)
 #endif
@@ -114,12 +114,19 @@ static int ChunkSize = 0;
 static buffer_t * _buffer_create(int nbchunks, int chunksize)
 {
 	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
+	if (buffer == NULL)
+		return NULL;
 	/**
 	 * nbchunks is unused here, because is it possible to realloc.
 	 * Embeded version may use the nbchunk with special vcalloc.
 	 * The idea is to create a pool of chunks into the stack.
 	 */
 	buffer->data = vcalloc(1, chunksize);
+	if (buffer->data == NULL)
+	{
+		free(buffer);
+		return NULL;
+	}
 	/**
 	 * the chunksize has to be constant during the life of the application.
 	 * Two ways are available:
@@ -222,7 +229,9 @@ void httpmessage_destroy(http_message_t *message)
 
 void httpmessage_request(http_message_t *message, const char *method, char *resource)
 {
-	message->method = calloc(1, sizeof(*message->method));
+	message->method = vcalloc(1, sizeof(*message->method));
+	if (message->method == NULL)
+		return;
 	message->method->key = method;
 	message->version = HTTP11;
 	if (resource)
@@ -771,6 +780,8 @@ HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key,
 {
 	dbentry_t *headerinfo;
 	headerinfo = vcalloc(1, sizeof(dbentry_t));
+	if (headerinfo == NULL)
+		return;
 	headerinfo->key = key;
 	headerinfo->value = value;
 	headerinfo->next = message->headers;
@@ -871,6 +882,8 @@ int httpmessage_isprotected(http_message_t *message)
 http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize)
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
+	if (client == NULL)
+		return NULL;
 	client->server = server;
 
 	if (server)
@@ -940,6 +953,8 @@ void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_
 	http_connector_list_t *callback;
 
 	callback = vcalloc(1, sizeof(*callback));
+	if (callback == NULL)
+		return;
 	if (vhost)
 	{
 		int length = strlen(vhost);
@@ -1730,6 +1745,11 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 	while (mod)
 	{
 		http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
+		if (modctx == NULL)
+		{
+			ret = EREJECT;
+			break;
+		}
 
 		if (mod->func)
 		{
@@ -1939,6 +1959,8 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	http_server_t *server;
 
 	server = vcalloc(1, sizeof(*server));
+	if (server == NULL)
+		return NULL;
 	if (config)
 		server->config = config;
 	else
@@ -1966,6 +1988,8 @@ static void _httpserver_addmethod(http_server_t *server, const char *key, _http_
 {
 	http_message_method_t *method;
 	method = vcalloc(1, sizeof(*method));
+	if (method == NULL)
+		return;
 	method->key = key;
 	method->id = id;
 	method->next = server->methods;
@@ -1988,6 +2012,8 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 	if (method == NULL)
 	{
 		method = vcalloc(1, sizeof(*method));
+		if (method == NULL)
+			return;
 		method->key = key;
 		method->id = id + 1;
 		method->next = server->methods;
@@ -2000,6 +2026,8 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg, const char *name)
 {
 	http_server_mod_t *mod = vcalloc(1, sizeof(*mod));
+	if (mod == NULL)
+		return;
 	mod->func = modf;
 	mod->freectx = unmodf;
 	mod->arg = arg;
@@ -2013,6 +2041,8 @@ void httpserver_addconnector(http_server_t *server, char *vhost, http_connector_
 	http_connector_list_t *callback;
 	
 	callback = vcalloc(1, sizeof(*callback));
+	if (callback == NULL)
+		return;
 	if (vhost)
 	{
 		int length = strlen(vhost);
@@ -2342,6 +2372,8 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 		if (!sessioninfo)
 		{
 			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
+			if (sessioninfo)
+				return  NULL;
 			if (!message->client->session_storage)
 			{
 				message->client->session_storage = _buffer_create(MAXCHUNKS_SESSION, message->chunksize);
