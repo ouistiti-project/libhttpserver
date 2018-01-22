@@ -1775,12 +1775,20 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 	return ret;
 }
 
-static int _httpserver_checkclients(http_server_t *server)
+static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set *pwfds)
 {
 	int ret = 0;
 	http_client_t *client = server->clients;
 	while (client != NULL)
 	{
+#ifndef VTHREAD
+		if (FD_ISSET(httpclient_socket(client), prfds) || FD_ISSET(httpclient_socket(client), pwfds))
+		{
+			client->state |= CLIENT_RUNNING;
+			if (_httpclient_run(client) == ESUCCESS)
+				client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
+		}
+#endif
 #ifdef VTHREAD
 		if ((!vthread_exist(client->thread)) ||
 			((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD))
@@ -1854,6 +1862,8 @@ static int _httpserver_connect(http_server_t *server)
 					FD_SET(httpclient_socket(client), &rfds);
 				maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
 			}
+			else
+				client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 			client = client->next;
 		}
 
@@ -1865,31 +1875,19 @@ static int _httpserver_connect(http_server_t *server)
 			ptimeout = &timeout;
 		}
 #else
-		//_httpserver_checkclients(server);
+		//_httpserver_checkclients(server, &rfds, &wfds);
 #endif
 
 		int nbselect;
 		nbselect = select(maxfd +1, &rfds, &wfds, &efds, ptimeout);
 
 		int count = 0;
-		count = _httpserver_checkclients(server);
+		count = _httpserver_checkclients(server, &rfds, &wfds);
 		maxclients = (maxclients > count)? maxclients: count;
 		dbg("nb clients %d / %d / %d", count, maxclients, nbclients);
 
 		if (nbselect == 0 || (count + 1) > server->config->maxclients)
 		{
-#ifndef VTHREAD
-			/**
-			 * TODO: this code has to be checked and explained
-			 */
-			client = server->clients;
-			while (client != NULL)
-			{
-				client->state &= ~CLIENT_KEEPALIVE;
-				_httpclient_run(client);
-				client = client->next;
-			}
-#endif
 			//vthread_yield(server->thread);
 			continue;
 		}
@@ -1947,29 +1945,6 @@ static int _httpserver_connect(http_server_t *server)
 				}
 			} while (client != NULL && count < server->config->maxclients);
 		}
-#ifndef VTHREAD
-		if (nbselect > 0)
-		{
-			client = server->clients;
-			while (client != NULL)
-			{
-				http_client_t *next = client->next;
-				if (httpclient_socket(client) < 0)
-				{
-					client->state |= CLIENT_STOPPED;
-				}
-				else if (FD_ISSET(httpclient_socket(client), &rfds) || FD_ISSET(httpclient_socket(client), &wfds))
-				{
-					client->state |= CLIENT_RUNNING;
-					_httpclient_run(client);
-					nbselect--;
-				}
-				client = next;
-				if (nbselect == 0)
-					break;
-			}
-		}
-#endif
 	}
 	server->ops->close(server);
 	return ret;
