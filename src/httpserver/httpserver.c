@@ -1405,7 +1405,7 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_REQUEST | (client->state & ~CLIENT_MACHINEMASK);
 			if (request_ret == ECONTINUE)
 			{
-				if (httpclient_wait(client, 0) < 0)
+				if (httpclient_wait(client, 0) == EREJECT)
 				{
 					/* timeout */
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1427,7 +1427,7 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (request_ret == ECONTINUE)
 			{
-				if (httpclient_wait(client, 0) < 0)
+				if (httpclient_wait(client, 0) == EREJECT)
 				{
 					/* timeout */
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1862,7 +1862,7 @@ static int _httpserver_connect(http_server_t *server)
 			ptimeout = &timeout;
 		}
 #else
-		_httpserver_checkclients(server);
+		//_httpserver_checkclients(server);
 #endif
 
 		int nbselect;
@@ -1887,7 +1887,7 @@ static int _httpserver_connect(http_server_t *server)
 				client = client->next;
 			}
 #endif
-		vthread_yield(server->thread);
+			//vthread_yield(server->thread);
 			continue;
 		}
 		else if (nbselect < 0)
