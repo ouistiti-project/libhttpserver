@@ -1088,15 +1088,16 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 }
 #endif
 
+#ifdef VTHREAD
 static int _httpclient_connect(http_client_t *client)
 {
-
+	int ret;
 	client->state &= ~CLIENT_STARTED;
 	client->state |= CLIENT_RUNNING;
 	do
 	{
-		_httpclient_run(client);
-	} while(!(client->state & CLIENT_STOPPED));
+		ret = _httpclient_run(client);
+	} while(ret == ECONTINUE);
 	/**
 	 * When the connector manages it-self the socket,
 	 * it possible to leave this thread without shutdown the socket.
@@ -1110,6 +1111,7 @@ static int _httpclient_connect(http_client_t *client)
 #endif
 	return 0;
 }
+#endif
 
 int httpclient_socket(http_client_t *client)
 {
@@ -1729,7 +1731,7 @@ static int _httpclient_run(http_client_t *client)
 		}
 		break;
 	}
-	return 0;
+	return (client->state & CLIENT_STOPPED)?ESUCCESS:ECONTINUE;
 }
 
 void httpclient_shutdown(http_client_t *client)
@@ -1911,7 +1913,7 @@ static int _httpserver_connect(http_server_t *server)
 					if (errno == EINTR)
 					{
 #ifdef VTHREAD
-						_httpserver_checkclients(server);
+						_httpserver_checkclients(server, &rfds, &wfds);
 #endif
 					}
 					ret = -1;
