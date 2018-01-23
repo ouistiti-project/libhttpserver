@@ -25,6 +25,11 @@ endif
 ifneq ($(MAXCHUNKS_URI),)
 httpserver_CFLAGS+=-DMAXCHUNKS_URI=$(MAXCHUNKS_URI)
 endif
+ifneq ($(MAXWEBSOCKETS),)
+httpserver_CFLAGS+=-DMAXWEBSOCKETS=$(MAXWEBSOCKETS)
+else
+httpserver_CFLAGS+=-DMAXWEBSOCKETS=10
+endif
 
 ifeq ($(VTHREAD_TYPE),)
 VTHREAD_TYPE:=fork

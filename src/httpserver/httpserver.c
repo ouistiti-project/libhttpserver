@@ -1980,8 +1980,9 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	 *  - for each client socket
 	 *  - for each file to send
 	 *  - for stdin stdout stderr
+	 *  - for websocket and other stream
 	 */
-	rlim.rlim_cur = (server->config->maxclients) * 2 + 5;
+	rlim.rlim_cur = (server->config->maxclients) * 2 + 5 + MAXWEBSOCKETS;
 	setrlimit(RLIMIT_NOFILE, &rlim);
 
 	nice(-4);
