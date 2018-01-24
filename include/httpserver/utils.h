@@ -43,6 +43,7 @@ typedef enum
 	MIME_APPLICATIONOCTETSTREAM,
 } utils_mimetype_enum;
 const char *utils_getmime(const char *path);
+void utils_addmime(const char *ext, const char*mime);
 
 char *utils_urldecode(const char *encoded);
 int utils_searchexp(const char *haystack, const char *needleslist);
