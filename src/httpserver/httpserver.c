@@ -1956,6 +1956,7 @@ static int _httpserver_connect(http_server_t *server)
 	return ret;
 }
 
+static int _maxclients = 1024;
 http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
@@ -1972,19 +1973,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
 	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
 
-	struct rlimit rlim;
-	getrlimit(RLIMIT_NOFILE, &rlim);
-	/**
-	 * need a file descriptors:
-	 *  - for the server socket
-	 *  - for each client socket
-	 *  - for each file to send
-	 *  - for stdin stdout stderr
-	 *  - for websocket and other stream
-	 */
-	rlim.rlim_cur = (server->config->maxclients) * 2 + 5 + MAXWEBSOCKETS;
-	setrlimit(RLIMIT_NOFILE, &rlim);
-
+	_maxclients += server->config->maxclients;
 	nice(-4);
 
 	if (server->ops->start(server))
@@ -2072,11 +2061,24 @@ void httpserver_addconnector(http_server_t *server, char *vhost, http_connector_
 
 void httpserver_connect(http_server_t *server)
 {
-	vthread_attr_t attr;
+	struct rlimit rlim;
+	getrlimit(RLIMIT_NOFILE, &rlim);
+	/**
+	 * need a file descriptors:
+	 *  - for the server socket
+	 *  - for each client socket
+	 *  - for each file to send
+	 *  - for stdin stdout stderr
+	 *  - for websocket and other stream
+	 */
+	rlim.rlim_cur = _maxclients * 2 + 5 + MAXWEBSOCKETS;
+	setrlimit(RLIMIT_NOFILE, &rlim);
 
 #ifndef VTHREAD
 	_httpserver_connect(server);
 #else
+	vthread_attr_t attr;
+
 	vthread_create(&server->thread, &attr, (vthread_routine)_httpserver_connect, (void *)server, sizeof(*server));
 #endif
 }
