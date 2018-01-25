@@ -140,7 +140,7 @@ static int tcpclient_status(void *ctl)
 		return EREJECT;
 	int nbbytes = 0;
 	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
-	warn("status %p %d %d", client, ret, nbbytes);
+	dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
 	if (ret < 0)
 		return EREJECT;
 	if (nbbytes == 0)

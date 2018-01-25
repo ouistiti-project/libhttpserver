@@ -1560,12 +1560,12 @@ int httpclient_wait(http_client_t *client, int sending)
 			ret = EREJECT;
 	}
 #else
-	if (client->ops.status(client) != EREJECT)
+	ret = client->ops.status(client);
+	if (ret == ESUCCESS)
 		ret = client->sock;
-	else
+	else if (ret == EREJECT)
 	{
 		err("httpclient_wait %p socket closed ", client);
-		ret = EREJECT;
 	}
 #endif
 	return ret;
@@ -1615,7 +1615,6 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (response_ret == EREJECT)
 			{
-				warn("exit response");
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				return EINCOMPLETE;
 			}
@@ -1628,9 +1627,7 @@ static int _httpclient_run(http_client_t *client)
 	{
 		case CLIENT_NEW:
 		{
-			if (request_ret == EREJECT ||
-				(request_ret == EINCOMPLETE &&
-					httpclient_wait(client, 0) == EREJECT))
+			if ((request_ret = httpclient_wait(client, 0)) == EREJECT)
 			{
 				/* timeout */
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1644,12 +1641,9 @@ static int _httpclient_run(http_client_t *client)
 		{
 			if (client->request_queue)
 				client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
-			else if (request_ret == EREJECT ||
-					(request_ret == EINCOMPLETE &&
-						httpclient_wait(client, 0) == EREJECT))
+			else if ((request_ret = httpclient_wait(client, 0)) == EREJECT)
 			{
 				/* timeout */
-				warn("exit reading");
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				return EINCOMPLETE;
 			}
@@ -1657,6 +1651,7 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_SENDING:
 		{
+			request_ret = client->ops.status(client);
 			if (client->request_queue == NULL)
 			{
 				if (client->server->config->keepalive &&
@@ -1665,7 +1660,6 @@ static int _httpclient_run(http_client_t *client)
 					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 				else
 				{
-				warn("exit sending");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					return EINCOMPLETE;
 				}
@@ -1885,7 +1879,9 @@ static int _httpserver_connect(http_server_t *server)
 
 		if (nbselect == 0 || (count + 1) > server->config->maxclients)
 		{
+#ifdef VTHREAD
 			//vthread_yield(server->thread);
+#endif
 			continue;
 		}
 		else if (nbselect < 0)
