@@ -133,6 +133,21 @@ static int tcpclient_send(void *ctl, char *data, int length)
 	return ret;
 }
 
+static int tcpclient_status(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+	if (client->sock < 0)
+		return EREJECT;
+	int nbbytes = 0;
+	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
+	warn("status %p %d %d", client, ret, nbbytes);
+	if (ret < 0)
+		return EREJECT;
+	if (nbbytes == 0)
+		return EINCOMPLETE;
+	return ESUCCESS;
+}
+
 static void tcpclient_flush(void *ctl)
 {
 	http_client_t *client = (http_client_t *)ctl;
@@ -180,6 +195,7 @@ httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,
 	.sendresp = tcpclient_send,
+	.status = tcpclient_status,
 	.flush = tcpclient_flush,
 	.disconnect = tcpclient_disconnect,
 	.destroy = tcpclient_destroy,

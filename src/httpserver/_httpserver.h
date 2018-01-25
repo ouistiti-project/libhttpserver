@@ -46,6 +46,7 @@ typedef struct http_client_modctx_s http_client_modctx_t;
 typedef struct http_message_method_s http_message_method_t;
 
 typedef int (*http_connect_t)(void *ctl, char *addr, int port);
+typedef int (*http_status_t)(void *ctl);
 typedef void (*http_flush_t)(void *ctl);
 typedef void (*http_disconnect_t)(void *ctl);
 typedef void (*http_destroy_t)(void *ctl);
@@ -56,6 +57,7 @@ struct httpclient_ops_s
 	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */
+	http_status_t status; /* callback to get the socket status*/
 	http_flush_t flush; /* callback to flush the socket */
 	http_disconnect_t disconnect; /* callback to close the socket */
 	http_destroy_t destroy; /* callback to close the socket */
