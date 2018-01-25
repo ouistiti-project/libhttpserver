@@ -1306,7 +1306,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 	if (request->response == NULL)
 	{
 		request->response = _httpmessage_create(client, request, client->server->config->chunksize);
-		request->response->state = GENERATE_INIT | PARSE_CONTINUE | (request->response->state & ~GENERATE_MASK);
+		request->response->state = GENERATE_INIT;
 #ifdef RESULT_500
 		httpmessage_result(request->response, RESULT_500);
 #else
@@ -1393,13 +1393,18 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				break;
 			}
 			if (request->method->id != MESSAGE_TYPE_HEAD)
-				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+				response->state = GENERATE_CONTENT | PARSE_CONTINUE | (response->state & ~GENERATE_MASK);
 			else
 				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 		}
 		break;
 		case GENERATE_CONTENT:
 		{
+			if (!(response->state & PARSE_CONTINUE))
+			{
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+				break;
+			}
 			int size;
 			buffer_t *buffer = response->content;
 			if (buffer == NULL)
@@ -1423,11 +1428,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				buffer->offset += size;
 			} while (buffer->length > 0);
 			_buffer_reset(buffer);
-
-			if (!(response->state & PARSE_CONTINUE))
-			{
-				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
-			}
 		}
 		break;
 		case GENERATE_ERROR:
@@ -1482,7 +1482,7 @@ static void _httpclient_pushrequest(http_client_t *client, http_message_t *reque
 {
 	http_message_t *iterator = client->request_queue;
 	if (request->response)
-		request->response->state = GENERATE_INIT | PARSE_CONTINUE | (request->response->state & ~GENERATE_MASK);
+		request->response->state = GENERATE_INIT | (request->response->state & ~GENERATE_MASK);
 	if (iterator == NULL)
 	{
 		client->request_queue = request;
@@ -1534,7 +1534,7 @@ int httpclient_wait(http_client_t *client, int sending)
 	{
 		if (FD_ISSET(client->sock, &fds))
 		{
-			if (client->ops.status(client) == ESUCCESS)
+			if (sending || client->ops.status(client) == ESUCCESS)
 				ret = client->sock;
 			else
 			{
@@ -1560,7 +1560,10 @@ int httpclient_wait(http_client_t *client, int sending)
 			ret = EREJECT;
 	}
 #else
-	ret = client->ops.status(client);
+	if (sending)
+		ret = ESUCCESS;
+	else
+		ret = client->ops.status(client);
 	if (ret == ESUCCESS)
 		ret = client->sock;
 	else if (ret == EREJECT)
