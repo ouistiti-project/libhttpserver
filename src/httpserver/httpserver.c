@@ -1229,14 +1229,6 @@ static int _httpclient_request(http_client_t *client)
 	ret = _httpmessage_parserequest(client->request, client->sockdata);
 	if (ret == EREJECT)
 	{
-		if (client->request->response == NULL)
-		{
-			/**
-			 * parsing error before response creation 
-			 * response's result will be the result set into the request.
-			 **/
-			client->request->response = _httpmessage_create(client, client->request, client->server->config->chunksize);
-		}
 		/**
 		 * the parsing found an error in the request
 		 * the treatment is completed and is successed
@@ -1308,9 +1300,189 @@ static int _httpclient_request(http_client_t *client)
 	return ret;
 }
 
-static int _httpclient_pushrequest(http_client_t *client, http_message_t *request)
+static int _httpclient_response(http_client_t *client, http_message_t *request)
+{
+	int ret = ECONTINUE;
+	if (request->response == NULL)
+	{
+		request->response = _httpmessage_create(client, request, client->server->config->chunksize);
+		request->response->state = GENERATE_INIT | PARSE_CONTINUE | (request->response->state & ~GENERATE_MASK);
+#ifdef RESULT_500
+		httpmessage_result(request->response, RESULT_500);
+#else
+		httpmessage_result(request->response, RESULT_400);
+#endif
+		request->response->state = GENERATE_ERROR;
+	}
+	http_message_t *response = request->response;
+
+	switch (response->state & GENERATE_MASK)
+	{
+		case GENERATE_INIT:
+		{
+			if (response->version == HTTP09)
+				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+			else
+			{
+				if (response->header == NULL)
+					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
+				buffer_t *buffer = response->header;
+				response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
+				_httpmessage_buildresponse(response, client->server->config->version, buffer);
+			}
+		}
+		break;
+		case GENERATE_RESULT:
+		{
+			int size;
+			/**
+			 * here, it is the call to the sendresp callback from the
+			 * server configuration.
+			 * see http_server_config_t and httpserver_create
+			 */
+			buffer_t *buffer = response->header;
+			size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+			if (size < 0)
+			{
+				err("send error %s", strerror(errno));
+				response->state &= ~PARSE_CONTINUE;
+				ret = size;
+				break;
+			}
+			buffer->offset += size;
+			buffer->length -= size;
+
+			if (buffer->length <= 0)
+			{
+				response->state = GENERATE_HEADER | (response->state & ~GENERATE_MASK);
+				_buffer_reset(buffer);
+				_httpmessage_buildheader(response, buffer);
+			}
+		}
+		break;
+		case GENERATE_HEADER:
+		{
+			int size;
+			buffer_t *buffer = response->header;
+			size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+			if (size < 0)
+			{
+				err("send error %s", strerror(errno));
+				response->state &= ~PARSE_CONTINUE;
+				ret = size;
+				break;
+			}
+			buffer->offset += size;
+			buffer->length -= size;
+
+			if (buffer->length <= 0)
+			{
+				response->state = GENERATE_SEPARATOR | (response->state & ~GENERATE_MASK);
+			}
+		}
+		break;
+		case GENERATE_SEPARATOR:
+		{
+			int size;
+			size = client->ops.sendresp(client->ctx, "\r\n", 2);
+			if (size < 0)
+			{
+				err("send error %s", strerror(errno));
+				response->state &= ~PARSE_CONTINUE;
+				ret = size;
+				break;
+			}
+			if (request->method->id != MESSAGE_TYPE_HEAD)
+				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+			else
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+		}
+		break;
+		case GENERATE_CONTENT:
+		{
+			int size;
+			buffer_t *buffer = response->content;
+			if (buffer == NULL)
+			{
+				if (response->state & PARSE_CONTINUE)
+					break;
+				else
+					return ESUCCESS;
+			}
+			buffer->offset = buffer->data;
+			do {
+				size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+				if (size < 0)
+				{
+					err("send error %s", strerror(errno));
+					response->state &= ~PARSE_CONTINUE;
+					ret = size;
+					break;
+				}
+				buffer->length -= size;
+				buffer->offset += size;
+			} while (buffer->length > 0);
+			_buffer_reset(buffer);
+
+			if (!(response->state & PARSE_CONTINUE))
+			{
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+			}
+		}
+		break;
+		case GENERATE_ERROR:
+		{
+			if (response->content == NULL)
+			{
+				const char *value = _httpmessage_status(response);
+				httpmessage_addcontent(response, "text/plain", (char *)value, strlen(value));
+			}
+			if (response->version == HTTP09)
+				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+			else
+			{
+				if (response->header == NULL)
+					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
+				buffer_t *buffer = response->header;
+				response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
+				_httpmessage_buildresponse(response, client->server->config->version, buffer);
+			}
+			response->state &= ~PARSE_CONTINUE;
+		}
+		break;
+		case GENERATE_END:
+		{
+			response->state &= ~PARSE_CONTINUE;
+			ret = ESUCCESS;
+		}
+		break;
+	}
+
+	if (response->state & PARSE_CONTINUE)
+	{
+		ret = _httpmessage_runconnector(request, request->response);
+		if (ret == EREJECT)
+		{
+			response->state = GENERATE_ERROR;
+			/** delete func to stop request after the error response **/
+			request->connector = NULL;
+			ret = ECONTINUE;
+		}
+		else if (ret == ESUCCESS)
+		{
+			response->state &= ~PARSE_CONTINUE;
+			ret = ECONTINUE;
+		}
+	}
+
+	return ret;
+}
+
+static void _httpclient_pushrequest(http_client_t *client, http_message_t *request)
 {
 	http_message_t *iterator = client->request_queue;
+	if (request->response)
+		request->response->state = GENERATE_INIT | PARSE_CONTINUE | (request->response->state & ~GENERATE_MASK);
 	if (iterator == NULL)
 	{
 		client->request_queue = request;
@@ -1320,7 +1492,6 @@ static int _httpclient_pushrequest(http_client_t *client, http_message_t *reques
 		while (iterator->next != NULL) iterator = iterator->next;
 		iterator->next = request;
 	}
-	return (request->result != RESULT_200)? EREJECT:ESUCCESS;
 }
 
 int httpclient_wait(http_client_t *client, int sending)
@@ -1402,29 +1573,154 @@ int httpclient_wait(http_client_t *client, int sending)
 
 static int _httpclient_run(http_client_t *client)
 {
-	http_message_t *request = NULL;
-	if (client->request_queue)
-		request = client->request_queue;
-
-	int request_ret = ECONTINUE;
-	if ((!(client->state & CLIENT_LOCKED) &&
-		(client->server->config->version >= (HTTP11 | HTTP_PIPELINE))) || 
-		((client->state & CLIENT_MACHINEMASK) < CLIENT_PUSHREQUEST))
-	{
-		if (client->request == NULL)
-			client->request = _httpmessage_create(client, NULL, client->server->config->chunksize);
-		request_ret = _httpclient_request(client);
-		if (request_ret == ESUCCESS)
-		{
-			_httpclient_pushrequest(client, client->request);
-		}
-	}
-
 #ifdef DEBUG
 	struct timespec spec;
 	clock_gettime(CLOCK_MONOTONIC, &spec);
 	dbg("\tclient %p state %X at %d:%d", client, client->state, spec.tv_sec, spec.tv_nsec);
 #endif
+
+	if (!(client->state & CLIENT_LOCKED) &&
+		(client->state & CLIENT_MACHINEMASK) != CLIENT_EXIT)
+	{
+		if (client->request_queue)
+		{
+			int response_ret;
+			response_ret = _httpclient_response(client, client->request_queue);
+			if ((client->request_queue->response->mode & HTTPMESSAGE_KEEPALIVE) &&
+				(client->request_queue->response->version > HTTP10))
+			{
+				client->state |= CLIENT_KEEPALIVE;
+			}
+			if (client->request_queue->response->mode & HTTPMESSAGE_LOCKED)
+			{
+				client->state |= CLIENT_LOCKED;
+			}
+			if (response_ret == ESUCCESS)
+			{
+				http_connector_list_t *callback = client->request_queue->connector;
+				const char *name = "server";
+				if (callback)
+					name = callback->name;
+				warn("response to %p from connector \"%s\" result %d", client, name, client->request_queue->response->result);
+
+				/**
+				 * flush the output socket
+				 */
+				if (client->ops.flush != NULL)
+					client->ops.flush(client);
+
+				http_message_t *next = client->request_queue->next;
+				_httpmessage_destroy(client->request_queue);
+				client->request_queue = next;
+			}
+			else if (response_ret == EREJECT)
+			{
+				warn("exit response");
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				return EINCOMPLETE;
+			}
+		}
+	}
+
+	int request_ret = EINCOMPLETE;
+
+	switch (client->state & CLIENT_MACHINEMASK)
+	{
+		case CLIENT_NEW:
+		{
+			if (request_ret == EREJECT ||
+				(request_ret == EINCOMPLETE &&
+					httpclient_wait(client, 0) == EREJECT))
+			{
+				/* timeout */
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				return EINCOMPLETE;
+			}
+			else
+				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		break;
+		case CLIENT_READING:
+		{
+			if (client->request_queue)
+				client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
+			else if (request_ret == EREJECT ||
+					(request_ret == EINCOMPLETE &&
+						httpclient_wait(client, 0) == EREJECT))
+			{
+				/* timeout */
+				warn("exit reading");
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				return EINCOMPLETE;
+			}
+		}
+		break;
+		case CLIENT_SENDING:
+		{
+			if (client->request_queue == NULL)
+			{
+				if (client->server->config->keepalive &&
+						!(client->state & CLIENT_LOCKED) &&
+						(client->state & CLIENT_KEEPALIVE))
+					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+				else
+				{
+				warn("exit sending");
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					return EINCOMPLETE;
+				}
+			}
+		}
+		break;
+		case CLIENT_EXIT:
+		{
+			if (!(client->state & CLIENT_LOCKED))
+				client->ops.disconnect(client);
+			client->state |= CLIENT_STOPPED;
+		}
+		break;
+	}
+
+	if (!(client->state & CLIENT_LOCKED))
+	{
+
+		if((client->server->config->version >= (HTTP11 | HTTP_PIPELINE)) || 
+				((client->state & CLIENT_MACHINEMASK) < CLIENT_SENDING))
+		//if (request_ret == ESUCCESS)
+		{
+			if (client->request == NULL)
+				client->request = _httpmessage_create(client, NULL, client->server->config->chunksize);
+
+			request_ret = _httpclient_request(client);
+
+			if ((client->request->mode & HTTPMESSAGE_KEEPALIVE) &&
+				(client->request->version > HTTP10))
+			{
+				client->state |= CLIENT_KEEPALIVE;
+			}
+			if (client->request->mode & HTTPMESSAGE_LOCKED)
+			{
+				client->state |= CLIENT_LOCKED;
+			}
+
+			if (request_ret == EREJECT)
+			{
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				return EINCOMPLETE;
+			}
+			if (request_ret == ESUCCESS || request_ret == ECONTINUE)
+			{
+				_httpclient_pushrequest(client, client->request);
+				client->request = NULL;
+			}
+		}
+	}
+
+
+/* ********************************************************************************************** */
+
+
+#if 0
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
@@ -1769,6 +2065,7 @@ static int _httpclient_run(http_client_t *client)
 		}
 		break;
 	}
+#endif
 	return (client->state & CLIENT_STOPPED)?ESUCCESS:ECONTINUE;
 }
 
