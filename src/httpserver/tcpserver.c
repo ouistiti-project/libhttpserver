@@ -222,10 +222,14 @@ static int _tcpserver_start(http_server_t *server)
 			return -1;
 		}
 
+#ifdef SERVER_DEFER_ACCEPT
 		if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
 				warn("setsockopt(TCP_DEFER_ACCEPT) failed");
+#endif
+#ifdef SERVER_NODELAY
 		if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(TCP_NODELAY) failed");
+#endif
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT

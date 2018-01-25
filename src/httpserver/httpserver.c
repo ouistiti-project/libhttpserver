@@ -1396,6 +1396,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				response->state = GENERATE_CONTENT | PARSE_CONTINUE | (response->state & ~GENERATE_MASK);
 			else
 				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+			client->ops.flush(client);
 		}
 		break;
 		case GENERATE_CONTENT:
