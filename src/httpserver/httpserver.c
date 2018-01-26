@@ -1119,9 +1119,8 @@ static int _httpclient_connect(http_client_t *client)
 	 * it possible to leave this thread without shutdown the socket.
 	 * Be careful to not add action on the socket after this point
 	 */
-	client->ops.destroy(client);
 	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-	dbg("client %p close", client);
+	dbg("client %p thread exit", client);
 #ifdef DEBUG
 	fflush(stderr);
 #endif
@@ -1169,7 +1168,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	return ret;
 }
 
-static int _httpclient_request(http_client_t *client)
+static int _httpclient_request(http_client_t *client, http_message_t *request)
 {
 	/**
 	 * By default the function has to wait more data on the socket
@@ -1178,52 +1177,22 @@ static int _httpclient_request(http_client_t *client)
 	 *  EINCOMPLETE means the function needs to be call again ASAP.
 	 * This is the same meaning with the connectors.
 	 */
-	int ret = ECONTINUE;
-	int size = 0;
-
-	/**
-	 * here, it is the call to the recvreq callback from the
-	 * server configuration.
-	 * see http_server_config_t and httpserver_create
-	 */
-	if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
-		_buffer_reset(client->sockdata);
-	else
-		_buffer_shrink(client->sockdata);
-	size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
-	if (size > 0)
-	{
-		client->sockdata->length += size;
-		client->sockdata->data[client->sockdata->length] = 0;
-	}
-	else if (size == 0)
-	{
-		err("client %p shutdown from outside 0x%X", client, client->state);
-		return EREJECT;
-	}
-	else if (size == EINCOMPLETE)
-	{
-		dbg("client %p recv EAGAIN", client);
-		return EINCOMPLETE;
-	}
-	else
-	{
-		err("client %p recv error %s", client, strerror(errno));
-		return EREJECT;
-	}
+	int ret = EINCOMPLETE;
 
 	/**
 	 * the receiving may complete the buffer, but the parser has
 	 * to check the whole buffer.
 	 **/
 	client->sockdata->offset = client->sockdata->data;
-	ret = _httpmessage_parserequest(client->request, client->sockdata);
+	if (client->sockdata->length > 0)
+		ret = _httpmessage_parserequest(request, client->sockdata);
 	if (ret == EREJECT)
 	{
 		/**
 		 * the parsing found an error in the request
 		 * the treatment is completed and is successed
 		 **/
+		client->state |= CLIENT_RESPONSEREADY;
 		return ESUCCESS;
 	}
 
@@ -1236,27 +1205,31 @@ static int _httpclient_request(http_client_t *client)
 	 * depending of the server. It may be dangerous, a hacker can send
 	 * a request with a very big header.
 	 */
-	if ((client->request->state & PARSE_MASK) > PARSE_POSTHEADER)
+	if ((request->state & PARSE_MASK) > PARSE_POSTHEADER)
 	{
-		if (client->request->response == NULL)
-			client->request->response = _httpmessage_create(client, client->request, client->server->config->chunksize);
-		if (client->request->connector == NULL)
-			ret = _httpclient_checkconnector(client, client->request, client->request->response);
+		if (request->response == NULL)
+			request->response = _httpmessage_create(client, request, client->server->config->chunksize);
+		if (request->connector == NULL)
+			ret = _httpclient_checkconnector(client, request, request->response);
 		else
-			ret = _httpmessage_runconnector(client->request, client->request->response);
+			ret = _httpmessage_runconnector(request, request->response);
 		if (ret == ESUCCESS)
 		{
 			client->state |= CLIENT_RESPONSEREADY;
+			request->response->state &= ~PARSE_CONTINUE;
 		}
-		if (ret == EREJECT)
+		else if (ret == EREJECT)
 		{
+			request->response->state = GENERATE_ERROR;
 #ifdef DEBUG
-			if (client->request->response->result != RESULT_200)
+			if (request->response->result != RESULT_200)
 				err("Result error may return ESUCCESS");
 #endif
-			client->request->response->result = RESULT_404;
-			warn("request not found %s from %p", client->request->uri->data, client);
+			request->response->result = RESULT_404;
+			warn("request not found %s from %p", request->uri->data, client);
 		}
+		else
+			request->response->state |= PARSE_CONTINUE;
 	}
 	/**
 	 * The request's content should be used by  "_httpclient_checkconnector"
@@ -1271,7 +1244,9 @@ static int _httpclient_request(http_client_t *client)
 		{
 			if (!(client->state & CLIENT_RESPONSEREADY))
 			{
-				client->request->result = RESULT_405;
+				request->response->result = RESULT_405;
+				request->response->state = GENERATE_ERROR;
+				client->state |= CLIENT_RESPONSEREADY;
 			}
 		}
 		break;
@@ -1283,7 +1258,7 @@ static int _httpclient_request(http_client_t *client)
 		case ECONTINUE:
 		case EINCOMPLETE:
 		{
-			if ((client->request->state & PARSE_MASK) == PARSE_END)
+			if ((request->state & PARSE_MASK) == PARSE_END)
 				ret = ESUCCESS;
 		}
 		break;
@@ -1489,6 +1464,7 @@ static void _httpclient_pushrequest(http_client_t *client, http_message_t *reque
 int httpclient_wait(http_client_t *client, int sending)
 {
 	int ret = client->sock;
+
 #if defined(VTHREAD) && !defined(BLOCK_SOCKET)
 	fd_set fds;
 	fd_set *rfds = NULL, *wfds = NULL;
@@ -1748,7 +1724,7 @@ static int _httpclient_run(http_client_t *client)
 			if (client->request == NULL)
 				client->request = _httpmessage_create(client, NULL, client->server->config->chunksize);
 
-			request_ret = _httpclient_request(client);
+			request_ret = _httpclient_request(client, client->request);
 
 			if ((client->request->mode & HTTPMESSAGE_KEEPALIVE) &&
 				(client->request->version > HTTP10))
