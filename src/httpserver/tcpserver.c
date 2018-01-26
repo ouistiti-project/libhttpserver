@@ -129,6 +129,7 @@ static int tcpclient_send(void *ctl, char *data, int length)
 			ret = EINCOMPLETE;
 		else
 			ret = EREJECT;
+		//err("client %p send error %s %d", client, strerror(errno), ret);
 	}
 	return ret;
 }
@@ -140,7 +141,7 @@ static int tcpclient_status(void *ctl)
 		return EREJECT;
 	int nbbytes = 0;
 	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
-	dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
+	//dbg("client status (%p %x) %d %d %d", client, client->state, ret, nbbytes, client->nbbytes);
 	if (ret < 0)
 		return EREJECT;
 	if (nbbytes == 0)
@@ -201,6 +202,11 @@ httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.destroy = tcpclient_destroy,
 };
 
+#include <signal.h>
+static void handler(int sig, siginfo_t *si, void *arg)
+{
+}
+
 static int _tcpserver_start(http_server_t *server)
 {
 	int status;
@@ -208,6 +214,14 @@ static int _tcpserver_start(http_server_t *server)
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#else
+	struct sigaction action;
+	action.sa_flags = SA_SIGINFO;
+	sigemptyset(&action.sa_mask);
+	//action.sa_sigaction = handler;
+	action.sa_handler = SIG_IGN;
+	sigaction(SIGPIPE, &action, NULL);
+
 #endif
 	if (server->config->addr == NULL)
 	{
