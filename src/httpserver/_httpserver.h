@@ -73,7 +73,8 @@ struct httpclient_ops_s
 #define CLIENT_MACHINEMASK 0x000F
 #define CLIENT_NEW 0x0000
 #define CLIENT_READING 0x0001
-#define CLIENT_SENDING 0x0002
+#define CLIENT_WAITING 0x0002
+#define CLIENT_SENDING 0x0003
 #define CLIENT_EXIT 0x0009
 #define CLIENT_DEAD 0x000A
 struct http_client_s

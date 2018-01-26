@@ -1632,7 +1632,7 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 		}
 		break;
-		case CLIENT_READING:
+		case CLIENT_WAITING:
 		{
 			if (client->request_queue)
 				client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
@@ -1642,6 +1642,17 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				return EINCOMPLETE;
 			}
+			else
+				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		break;
+		case CLIENT_READING:
+		{
+			request_ret = client->ops.status(client);
+			if (request_ret == EINCOMPLETE)
+				client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);			
+			if (client->request_queue)
+				client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);			
 		}
 		break;
 		case CLIENT_SENDING:
@@ -1652,7 +1663,9 @@ static int _httpclient_run(http_client_t *client)
 				if (client->server->config->keepalive &&
 						!(client->state & CLIENT_LOCKED) &&
 						(client->state & CLIENT_KEEPALIVE))
-					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+				{
+					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK & ~CLIENT_RESPONSEREADY);
+				}
 				else
 				{
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
@@ -1684,6 +1697,45 @@ static int _httpclient_run(http_client_t *client)
 			return ESUCCESS;
 		}
 		break;
+	}
+
+	if (!(client->state & CLIENT_LOCKED) &&
+		((client->state & CLIENT_MACHINEMASK) < CLIENT_SENDING))
+	{
+		if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
+			_buffer_reset(client->sockdata);
+		else
+			_buffer_shrink(client->sockdata);
+		int size = 0;
+		/**
+		 * here, it is the call to the recvreq callback from the
+		 * server configuration.
+		 * see http_server_config_t and httpserver_create
+		 */
+		size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
+
+		if (size > 0)
+		{
+			client->sockdata->length += size;
+			client->sockdata->data[client->sockdata->length] = 0;
+			request_ret = ECONTINUE;
+			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_WAITING)
+				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		else if ( size == EINCOMPLETE)
+		{
+			//dbg("client %p recv EAGAIN", client);
+			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		else
+		{
+			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+			if ( size == 0)
+				err("client %p shutdown from outside 0x%X", client, client->state);
+			else
+				err("client %p recv error %s", client, strerror(errno));
+			return EINCOMPLETE;
+		}
 	}
 
 	if (!(client->state & CLIENT_LOCKED))
