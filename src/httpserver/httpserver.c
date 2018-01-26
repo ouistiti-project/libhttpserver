@@ -916,19 +916,10 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 
 static void _httpclient_destroy(http_client_t *client)
 {
+	if (!(client->state & CLIENT_LOCKED))
+		client->ops.disconnect(client);
 	client->ops.destroy(client);
 
-	http_client_modctx_t *modctx = client->modctx;
-	while (modctx)
-	{
-		http_client_modctx_t *next = modctx->next;
-		if (modctx->freectx)
-		{
-			modctx->freectx(modctx->ctx);
-		}
-		free(modctx);
-		modctx = next;
-	}
 	client->modctx = NULL;
 	http_connector_list_t *callback = client->callbacks;
 	while (callback != NULL)
@@ -1672,9 +1663,25 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_EXIT:
 		{
-			if (!(client->state & CLIENT_LOCKED))
-				client->ops.disconnect(client);
+			/**
+			 * the modules need to be free before any
+			 * socket closing.
+			 * This part may not be into destroy function.
+			 */
+			http_client_modctx_t *modctx = client->modctx;
+			while (modctx)
+			{
+				http_client_modctx_t *next = modctx->next;
+				if (modctx->freectx)
+				{
+					modctx->freectx(modctx->ctx);
+				}
+				free(modctx);
+				modctx = next;
+			}
+
 			client->state |= CLIENT_STOPPED;
+			return ESUCCESS;
 		}
 		break;
 	}
