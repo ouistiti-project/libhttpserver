@@ -43,6 +43,12 @@ extern "C"
 {
 #endif
 
+#ifndef DEFAULT_MAXCLIENTS
+#define DEFAULT_MAXCLIENTS 10
+#endif
+#ifndef DEFAULT_CHUNKSIZE
+#define DEFAULT_CHUNKSIZE 64
+#endif
 /**
  * MAXCHUNKS defines the maximum number of memory chunk which may be allocated
  * The size of the chunks is configurable with the server (see chunksize).

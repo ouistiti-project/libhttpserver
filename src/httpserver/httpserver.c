@@ -1978,7 +1978,7 @@ static int _httpserver_connect(http_server_t *server)
 	return ret;
 }
 
-static int _maxclients = 1024;
+static int _maxclients = DEFAULT_MAXCLIENTS;
 http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
