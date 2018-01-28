@@ -1359,7 +1359,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				break;
 			}
 			if (request->method->id != MESSAGE_TYPE_HEAD)
-				response->state = GENERATE_CONTENT | PARSE_CONTINUE | (response->state & ~GENERATE_MASK);
+				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
 			else
 				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 			client->ops.flush(client);
@@ -1367,11 +1367,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		break;
 		case GENERATE_CONTENT:
 		{
-			if (!(response->state & PARSE_CONTINUE))
-			{
-				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
-				break;
-			}
 			int size;
 			buffer_t *buffer = response->content;
 			if (buffer == NULL)
@@ -1395,6 +1390,14 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				buffer->offset += size;
 			} while (buffer->length > 0);
 			_buffer_reset(buffer);
+			/**
+			 * last data was prepared during the call to this function.
+			 * now the data is sending, and we can go to END
+			 */
+			if (!(response->state & PARSE_CONTINUE))
+			{
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+			}
 		}
 		break;
 		case GENERATE_ERROR:
@@ -1425,7 +1428,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		break;
 	}
 
-	if (response->state & PARSE_CONTINUE)
+	if (((response->state & GENERATE_MASK) > GENERATE_SEPARATOR) &&
+		(response->state & PARSE_CONTINUE))
 	{
 		ret = _httpmessage_runconnector(request, request->response);
 		if (ret == EREJECT)
@@ -1502,7 +1506,8 @@ int httpclient_wait(http_client_t *client, int sending)
 	{
 		if (FD_ISSET(client->sock, &fds))
 		{
-			if (sending || client->ops.status(client) == ESUCCESS)
+			ret = client->ops.status(client);
+			if (sending || ret == ESUCCESS)
 				ret = client->sock;
 			else
 			{
@@ -1547,7 +1552,7 @@ static int _httpclient_run(http_client_t *client)
 #ifdef DEBUG
 	struct timespec spec;
 	clock_gettime(CLOCK_MONOTONIC, &spec);
-	dbg("\tclient %p state %X at %d:%d", client, client->state, spec.tv_sec, spec.tv_nsec);
+	//dbg("\tclient %p state %X at %d:%d", client, client->state, spec.tv_sec, spec.tv_nsec);
 #endif
 
 	if (!(client->state & CLIENT_LOCKED) &&
