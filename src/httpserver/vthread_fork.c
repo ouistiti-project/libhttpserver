@@ -61,6 +61,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	sigemptyset(&action.sa_mask);
 	action.sa_sigaction = handler;
 	sigaction(SIGCHLD, &action, NULL);
+
 	vthread = vcalloc(1, sizeof(struct vthread_s));
 
 	if (vthread && (vthread->pid = fork()) == 0)
@@ -102,16 +103,8 @@ int vthread_join(vthread_t thread, void **value_ptr)
 	int ret = 0;
 	if (thread->pid > 0)
 	{
-		kill( thread->pid, SIGKILL);
-		do
-		{
 			pid_t pid;
 			pid = waitpid(thread->pid, &ret, 0);
-			if (pid < 0 && errno == EINTR)
-				continue;
-			if (pid != thread->pid)
-				break;
-		} while (!WIFEXITED(ret));
 	}
 	vfree(thread);
 	return WEXITSTATUS(ret);
@@ -119,26 +112,26 @@ int vthread_join(vthread_t thread, void **value_ptr)
 
 int vthread_exist(vthread_t thread)
 {
-	int ret = 0;
-	int pid;
+	int pid = -1;
 	if (thread->pid > 0)
 	{
-		pid = waitpid(thread->pid, &ret, WNOHANG);
-		if (pid == 0)
+		pid = waitpid(thread->pid, NULL, WNOHANG);
+		if (pid < 0)
 		{
-			return 1;
+			err("vthread_exist error %s", strerror(errno));
+			if (errno == ECHILD)
+				thread->pid = 0;
 		}
 		if (pid == thread->pid)
 		{
-			if (WIFEXITED(ret))
-				thread->pid = 0;
-			return !WIFEXITED(ret);
-		}
-		err("vthread_exist error %s", strerror(errno));
-		if (errno == ECHILD)
+			/**
+			 * thread died previously
+			 * Don't try to wait again into vthread_join
+			 */
 			thread->pid = 0;
+		}
 	}
-	return 0;
+	return (pid == 0);
 }
 
 void vthread_wait(vthread_t threads[], int nbthreads)
