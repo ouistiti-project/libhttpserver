@@ -1465,7 +1465,9 @@ static void _httpclient_pushrequest(http_client_t *client, http_message_t *reque
 	}
 }
 
-int httpclient_wait(http_client_t *client, int sending)
+#define WAIT_SEND 0x01
+#define WAIT_ACCEPT 0x02
+int httpclient_wait(http_client_t *client, int options)
 {
 	int ret = client->sock;
 
@@ -1477,10 +1479,10 @@ int httpclient_wait(http_client_t *client, int sending)
 	struct timeval timeout;
 	if (client->server->config->keepalive)
 	{
-		if (sending)
+		if (options & WAIT_SEND)
 		{
 			timeout.tv_sec = 0;
-			timeout.tv_usec = 1000;
+			timeout.tv_usec = 10000;
 		}
 		else
 		{
@@ -1489,10 +1491,16 @@ int httpclient_wait(http_client_t *client, int sending)
 		}
 		ptimeout = &timeout;
 	}
+	if (options & WAIT_ACCEPT)
+	{
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 10000;
+		ptimeout = &timeout;
+	}
 
 	FD_ZERO(&fds);
 	FD_SET(client->sock, &fds);
-	if (sending)
+	if (options & WAIT_SEND)
 		wfds = &fds;
 	else
 		rfds = &fds;
@@ -1507,7 +1515,7 @@ int httpclient_wait(http_client_t *client, int sending)
 		if (FD_ISSET(client->sock, &fds))
 		{
 			ret = client->ops.status(client);
-			if (sending || ret == ESUCCESS)
+			if ((options & WAIT_SEND) || ret == ESUCCESS)
 				ret = client->sock;
 			else
 			{
@@ -1533,7 +1541,7 @@ int httpclient_wait(http_client_t *client, int sending)
 			ret = EREJECT;
 	}
 #else
-	if (sending)
+	if (options & WAIT_SEND)
 		ret = ESUCCESS;
 	else
 		ret = client->ops.status(client);
@@ -1603,9 +1611,14 @@ static int _httpclient_run(http_client_t *client)
 	{
 		case CLIENT_NEW:
 		{
-			if ((request_ret = httpclient_wait(client, 0)) == EREJECT)
+			request_ret = httpclient_wait(client, WAIT_ACCEPT);
+			if (request_ret == client->sock)
+				request_ret = ESUCCESS;
+
+			if (request_ret != ESUCCESS)
 			{
-				/* timeout */
+				err("client %p accept error %d", client, request_ret);
+				// timeout
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				return EINCOMPLETE;
 			}
