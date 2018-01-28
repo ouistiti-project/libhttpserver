@@ -1810,6 +1810,50 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 	return ret;
 }
 
+static int _httpserver_prepare(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
+{
+	int count = 0;
+	int maxfd = 0;
+		FD_ZERO(prfds);
+		FD_ZERO(pwfds);
+		FD_ZERO(pefds);
+		FD_SET(server->sock, pefds);
+		maxfd = server->sock;
+		http_client_t *client = server->clients;
+
+	int checksockets = 1;
+#ifndef VTHREAD
+		client = server->clients;
+		while (client != NULL)
+		{
+			if (httpclient_socket(client) > 0)
+			{
+				if (client->request_queue)
+				{
+					FD_SET(httpclient_socket(client), pwfds);
+				}
+				FD_SET(httpclient_socket(client), prfds);
+				FD_SET(httpclient_socket(client), pefds);
+				maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
+				if (client->ops.status(client) == ESUCCESS)
+					checksockets = 0;
+				count++;
+			}
+			else
+				client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
+			client = client->next;
+		}
+
+#else
+		//_httpserver_checkclients(server, &rfds, &wfds);
+#endif
+		if (count < server->config->maxclients)
+			FD_SET(server->sock, prfds);
+	if (!checksockets)
+		return -1;
+	return maxfd;
+}
+
 static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set *pwfds)
 {
 	int ret = 0;
@@ -1869,49 +1913,81 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 	return ret;
 }
 
+#ifdef DEBUG
+static int _debug_nbclients = 0;
+static int _debug_maxclients = 0;
+#endif
+static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set *pwfds)
+{
+	int ret = ESUCCESS;
+	int count = 0;
+	count = _httpserver_checkclients(server, prfds, pwfds);
+#ifdef DEBUG
+	_debug_maxclients = (_debug_maxclients > count)? _debug_maxclients: count;
+	//dbg("nb clients %d / %d / %d", count, _debug_maxclients, _debug_nbclients);
+#endif
+
+	if ((count + 1) > server->config->maxclients)
+		ret = EINCOMPLETE;
+	else if (FD_ISSET(server->sock, prfds))
+	{
+		http_client_t *client = NULL;
+		do
+		{
+			client = server->ops->createclient(server);
+			if (client == NULL)
+			{
+				break;
+			}
+			else
+			{
+				ret = _httpserver_setmod(server, client);
+#ifdef VTHREAD
+				if (ret == ESUCCESS)
+				{
+					vthread_attr_t attr;
+					client->state &= ~CLIENT_STOPPED;
+					client->state |= CLIENT_STARTED;
+					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
+				}
+#endif
+			}
+			if (ret == ESUCCESS)
+			{
+				client->next = server->clients;
+				server->clients = client;
+
+#ifdef DEBUG
+				_debug_nbclients++;
+#endif
+				count++;
+			}
+			else
+			{
+				httpclient_shutdown(client);
+				_httpclient_destroy(client);
+			}
+		} while (client != NULL && count < server->config->maxclients);
+		if ((count + 1) > server->config->maxclients)
+			ret = EINCOMPLETE;
+	}
+
+	return ret;
+}
+
 static int _httpserver_connect(http_server_t *server)
 {
 	int ret = ESUCCESS;
 	int maxfd = 0;
 	fd_set rfds, wfds, efds;
-	int nbclients = 0;
-	int maxclients = 0;
 
 	server->run = 1;
 	while(server->run)
 	{
-		int count = 0;
-		FD_ZERO(&rfds);
-		FD_ZERO(&wfds);
-		FD_ZERO(&efds);
-		FD_SET(server->sock, &efds);
-		maxfd = server->sock;
-		http_client_t *client = server->clients;
+		maxfd = _httpserver_prepare(server, &rfds, &wfds, &efds);
 
 		struct timeval *ptimeout = NULL;
-		int checksockets = 1;
 #ifndef VTHREAD
-		client = server->clients;
-		while (client != NULL)
-		{
-			if (httpclient_socket(client) > 0)
-			{
-				if (client->request_queue)
-				{
-					FD_SET(httpclient_socket(client), &wfds);
-				}
-				FD_SET(httpclient_socket(client), &rfds);
-				FD_SET(httpclient_socket(client), &efds);
-				maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
-				if (client->ops.status(client) == ESUCCESS)
-					checksockets = 0;
-				count++;
-			}
-			else
-				client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-			client = client->next;
-		}
-
 		struct timeval timeout;
 		if (server->config->keepalive)
 		{
@@ -1919,22 +1995,13 @@ static int _httpserver_connect(http_server_t *server)
 			timeout.tv_usec = 0;
 			ptimeout = &timeout;
 		}
-#else
-		//_httpserver_checkclients(server, &rfds, &wfds);
 #endif
-		if (count < server->config->maxclients)
-			FD_SET(server->sock, &rfds);
 
 		int nbselect;
-		if (checksockets)
+		if (maxfd > 0)
 			nbselect = select(maxfd +1, &rfds, &wfds, &efds, ptimeout);
 
-		count = 0;
-		count = _httpserver_checkclients(server, &rfds, &wfds);
-		maxclients = (maxclients > count)? maxclients: count;
-		//dbg("nb clients %d / %d / %d", count, maxclients, nbclients);
-
-		if (nbselect == 0 || (count + 1) > server->config->maxclients)
+		if (nbselect == 0)
 		{
 #ifdef VTHREAD
 			//vthread_yield(server->thread);
@@ -1957,44 +2024,9 @@ static int _httpserver_connect(http_server_t *server)
 			}
 			continue;
 		}
-		else if ((nbselect > 0) && (FD_ISSET(server->sock, &rfds)))
+		else if (nbselect > 0)
 		{
-			nbselect--;
-			http_client_t *client = NULL;
-			do
-			{
-				client = server->ops->createclient(server);
-				if (client == NULL)
-				{
-					break;
-				}
-				else
-				{
-					ret = _httpserver_setmod(server, client);
-#ifdef VTHREAD
-					if (ret == ESUCCESS)
-					{
-						vthread_attr_t attr;
-						client->state &= ~CLIENT_STOPPED;
-						client->state |= CLIENT_STARTED;
-						ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
-					}
-#endif
-				}
-				if (ret == ESUCCESS)
-				{
-					client->next = server->clients;
-					server->clients = client;
-
-					nbclients++;
-					count++;
-				}
-				else
-				{
-					httpclient_shutdown(client);
-					_httpclient_destroy(client);
-				}
-			} while (client != NULL && count < server->config->maxclients);
+			_httpserver_checkserver(server, &rfds, &wfds);
 		}
 	}
 	server->ops->close(server);
