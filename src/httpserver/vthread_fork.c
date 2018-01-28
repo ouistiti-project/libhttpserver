@@ -56,10 +56,17 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	int ret = ESUCCESS;
 	vthread_t vthread;
 
+	/**
+	 * SIGCHLD must be catched to wake up the server when a client terminated.
+	 */
 	struct sigaction action;
 	action.sa_flags = SA_SIGINFO;
 	sigemptyset(&action.sa_mask);
-	action.sa_sigaction = handler;
+	//action.sa_sigaction = handler;
+	/**
+	 * ignore SIGCHLD allows the child to die without to create a zombie.
+	 */
+	action.sa_handler = SIG_IGN;
 	sigaction(SIGCHLD, &action, NULL);
 
 	vthread = vcalloc(1, sizeof(struct vthread_s));
