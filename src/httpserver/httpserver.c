@@ -1943,11 +1943,16 @@ static int _httpserver_connect(http_server_t *server)
 		}
 		else if (nbselect < 0)
 		{
-			if (errno == EINTR || errno == EAGAIN)
+			/**
+			 * Some time receives error ENOTCONN 
+			 *     107 Transport Endpoint not connected
+			 * without explanation.
+			 */
+			if (errno == EINTR || errno == EAGAIN || errno == ENOTCONN)
 				errno = 0;
 			else
 			{
-				err("select error %s", strerror(errno));
+				err("server %p select error (%d, %s)", server, errno, strerror(errno));
 				server->run = 0;
 			}
 			continue;
