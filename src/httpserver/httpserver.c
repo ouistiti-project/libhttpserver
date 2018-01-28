@@ -1272,7 +1272,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 	if (request->response == NULL)
 	{
 		request->response = _httpmessage_create(client, request, client->server->config->chunksize);
-		request->response->state = GENERATE_INIT;
 #ifdef RESULT_500
 		httpmessage_result(request->response, RESULT_500);
 #else
@@ -1280,6 +1279,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 #endif
 		request->response->state = GENERATE_ERROR;
 	}
+
 	http_message_t *response = request->response;
 
 	switch (response->state & GENERATE_MASK)
@@ -1288,13 +1288,18 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			if (response->version == HTTP09)
 				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
-			else
+			else if (response->result < 300)
 			{
 				if (response->header == NULL)
 					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
 				buffer_t *buffer = response->header;
 				response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
 				_httpmessage_buildresponse(response, client->server->config->version, buffer);
+			}
+			else
+			{
+				response->state = GENERATE_ERROR;
+				ret = EINCOMPLETE;
 			}
 		}
 		break;
@@ -1371,25 +1376,25 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			buffer_t *buffer = response->content;
 			if (buffer == NULL)
 			{
-				if (response->state & PARSE_CONTINUE)
-					break;
-				else
-					return ESUCCESS;
+				response->state &= ~PARSE_CONTINUE;
 			}
-			buffer->offset = buffer->data;
-			do {
-				size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
-				if (size < 0)
-				{
-					err("send error %s", strerror(errno));
-					response->state &= ~PARSE_CONTINUE;
-					ret = size;
-					break;
-				}
-				buffer->length -= size;
-				buffer->offset += size;
-			} while (buffer->length > 0);
-			_buffer_reset(buffer);
+			else
+			{
+				buffer->offset = buffer->data;
+				do {
+					size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+					if (size < 0)
+					{
+						err("send error %s", strerror(errno));
+						response->state &= ~PARSE_CONTINUE;
+						ret = size;
+						break;
+					}
+					buffer->length -= size;
+					buffer->offset += size;
+				} while (buffer->length > 0);
+				_buffer_reset(buffer);
+			}
 			/**
 			 * last data was prepared during the call to this function.
 			 * now the data is sending, and we can go to END
@@ -1432,7 +1437,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		(response->state & PARSE_CONTINUE))
 	{
 		ret = _httpmessage_runconnector(request, request->response);
-		if (ret == EREJECT)
+		if (ret == EREJECT || request->response->result > 299)
 		{
 			response->state = GENERATE_ERROR;
 			/** delete func to stop request after the error response **/
@@ -1465,8 +1470,6 @@ static void _httpclient_pushrequest(http_client_t *client, http_message_t *reque
 	}
 }
 
-#define WAIT_SEND 0x01
-#define WAIT_ACCEPT 0x02
 int httpclient_wait(http_client_t *client, int options)
 {
 	int ret = client->sock;
