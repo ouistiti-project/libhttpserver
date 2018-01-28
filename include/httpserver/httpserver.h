@@ -602,11 +602,14 @@ void httpclient_shutdown(http_client_t *client);
  * @brief wait on the socket while no dat available
  * 
  * @param client the connection that received the request
- * @param sending 1 to wait place to send data, 0 to receive
+ * @param options 1 to wait place to send data, 0 to receive
  * 
  * @return socket fd
  */
-int httpclient_wait(http_client_t *client, int sending);
+#define WAIT_SEND 0x01
+#define WAIT_ACCEPT 0x02
+int httpclient_wait(http_client_t *client, int options);
+
 #ifdef __cplusplus
 }
 #endif
