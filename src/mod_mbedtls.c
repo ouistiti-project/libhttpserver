@@ -300,7 +300,7 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
 	}
 	if (ret == MBEDTLS_ERR_SSL_WANT_READ)
-		ret = EINCOMPLETE;
+		ret = ECONTINUE;
 	else if (ret < 0)
 	{
 		ret = EREJECT;

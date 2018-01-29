@@ -1245,9 +1245,10 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 			if (!(client->state & CLIENT_RESPONSEREADY))
 			{
 				request->response->result = RESULT_405;
-				request->response->state = GENERATE_ERROR;
 				client->state |= CLIENT_RESPONSEREADY;
 			}
+			if (request->response->result > 299)
+				request->response->state = GENERATE_ERROR;
 		}
 		break;
 		case EREJECT:
@@ -1383,6 +1384,10 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				buffer->offset = buffer->data;
 				do {
 					size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+					if (size == EINCOMPLETE)
+					{
+						return size;
+					}
 					if (size < 0)
 					{
 						err("send error %s", strerror(errno));
@@ -1719,6 +1724,10 @@ static int _httpclient_run(http_client_t *client)
 			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_WAITING)
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 		}
+		else if ( size == ECONTINUE)
+		{
+			request_ret = EINCOMPLETE;
+		}
 		else if ( size == EINCOMPLETE)
 		{
 			//dbg("client %p recv EAGAIN", client);
@@ -2009,7 +2018,6 @@ static int _httpserver_connect(http_server_t *server)
 #ifdef VTHREAD
 			//vthread_yield(server->thread);
 #endif
-			continue;
 		}
 		else if (nbselect < 0)
 		{
