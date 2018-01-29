@@ -19,6 +19,10 @@ httpserver_CFLAGS+=-I../../include/httpserver
 #httpserver_CFLAGS+=-DSERVER_DEFER_ACCEPT
 httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
 
+ifneq ($(MAX_SERVERS),)
+httpserver_CFLAGS+=-DMAXSERVERS=$(MAX_SERVERS)
+endif
+
 ifneq ($(MAXCHUNKS_HEADER),)
 httpserver_CFLAGS+=-DMAXCHUNKS_HEADER=$(MAXCHUNKS_HEADER)
 endif

@@ -2010,8 +2010,20 @@ static int _httpserver_run(http_server_t *server)
 	int ret = ESUCCESS;
 	int run = 0;
 
-
-	while(server->run)
+#ifndef VTHREAD
+	int i;
+	i = 0;
+	while ( _servers[i] != NULL)
+	{
+		_servers[i]->run = 1;
+		i++;
+		run++;
+	}
+#else
+	server->run = 1;
+	run = 1;
+#endif
+	while(run)
 	{
 		struct timeval *ptimeout = NULL;
 		int maxfd = 0;
@@ -2019,8 +2031,6 @@ static int _httpserver_run(http_server_t *server)
 		FD_ZERO(&rfds);
 		FD_ZERO(&wfds);
 		FD_ZERO(&efds);
-
-		maxfd = _httpserver_prepare(server, &rfds, &wfds, &efds);
 
 #ifndef VTHREAD
 		struct timeval timeout;
@@ -2030,7 +2040,23 @@ static int _httpserver_run(http_server_t *server)
 			timeout.tv_usec = 0;
 			ptimeout = &timeout;
 		}
+
+		i = 0;
+		while ( _servers[i] != NULL)
+		{
+			if (maxfd < 0)
+				break;
+			http_server_t *server = _servers[i];
+			i++;
+#else
+		{
 #endif
+			int lastfd = _httpserver_prepare(server, &rfds, &wfds, &efds);
+			if (lastfd > 0)
+				maxfd = (maxfd > lastfd)?maxfd:lastfd;
+			else
+				maxfd = lastfd;
+		}
 
 		int nbselect;
 		if (maxfd > 0)
@@ -2056,14 +2082,37 @@ static int _httpserver_run(http_server_t *server)
 				err("server %p select error (%d, %s)", server, errno, strerror(errno));
 				server->run = 0;
 			}
-			continue;
 		}
 		else if (nbselect > 0)
 		{
-			_httpserver_checkserver(server, &rfds, &wfds);
+#ifndef VTHREAD
+			i = 0;
+			while ( _servers[i] != NULL)
+			{
+				http_server_t *server = _servers[i];
+				i++;
+#else
+			{
+#endif
+				_httpserver_checkserver(server, &rfds, &wfds);
+			}
+		}
+#ifndef VTHREAD
+		i = 0;
+		while ( _servers[i] != NULL)
+		{
+			http_server_t *server = _servers[i];
+			i++;
+#else
+		{
+#endif
+			if (!server->run)
+			{
+				server->ops->close(server);
+				run--;
+			}
 		}
 	}
-	server->ops->close(server);
 	return ret;
 }
 
@@ -2190,7 +2239,17 @@ void httpserver_connect(http_server_t *server)
 #else
 	vthread_attr_t attr;
 
-	vthread_create(&server->thread, &attr, (vthread_routine)_httpserver_connect, (void *)server, sizeof(*server));
+	vthread_create(&server->thread, &attr, (vthread_routine)_httpserver_run, (void *)server, sizeof(*server));
+#endif
+}
+
+int httpserver_run(http_server_t *server)
+{
+#ifndef VTHREAD
+	return _httpserver_run(server);
+#else
+	vthread_join(server->thread, NULL);
+	return ESUCCESS;
 #endif
 }
 
