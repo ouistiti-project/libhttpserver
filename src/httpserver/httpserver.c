@@ -2559,7 +2559,7 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 		if (!sessioninfo)
 		{
 			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
-			if (sessioninfo)
+			if (sessioninfo == NULL)
 				return  NULL;
 			if (!message->client->session_storage)
 			{
