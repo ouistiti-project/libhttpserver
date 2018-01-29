@@ -1826,9 +1826,6 @@ static int _httpserver_prepare(http_server_t *server, fd_set *prfds, fd_set *pwf
 {
 	int count = 0;
 	int maxfd = 0;
-		FD_ZERO(prfds);
-		FD_ZERO(pwfds);
-		FD_ZERO(pefds);
 		FD_SET(server->sock, pefds);
 		maxfd = server->sock;
 		http_client_t *client = server->clients;
@@ -1987,18 +1984,44 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	return ret;
 }
 
+#ifndef VTHREAD
+static http_server_t *_servers[MAXSERVERS + 1] = {NULL};
 static int _httpserver_connect(http_server_t *server)
 {
-	int ret = ESUCCESS;
-	int maxfd = 0;
-	fd_set rfds, wfds, efds;
+	int ret = EREJECT;
+	int i = 0;
+	while (_servers[i] != NULL) i++;
+	if (i < MAXSERVERS)
+	{
+		_servers[i] = server;
+		ret = ESUCCESS;
+	}
+	return ret;
+}
+#else
+static int _httpserver_connect(http_server_t *server)
+{
+	return ESUCCESS;
+}
+#endif
 
-	server->run = 1;
+static int _httpserver_run(http_server_t *server)
+{
+	int ret = ESUCCESS;
+	int run = 0;
+
+
 	while(server->run)
 	{
+		struct timeval *ptimeout = NULL;
+		int maxfd = 0;
+		fd_set rfds, wfds, efds;
+		FD_ZERO(&rfds);
+		FD_ZERO(&wfds);
+		FD_ZERO(&efds);
+
 		maxfd = _httpserver_prepare(server, &rfds, &wfds, &efds);
 
-		struct timeval *ptimeout = NULL;
 #ifndef VTHREAD
 		struct timeval timeout;
 		if (server->config->keepalive)
