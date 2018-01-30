@@ -332,6 +332,7 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 
 	if (server->sock < 0)
 		return NULL;
+
 	// Client connection request recieved
 	// Create new client socket to communicate
 	client->addr_size = sizeof(client->addr);

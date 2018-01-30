@@ -1969,7 +1969,10 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 		if (FD_ISSET(httpclient_socket(client), pefds))
 		{
 			err("client %p exception", client);
-			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+			if ((client->state & CLIENT_MACHINEMASK) != CLIENT_NEW)
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+			else
+				FD_CLR(httpclient_socket(client), prfds);
 		}
 		if (FD_ISSET(httpclient_socket(client), prfds) ||
 			client->request_queue != NULL)
@@ -2037,6 +2040,12 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	_debug_maxclients = (_debug_maxclients > count)? _debug_maxclients: count;
 	//dbg("nb clients %d / %d / %d", count, _debug_maxclients, _debug_nbclients);
 #endif
+
+	if (FD_ISSET(server->sock, pefds))
+	{
+		err("server %p exception", server);
+		FD_CLR(server->sock, prfds);
+	}
 
 	if ((count + 1) > server->config->maxclients)
 	{
@@ -2260,7 +2269,16 @@ static int _httpserver_run(http_server_t *server)
 					ret = EREJECT;
 				}
 				else
-					ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+				{
+					http_client_t *client = server->clients;
+					while (client != NULL)
+					{
+						warn("EBADF %p (%d)", client, client->sock);
+						int ret = write(client->sock, NULL, 0);
+						warn("EBADF %p (%d)", client, ret);
+						client = client->next;
+					}
+				}
 #endif
 				errno = 0;
 			}
@@ -2273,7 +2291,6 @@ static int _httpserver_run(http_server_t *server)
 		}
 		else if (nbselect > 0)
 		{
-			err("check server %p", server);
 			_httpserver_checkserver(server, prfds, pwfds, pefds);
 #ifdef VTHREAD
 			vthread_yield(server->thread);
