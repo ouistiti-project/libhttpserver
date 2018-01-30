@@ -2055,7 +2055,7 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	else if (FD_ISSET(server->sock, prfds))
 	{
 		http_client_t *client = NULL;
-		//do
+		do
 		{
 			client = server->ops->createclient(server);
 
@@ -2083,12 +2083,22 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 				}
 				else
 				{
+					/**
+					 * One module rejected the new client socket.
+					 * It may be a bug or a module checking the client
+					 * like "clientfilter"
+					 */
 					httpclient_shutdown(client);
 					_httpclient_destroy(client);
 				}
 			}
 		}
-		//while (client != NULL && count < server->config->maxclients);
+		while (client != NULL && count < server->config->maxclients);
+		/**
+		 * this loop generates more exception on the server socket.
+		 * The exception is handled and should not generate trouble.
+		 */
+
 		if ((count + 1) > server->config->maxclients)
 			ret = EINCOMPLETE;
 	}
