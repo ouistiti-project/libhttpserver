@@ -39,6 +39,7 @@
 # include <arpa/inet.h>
 # include <netdb.h>
 # include <fcntl.h>
+#include <signal.h>
 
 #else
 
@@ -141,7 +142,7 @@ static int tcpclient_status(void *ctl)
 		return EREJECT;
 	int nbbytes = 0;
 	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
-	//dbg("client status (%p %x) %d %d %d", client, client->state, ret, nbbytes, client->nbbytes);
+	//dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
 	if (ret < 0)
 		return EREJECT;
 	if (nbbytes == 0)
@@ -202,7 +203,6 @@ httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.destroy = tcpclient_destroy,
 };
 
-#include <signal.h>
 static void handler(int sig, siginfo_t *si, void *arg)
 {
 }

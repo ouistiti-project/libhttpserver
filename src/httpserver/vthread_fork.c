@@ -125,9 +125,13 @@ int vthread_exist(vthread_t thread)
 		pid = waitpid(thread->pid, NULL, WNOHANG);
 		if (pid < 0)
 		{
-			err("vthread_exist error %s", strerror(errno));
 			if (errno == ECHILD)
+			{
 				thread->pid = 0;
+				err("vthread exist NO with ECHILD %d", pid == 0);
+			}
+			else
+				err("vthread_exist error %s", strerror(errno));
 		}
 		if (pid == thread->pid)
 		{
@@ -136,6 +140,7 @@ int vthread_exist(vthread_t thread)
 			 * Don't try to wait again into vthread_join
 			 */
 			thread->pid = 0;
+				err("vthread exist NO with SIGCHLD %d", pid == 0);
 		}
 	}
 	return (pid == 0);
