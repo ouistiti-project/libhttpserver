@@ -85,6 +85,12 @@ struct http_message_method_s
 	http_message_method_t *next;
 };
 
+struct http_server_session_s
+{
+	dbentry_t *dbfirst;
+	buffer_t *storage;
+};
+
 static int _httpclient_run(http_client_t *client);
 
 /********************************************************************/
@@ -930,12 +936,17 @@ static void _httpclient_destroy(http_client_t *client)
 		free(callback);
 		callback = next;
 	}
-	dbentry_t *session = client->session;
-	while (session)
+	if (client->session)
 	{
-		dbentry_t *next = session->next;
-		free(session);
-		session = next;
+		dbentry_t *db = client->session->dbfirst;
+		while (db)
+		{
+			dbentry_t *next = db->next;
+			free(db);
+			db = next;
+		}
+		vfree(client->session->storage);
+		vfree(client->session);
 	}
 	if (client->sockdata)
 		_buffer_destroy(client->sockdata);
@@ -949,8 +960,6 @@ static void _httpclient_destroy(http_client_t *client)
 	client->request_queue = NULL;
 	if (client->request)
 		_httpmessage_destroy(client->request);
-	if (client->session_storage)
-		vfree(client->session_storage);
 	vfree(client);
 }
 
@@ -2542,33 +2551,46 @@ char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	return value;
 }
 
+http_server_session_t *_httpserver_createsession(http_server_t *server, http_client_t *client)
+{
+	http_server_session_t *session = NULL;
+	session = vcalloc(1, sizeof(*session));
+	if (session)
+		session->storage = _buffer_create(MAXCHUNKS_SESSION, server->config->chunksize);
+	return session;
+}
+
 char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 {
 	dbentry_t *sessioninfo;
 	if (message->client == NULL)
 		return NULL;
 
-	sessioninfo = message->client->session;
-	
-	while (sessioninfo && strcmp(sessioninfo->key, key))
+	if (message->client->session)
 	{
-		sessioninfo = sessioninfo->next;
+		sessioninfo = message->client->session->dbfirst;
+		
+		while (sessioninfo && strcmp(sessioninfo->key, key))
+		{
+			sessioninfo = sessioninfo->next;
+		}
 	}
 	if (value != NULL)
 	{
+		if (!message->client->session)
+		{
+			message->client->session = _httpserver_createsession(message->client->server, message->client);
+			sessioninfo = message->client->session->dbfirst;
+		}
 		if (!sessioninfo)
 		{
 			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 			if (sessioninfo == NULL)
 				return  NULL;
-			if (!message->client->session_storage)
-			{
-				message->client->session_storage = _buffer_create(MAXCHUNKS_SESSION, message->chunksize);
-			}
 			sessioninfo->key = 
-				_buffer_append(message->client->session_storage, key, strlen(key) + 1);
-			sessioninfo->next = message->client->session;
-			message->client->session = sessioninfo;
+				_buffer_append(message->client->session->storage, key, strlen(key) + 1);
+			sessioninfo->next = message->client->session->dbfirst;
+			message->client->session->dbfirst = sessioninfo;
 		}
 		if (sessioninfo->value)
 		{
@@ -2579,8 +2601,8 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 			}
 			else if (next != NULL)
 			{
-				char *data = message->client->session_storage->data;
-				int length = message->client->session_storage->length;
+				char *data = message->client->session->storage->data;
+				int length = message->client->session->storage->length;
 				length -= next->key - data;
 				memmove(sessioninfo->key, next->key, length);
 				length = next->key - sessioninfo->key;
@@ -2590,12 +2612,12 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 					next->value -= length;
 					next = next->next;
 				}
-				message->client->session_storage->length -= length;
+				message->client->session->storage->length -= length;
 			}
 		}
 		else
 			sessioninfo->value = 
-				_buffer_append(message->client->session_storage, value, strlen(value) + 1);
+				_buffer_append(message->client->session->storage, value, strlen(value) + 1);
 	}
 	else if (sessioninfo == NULL)
 		return default_value;

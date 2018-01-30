@@ -44,6 +44,7 @@ typedef struct buffer_s buffer_t;
 typedef struct http_connector_list_s http_connector_list_t;
 typedef struct http_client_modctx_s http_client_modctx_t;
 typedef struct http_message_method_s http_message_method_t;
+typedef struct http_server_session_s http_server_session_t;
 
 typedef int (*http_connect_t)(void *ctl, char *addr, int port);
 typedef int (*http_status_t)(void *ctl);
@@ -95,8 +96,7 @@ struct http_client_s
 
 	buffer_t *sockdata;
 
-	dbentry_t *session;
-	buffer_t *session_storage;
+	http_server_session_t *session;
 #ifndef WIN32
 	struct sockaddr_un addr;
 #elif defined IPV6
