@@ -40,6 +40,8 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <poll.h>
+#include <signal.h>
 
 #include "valloc.h"
 #include "vthread.h"
@@ -922,8 +924,6 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 
 static void _httpclient_destroy(http_client_t *client)
 {
-	if (!(client->state & CLIENT_LOCKED))
-		client->ops.disconnect(client);
 	client->ops.destroy(client);
 
 	client->modctx = NULL;
@@ -1129,7 +1129,7 @@ static int _httpclient_connect(http_client_t *client)
 	 * Be careful to not add action on the socket after this point
 	 */
 	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-	dbg("client %p thread exit", client);
+	warn("client %p thread exit", client);
 #ifdef DEBUG
 	fflush(stderr);
 #endif
@@ -1325,7 +1325,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
 			if (size < 0)
 			{
-				err("send error %s", strerror(errno));
+				err("client %p RESULT send error %s", client, strerror(errno));
 				response->state &= ~PARSE_CONTINUE;
 				ret = size;
 				break;
@@ -1348,7 +1348,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
 			if (size < 0)
 			{
-				err("send error %s", strerror(errno));
+				err("client %p HEADER send error %s", client, strerror(errno));
 				response->state &= ~PARSE_CONTINUE;
 				ret = size;
 				break;
@@ -1368,7 +1368,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			size = client->ops.sendresp(client->ctx, "\r\n", 2);
 			if (size < 0)
 			{
-				err("send error %s", strerror(errno));
+				err("client %p SEPARATOR send error %s", client, strerror(errno));
 				response->state &= ~PARSE_CONTINUE;
 				ret = size;
 				break;
@@ -1399,7 +1399,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 					}
 					if (size < 0)
 					{
-						err("send error %s", strerror(errno));
+						err("client %p CONTENT send error %s", client, strerror(errno));
 						response->state &= ~PARSE_CONTINUE;
 						ret = size;
 						break;
@@ -1489,39 +1489,43 @@ int httpclient_wait(http_client_t *client, int options)
 	int ret = client->sock;
 
 #if defined(VTHREAD) && !defined(BLOCK_SOCKET)
-	fd_set fds;
-	fd_set *rfds = NULL, *wfds = NULL;
-
-	struct timeval *ptimeout = NULL;
-	struct timeval timeout;
+	struct timespec *ptimeout = NULL;
+	struct timespec timeout;
 	if (client->server->config->keepalive)
 	{
 		if (options & WAIT_SEND)
 		{
 			timeout.tv_sec = 0;
-			timeout.tv_usec = 10000;
+			timeout.tv_nsec = 10000000;
 		}
 		else
 		{
 			timeout.tv_sec = client->server->config->keepalive;
-			timeout.tv_usec = 0;
+			timeout.tv_nsec = 0;
 		}
 		ptimeout = &timeout;
 	}
 	if (options & WAIT_ACCEPT)
 	{
 		timeout.tv_sec = 0;
-		timeout.tv_usec = 10000;
+		timeout.tv_nsec = 10000000;
 		ptimeout = &timeout;
 	}
 
+	fd_set fds;
 	FD_ZERO(&fds);
+	fd_set *rfds = NULL, *wfds = NULL;
 	FD_SET(client->sock, &fds);
 	if (options & WAIT_SEND)
 		wfds = &fds;
 	else
 		rfds = &fds;
-	ret = select(client->sock + 1, rfds, wfds, NULL, ptimeout);
+
+	sigset_t sigmask;
+	sigemptyset(&sigmask);
+	sigaddset(&sigmask, SIGCHLD);
+	ret = pselect(client->sock + 1, rfds, wfds, NULL, ptimeout, &sigmask);
+
 	if (ret == 0)
 	{
 		ret = EINCOMPLETE;
@@ -1539,11 +1543,6 @@ int httpclient_wait(http_client_t *client, int options)
 				err("httpclient_wait %p socket closed ", client);
 				ret = EREJECT;
 			}
-		}
-		else
-		{
-			err("httpclient_wait %p bad socket (%d)", client, client->sock);
-			ret = EREJECT;
 		}
 	}
 	else
@@ -1617,6 +1616,7 @@ static int _httpclient_run(http_client_t *client)
 			else if (response_ret == EREJECT)
 			{
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				client->state |= CLIENT_ERROR;
 				return EINCOMPLETE;
 			}
 		}
@@ -1628,19 +1628,28 @@ static int _httpclient_run(http_client_t *client)
 	{
 		case CLIENT_NEW:
 		{
-			request_ret = httpclient_wait(client, WAIT_ACCEPT);
-			if (request_ret == client->sock)
-				request_ret = ESUCCESS;
+			//request_ret = httpclient_wait(client, WAIT_ACCEPT);
+			//if (request_ret == client->sock)
+			//	request_ret = ESUCCESS;
+			request_ret = client->ops.status(client);
 
-			if (request_ret != ESUCCESS)
+			if (request_ret == EREJECT)
 			{
 				err("client %p accept error %d", client, request_ret);
 				// timeout
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				client->state |= CLIENT_ERROR;
 				return EINCOMPLETE;
 			}
-			else
+			else if (request_ret == ESUCCESS)
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+			else
+			{
+				dbg("client %p waits again first data", client);
+#ifdef VTHREAD
+				vthread_yield(client->thread);
+#endif
+			}
 		}
 		break;
 		case CLIENT_WAITING:
@@ -1651,6 +1660,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				/* timeout */
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				client->state |= CLIENT_ERROR;
 				return EINCOMPLETE;
 			}
 			else
@@ -1703,6 +1713,8 @@ static int _httpclient_run(http_client_t *client)
 				free(modctx);
 				modctx = next;
 			}
+			if (!(client->state & CLIENT_LOCKED))
+				client->ops.disconnect(client);
 
 			client->state |= CLIENT_STOPPED;
 			return ESUCCESS;
@@ -1745,6 +1757,7 @@ static int _httpclient_run(http_client_t *client)
 		else
 		{
 			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+			client->state |= CLIENT_ERROR;
 			if ( size == 0)
 				err("client %p shutdown from outside 0x%X", client, client->state);
 			else
@@ -1831,55 +1844,91 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 	return ret;
 }
 
-static int _httpserver_prepare(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
+static int _httpserver_prepare(http_server_t *server)
 {
 	int count = 0;
 	int maxfd = 0;
-		FD_SET(server->sock, pefds);
-		maxfd = server->sock;
-		http_client_t *client = server->clients;
 
 	int checksockets = 1;
+	maxfd = server->sock;
+	server->numfds = 0;
+
+	http_client_t *client = server->clients;
 #ifndef VTHREAD
-		client = server->clients;
-		while (client != NULL)
+	client = server->clients;
+	while (client != NULL)
+	{
+		if (httpclient_socket(client) > 0)
 		{
-			if (httpclient_socket(client) > 0)
+			if (client->request_queue)
 			{
-				if (client->request_queue)
-				{
-					FD_SET(httpclient_socket(client), pwfds);
-				}
-				FD_SET(httpclient_socket(client), prfds);
-				FD_SET(httpclient_socket(client), pefds);
-				maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
-				if (client->ops.status(client) == ESUCCESS)
-					checksockets = 0;
-				count++;
+				FD_SET(httpclient_socket(client), &server->fds[1]);
 			}
-			else
-				client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-			client = client->next;
+			FD_SET(httpclient_socket(client), &server->fds[0]);
+			FD_SET(httpclient_socket(client), &server->fds[2]);
+
+			server->numfds++;
+
+			maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
+			if (client->ops.status(client) == ESUCCESS)
+				checksockets = 0;
+			count++;
+			if (count >= server->config->maxclients)
+				break;
 		}
+		client = client->next;
+	}
 
 #else
-		//_httpserver_checkclients(server, &rfds, &wfds);
+	//_httpserver_checkclients(server, &rfds, &wfds);
 #endif
-		if (count < server->config->maxclients)
-			FD_SET(server->sock, prfds);
+
+	if (count < server->config->maxclients)
+		FD_SET(server->sock, &server->fds[0]);
+	FD_SET(server->sock, &server->fds[2]);
+	server->numfds++;
 	if (!checksockets)
 		return -1;
 	return maxfd;
 }
 
-static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set *pwfds)
+# include <sys/ioctl.h>
+
+static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
 {
 	int ret = 0;
+	int run = 0;
 	http_client_t *client = server->clients;
 	while (client != NULL)
 	{
+#ifdef CHECK_EBADF
+		/**
+		 * Some ppoll and pselect return with EBADF without explanation.
+		 * This code should check all socket and find the wrong socket.
+		 * But the result is allway good.
+		 */
+		if (errno == EBADF)
+		{
+			if (fcntl(httpclient_socket(client), F_GETFL) < 0)
+			{
+				err("client %p error (%d, %s)", client, errno, strerror(errno));
+				if (errno == EBADF)
+				{
+					err("EBADF");
+					client->state |= CLIENT_STOPPED;
+				}
+			}
+			errno = EBADF;
+		}
+#endif
 #ifndef VTHREAD
-		if (FD_ISSET(httpclient_socket(client), prfds) || FD_ISSET(httpclient_socket(client), pwfds))
+		if (FD_ISSET(httpclient_socket(client), pefds))
+		{
+			err("client %p exception", client);
+			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		if (FD_ISSET(httpclient_socket(client), prfds) ||
+			client->request_queue != NULL)
 		{
 			client->state |= CLIENT_RUNNING;
 			int run_ret;
@@ -1889,14 +1938,16 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 				run_ret = _httpclient_run(client);
 				if (run_ret == ESUCCESS)
 					client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-			} while (run_ret == EINCOMPLETE);
+			}
+			while (run_ret == EINCOMPLETE && client->request_queue == NULL);
+			run++;
 		}
-#endif
-#ifdef VTHREAD
+
+		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
+#else
+
 		if ((!vthread_exist(client->thread)) ||
 			((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD))
-#else
-		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 #endif
 		{
 			warn("client %p died", client);
@@ -1923,11 +1974,9 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 		{
 			ret++;
 			client = client->next;
-#ifdef VTHREAD
-			vthread_yield(server->thread);
-#endif
 		}
 	}
+
 	return ret;
 }
 
@@ -1935,29 +1984,29 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 static int _debug_nbclients = 0;
 static int _debug_maxclients = 0;
 #endif
-static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set *pwfds)
+static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
 {
 	int ret = ESUCCESS;
 	int count = 0;
-	count = _httpserver_checkclients(server, prfds, pwfds);
+	count = _httpserver_checkclients(server, prfds, pwfds, pefds);
 #ifdef DEBUG
 	_debug_maxclients = (_debug_maxclients > count)? _debug_maxclients: count;
 	//dbg("nb clients %d / %d / %d", count, _debug_maxclients, _debug_nbclients);
 #endif
 
 	if ((count + 1) > server->config->maxclients)
+	{
 		ret = EINCOMPLETE;
+		err("maxclients");
+	}
 	else if (FD_ISSET(server->sock, prfds))
 	{
 		http_client_t *client = NULL;
-		do
+		//do
 		{
 			client = server->ops->createclient(server);
-			if (client == NULL)
-			{
-				break;
-			}
-			else
+
+			if (client != NULL)
 			{
 				ret = _httpserver_setmod(server, client);
 #ifdef VTHREAD
@@ -1969,23 +2018,24 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
 				}
 #endif
-			}
-			if (ret == ESUCCESS)
-			{
-				client->next = server->clients;
-				server->clients = client;
+				if (ret == ESUCCESS)
+				{
+					client->next = server->clients;
+					server->clients = client;
 
 #ifdef DEBUG
-				_debug_nbclients++;
+					_debug_nbclients++;
 #endif
-				count++;
+					count++;
+				}
+				else
+				{
+					httpclient_shutdown(client);
+					_httpclient_destroy(client);
+				}
 			}
-			else
-			{
-				httpclient_shutdown(client);
-				_httpclient_destroy(client);
-			}
-		} while (client != NULL && count < server->config->maxclients);
+		}
+		//while (client != NULL && count < server->config->maxclients);
 		if ((count + 1) > server->config->maxclients)
 			ret = EINCOMPLETE;
 	}
@@ -2032,45 +2082,61 @@ static int _httpserver_run(http_server_t *server)
 	server->run = 1;
 	run = 1;
 #endif
-	while(run)
+	while(run > 0)
 	{
-		struct timeval *ptimeout = NULL;
+		struct timespec *ptimeout = NULL;
 		int maxfd = 0;
-		fd_set rfds, wfds, efds;
-		FD_ZERO(&rfds);
-		FD_ZERO(&wfds);
-		FD_ZERO(&efds);
+		FD_ZERO(&server->fds[0]);
+		FD_ZERO(&server->fds[1]);
+		FD_ZERO(&server->fds[2]);
 
 #ifndef VTHREAD
-		struct timeval timeout;
+		struct timespec timeout;
 		if (server->config->keepalive)
 		{
 			timeout.tv_sec = server->config->keepalive;
-			timeout.tv_usec = 0;
+			timeout.tv_nsec = 0;
 			ptimeout = &timeout;
 		}
 
 		i = 0;
 		while ( _servers[i] != NULL)
 		{
-			if (maxfd < 0)
-				break;
 			http_server_t *server = _servers[i];
 			i++;
-#else
-		{
+			if (!server->run)
+				continue;
+
+			if (maxfd < 0)
+				break;
 #endif
-			int lastfd = _httpserver_prepare(server, &rfds, &wfds, &efds);
-			if (lastfd > 0)
-				maxfd = (maxfd > lastfd)?maxfd:lastfd;
-			else
-				maxfd = lastfd;
-		}
+		int lastfd = _httpserver_prepare(server);
+		if (lastfd > 0)
+			maxfd = (maxfd > lastfd)?maxfd:lastfd;
+		else
+			maxfd = lastfd;
+#ifndef VTHREAD
+		} //while ( _servers[i] != NULL)
+#endif
 
 		int nbselect;
+		fd_set *prfds, *pwfds, *pefds;
 		if (maxfd > 0)
-			nbselect = select(maxfd +1, &rfds, &wfds, &efds, ptimeout);
+			nbselect = pselect(maxfd +1, &server->fds[0],
+						&server->fds[1], &server->fds[2], ptimeout, NULL);
+		prfds = &server->fds[0];
+		pwfds = &server->fds[1];
+		pefds = &server->fds[2];
 
+#ifndef VTHREAD
+		i = 0;
+		while ( _servers[i] != NULL)
+		{
+			http_server_t *server = _servers[i];
+			i++;
+			if (!server->run)
+				continue;
+#endif
 		if (nbselect == 0)
 		{
 #ifdef VTHREAD
@@ -2079,48 +2145,55 @@ static int _httpserver_run(http_server_t *server)
 		}
 		else if (nbselect < 0)
 		{
+			if (errno == EINTR || errno == EAGAIN)
+			{
+				warn("server %p select error (%d, %s)", server, errno, strerror(errno));
+				errno = 0;
+			}
 			/**
-			 * Some time receives error ENOTCONN 
-			 *     107 Transport Endpoint not connected
+			 * Some time receives error 
+			 *    ENOTCONN 107 Transport Endpoint not connected
+			 *    EBADF 9 Bad File descriptor
 			 * without explanation.
 			 */
-			if (errno == EINTR || errno == EAGAIN || errno == ENOTCONN)
+			else if (errno == EBADF || errno == ENOTCONN)
+			{
+				warn("server %p select error (%d, %s)", server, errno, strerror(errno));
+#ifdef CHECK_EBADF
+				if (fcntl(server->sock, F_GETFL) < 0)
+				{
+					server->run = 0;
+					err("server %p select EBADF", server);
+					ret = EREJECT;
+				}
+				else
+					ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+#endif
 				errno = 0;
+			}
 			else
 			{
 				err("server %p select error (%d, %s)", server, errno, strerror(errno));
 				server->run = 0;
+				ret = EREJECT;
 			}
 		}
 		else if (nbselect > 0)
 		{
-#ifndef VTHREAD
-			i = 0;
-			while ( _servers[i] != NULL)
-			{
-				http_server_t *server = _servers[i];
-				i++;
-#else
-			{
+			err("check server %p", server);
+			_httpserver_checkserver(server, prfds, pwfds, pefds);
+#ifdef VTHREAD
+			vthread_yield(server->thread);
 #endif
-				_httpserver_checkserver(server, &rfds, &wfds);
-			}
+		}
+		if (!server->run)
+		{
+			run--;
+			server->ops->close(server);
 		}
 #ifndef VTHREAD
-		i = 0;
-		while ( _servers[i] != NULL)
-		{
-			http_server_t *server = _servers[i];
-			i++;
-#else
-		{
+		} //while ( _servers[i] != NULL)
 #endif
-			if (!server->run)
-			{
-				server->ops->close(server);
-				run--;
-			}
-		}
 	}
 	return ret;
 }
@@ -2150,6 +2223,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		free(server);
 		return NULL;
 	}
+	warn("new server %p on port %d", server, server->config->port);
 	int flags;
 	flags = fcntl(server->sock, F_GETFL, 0);
 	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);

@@ -134,6 +134,8 @@ struct http_server_s
 	http_server_mod_t *mod;
 	httpserver_ops_t *ops;
 	http_message_method_t *methods;
+	fd_set fds[3];
+	int numfds;
 };
 
 typedef enum
