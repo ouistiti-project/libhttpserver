@@ -288,6 +288,8 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 		_buffer_destroy(message->uri);
 	if (message->content)
 		_buffer_destroy(message->content);
+	if (message->header)
+		_buffer_destroy(message->header);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
 	dbentry_t *header = message->headers;
@@ -2430,8 +2432,8 @@ int httpserver_run(http_server_t *server)
 #ifndef VTHREAD
 	return _httpserver_run(server);
 #else
-	vthread_join(server->thread, NULL);
-	return ESUCCESS;
+	pause();
+	return ECONTINUE;
 #endif
 }
 
