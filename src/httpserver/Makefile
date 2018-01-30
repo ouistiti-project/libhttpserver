@@ -17,6 +17,7 @@ httpserver_CFLAGS+=-I../../include/httpserver
 # SERVER_DEFER_ACCEPT may protect the client connection from some exceptions.
 # But it still decrease the speed of the answers.
 #httpserver_CFLAGS+=-DSERVER_DEFER_ACCEPT
+httpserver_CFLAGS+=-DUSE_POLL
 httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
 
 ifneq ($(MAX_SERVERS),)

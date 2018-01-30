@@ -1514,6 +1514,32 @@ int httpclient_wait(http_client_t *client, int options)
 
 	fd_set fds;
 	FD_ZERO(&fds);
+#ifdef USE_POLL
+	struct pollfd poll_set[1];
+	int numfds = 0;
+	poll_set[0].fd = client->sock;
+	if (options & WAIT_SEND)
+		poll_set[0].events = POLLOUT;
+	else
+		poll_set[0].events = POLLIN;
+	numfds++;
+
+	/**
+	 * ppoll receives SIGCHLD with pthread and fork VTREAD_TYPE.
+	 * Normally it shouldn't occure, the client is the child of the server
+	 * and has no child (exception for cgi module answer
+	 */
+	sigset_t sigmask;
+	sigemptyset(&sigmask);
+	sigaddset(&sigmask, SIGCHLD);
+	ret = ppoll(poll_set, numfds, ptimeout, NULL);
+	if (poll_set[0].revents & POLLIN)
+		FD_SET(client->sock, &fds);
+	else if (poll_set[0].revents & POLLOUT)
+		ret = client->sock;
+	else
+		err("client %p poll %x", client, poll_set[0].revents);
+#else
 	fd_set *rfds = NULL, *wfds = NULL;
 	FD_SET(client->sock, &fds);
 	if (options & WAIT_SEND)
@@ -1525,7 +1551,7 @@ int httpclient_wait(http_client_t *client, int options)
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGCHLD);
 	ret = pselect(client->sock + 1, rfds, wfds, NULL, ptimeout, &sigmask);
-
+#endif
 	if (ret == 0)
 	{
 		ret = EINCOMPLETE;
@@ -1860,13 +1886,21 @@ static int _httpserver_prepare(http_server_t *server)
 	{
 		if (httpclient_socket(client) > 0)
 		{
+#ifdef USE_POLL
+			server->poll_set[server->numfds].fd = client->sock;
+			server->poll_set[server->numfds].events = POLLIN;
+			if (client->request_queue)
+			{
+				server->poll_set[server->numfds].events |= POLLOUT;
+			}
+#else
 			if (client->request_queue)
 			{
 				FD_SET(httpclient_socket(client), &server->fds[1]);
 			}
 			FD_SET(httpclient_socket(client), &server->fds[0]);
 			FD_SET(httpclient_socket(client), &server->fds[2]);
-
+#endif
 			server->numfds++;
 
 			maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
@@ -1883,9 +1917,17 @@ static int _httpserver_prepare(http_server_t *server)
 	//_httpserver_checkclients(server, &rfds, &wfds);
 #endif
 
+#ifdef USE_POLL
+	if (count < server->config->maxclients)
+	{
+		server->poll_set[server->numfds].fd = server->sock;
+		server->poll_set[server->numfds].events = POLLIN;
+	}
+#else
 	if (count < server->config->maxclients)
 		FD_SET(server->sock, &server->fds[0]);
 	FD_SET(server->sock, &server->fds[2]);
+#endif
 	server->numfds++;
 	if (!checksockets)
 		return -1;
@@ -2086,9 +2128,12 @@ static int _httpserver_run(http_server_t *server)
 	{
 		struct timespec *ptimeout = NULL;
 		int maxfd = 0;
+#ifdef USE_POLL
+#else
 		FD_ZERO(&server->fds[0]);
 		FD_ZERO(&server->fds[1]);
 		FD_ZERO(&server->fds[2]);
+#endif
 
 #ifndef VTHREAD
 		struct timespec timeout;
@@ -2121,12 +2166,58 @@ static int _httpserver_run(http_server_t *server)
 
 		int nbselect;
 		fd_set *prfds, *pwfds, *pefds;
+#ifdef USE_POLL
+		fd_set rfds, wfds, efds;
+		//nbselect = poll(server->poll_set, server->numfds, -1);
+		nbselect = ppoll(server->poll_set, server->numfds, ptimeout, NULL);
+		FD_ZERO(&rfds);
+		FD_ZERO(&wfds);
+		FD_ZERO(&efds);
+		if (nbselect > 0)
+		{
+			int i;
+			for (i = 0; i < server->numfds; i++)
+			{
+				if (server->poll_set[i].revents & POLLIN)
+				{
+					FD_SET(server->poll_set[i].fd, &rfds);
+					server->poll_set[i].revents &= ~POLLIN;
+				}
+				if (server->poll_set[i].revents & POLLOUT)
+				{
+					FD_SET(server->poll_set[i].fd, &wfds);
+					server->poll_set[i].revents &= ~POLLOUT;
+				}
+				if (server->poll_set[i].revents & POLLHUP)
+				{
+					if (server->poll_set[i].fd == server->sock)
+					{
+						nbselect = -1;
+						server->run = 0;
+						errno = ECONNABORTED;
+					}
+					else
+					{
+						FD_SET(server->poll_set[i].fd, &rfds);
+						FD_SET(server->poll_set[i].fd, &efds);
+					}
+					server->poll_set[i].revents &= ~POLLHUP;
+				}
+				if (server->poll_set[i].revents)
+					err("server %p fd %d poll %x/%x", server, server->poll_set[i].fd, server->poll_set[i].revents, POLLHUP);
+			}
+		}
+		prfds = &rfds;
+		pwfds = &wfds;
+		pefds = &efds;
+#else
 		if (maxfd > 0)
 			nbselect = pselect(maxfd +1, &server->fds[0],
 						&server->fds[1], &server->fds[2], ptimeout, NULL);
 		prfds = &server->fds[0];
 		pwfds = &server->fds[1];
 		pefds = &server->fds[2];
+#endif
 
 #ifndef VTHREAD
 		i = 0;
@@ -2217,6 +2308,14 @@ http_server_t *httpserver_create(http_server_config_t *config)
 
 	_maxclients += server->config->maxclients;
 	nice(-4);
+#ifdef USE_POLL
+	server->poll_set =
+#ifndef VTHREAD
+		vcalloc(1 + server->config->maxclients, sizeof(*server->poll_set));
+#else
+		vcalloc(1, sizeof(*server->poll_set));
+#endif
+#endif
 
 	if (server->ops->start(server))
 	{

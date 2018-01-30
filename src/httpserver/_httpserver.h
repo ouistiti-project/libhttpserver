@@ -134,7 +134,11 @@ struct http_server_s
 	http_server_mod_t *mod;
 	httpserver_ops_t *ops;
 	http_message_method_t *methods;
+#ifdef USE_POLL
+	struct pollfd *poll_set;
+#else
 	fd_set fds[3];
+#endif
 	int numfds;
 };
 
