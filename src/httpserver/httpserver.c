@@ -1910,6 +1910,23 @@ static int _httpserver_prepare(http_server_t *server)
 	{
 		if (httpclient_socket(client) > 0)
 		{
+			if (client->ops.status(client) == ESUCCESS)
+			{
+				/**
+				 * data already availlables.
+				 * short cut the sockets polling to go directly to
+				 * the sockets checking.
+				 * _httpserver_prepare returns -1 (maxfd = -1)
+				 */
+				checksockets = 0;
+#ifdef USE_POLL
+				server->poll_set[server->numfds].revents = POLLIN;
+				if (client->request_queue)
+				{
+					server->poll_set[server->numfds].revents |= POLLOUT;
+				}
+#endif
+			}
 #ifdef USE_POLL
 			server->poll_set[server->numfds].fd = client->sock;
 			server->poll_set[server->numfds].events = POLLIN;
@@ -1928,8 +1945,6 @@ static int _httpserver_prepare(http_server_t *server)
 			server->numfds++;
 
 			maxfd = (maxfd > httpclient_socket(client))? maxfd:httpclient_socket(client);
-			if (client->ops.status(client) == ESUCCESS)
-				checksockets = 0;
 			count++;
 			if (count >= server->config->maxclients)
 				break;
