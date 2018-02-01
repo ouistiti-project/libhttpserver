@@ -215,13 +215,18 @@ static int _tcpserver_start(http_server_t *server)
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #else
+/**
+ * If the socket is open into more than one process, the sending on it
+ * may return a SIGPIPE.
+ * It is possible to disable the signal or to close the socket into
+ * all process except the sender.
 	struct sigaction action;
 	action.sa_flags = SA_SIGINFO;
 	sigemptyset(&action.sa_mask);
 	//action.sa_sigaction = handler;
 	action.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &action, NULL);
-
+ */
 #endif
 	if (server->config->addr == NULL)
 	{
@@ -354,7 +359,7 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 		NI_NUMERICHOST | NI_NUMERICSERV);
 
 	if (rc == 0) 
-		warn("new connection %p from %s %d", client, hoststr, server->config->port);
+		warn("new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
 #ifndef BLOCK_SOCKET
 	int flags;
 	flags = fcntl(httpclient_socket(client), F_GETFL, 0);

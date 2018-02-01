@@ -1121,6 +1121,12 @@ static int _httpclient_connect(http_client_t *client)
 	int ret;
 	client->state &= ~CLIENT_STARTED;
 	client->state |= CLIENT_RUNNING;
+#ifndef SHARED_SOCKET
+	/*
+	 * TODO : dispatch close and destroy from tcpserver.
+	 */
+	close(client->server->sock);
+#endif
 	do
 	{
 		ret = _httpclient_run(client);
@@ -2071,7 +2077,18 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	if ((count + 1) > server->config->maxclients)
 	{
 		ret = EINCOMPLETE;
-		err("maxclients");
+		//err("maxclients");
+#ifdef VTHREAD
+		vthread_yield(server->thread);
+#else
+		/**
+		 * It may be possible to call _httpserver_checkserver
+		 * and create a recursion of the function while at least
+		 * one client doesn't die. But if the clients never die,
+		 * it becomes an infinite loop.
+		 */
+		ret = _httpserver_checkclients(server, prfds, pwfds, pefds);
+#endif
 	}
 	else if (FD_ISSET(server->sock, prfds))
 	{
@@ -2090,6 +2107,17 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 					client->state &= ~CLIENT_STOPPED;
 					client->state |= CLIENT_STARTED;
 					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_connect, (void *)client, sizeof(*client));
+#ifndef SHARED_SOCKET
+					/**
+					 * To disallow the reception of SIGPIPE during the
+					 * "send" call, the socket into the parent process
+					 * must be closed.
+					 * Or the tcpserver must disable SIGPIPE
+					 * during the sending, but in this case
+					 * it is impossible to recceive real SIGPIPE.
+					 */
+					client->ops.destroy(client);
+#endif
 				}
 #endif
 				if (ret == ESUCCESS)
