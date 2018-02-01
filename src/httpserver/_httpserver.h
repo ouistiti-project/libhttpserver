@@ -78,10 +78,14 @@ struct httpclient_ops_s
 #define CLIENT_SENDING 0x0003
 #define CLIENT_EXIT 0x0009
 #define CLIENT_DEAD 0x000A
+
+#define WAIT_TIMER 2 //seconds
+
 struct http_client_s
 {
 	int sock;
 	int state;
+	int timeout;
 	http_server_t *server; /* the server which create the client */
 	vthread_t thread; /* The thread of socket management during the live of the connection */
 

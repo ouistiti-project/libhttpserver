@@ -1493,26 +1493,17 @@ int httpclient_wait(http_client_t *client, int options)
 #if defined(VTHREAD) && !defined(BLOCK_SOCKET)
 	struct timespec *ptimeout = NULL;
 	struct timespec timeout;
-	if (client->server->config->keepalive)
-	{
-		if (options & WAIT_SEND)
-		{
-			timeout.tv_sec = 0;
-			timeout.tv_nsec = 10000000;
-		}
-		else
-		{
-			timeout.tv_sec = client->server->config->keepalive;
-			timeout.tv_nsec = 0;
-		}
-		ptimeout = &timeout;
-	}
-	if (options & WAIT_ACCEPT)
+	if (options & WAIT_SEND)
 	{
 		timeout.tv_sec = 0;
 		timeout.tv_nsec = 10000000;
-		ptimeout = &timeout;
 	}
+	else
+	{
+		timeout.tv_sec = WAIT_TIMER;
+		timeout.tv_nsec = 0;
+	}
+	ptimeout = &timeout;
 
 	fd_set fds;
 	FD_ZERO(&fds);
@@ -1539,7 +1530,7 @@ int httpclient_wait(http_client_t *client, int options)
 		FD_SET(client->sock, &fds);
 	else if (poll_set[0].revents & POLLOUT)
 		ret = client->sock;
-	else
+	else if (ret < 0)
 		err("client %p poll %x", client, poll_set[0].revents);
 #else
 	fd_set *rfds = NULL, *wfds = NULL;
@@ -1554,10 +1545,26 @@ int httpclient_wait(http_client_t *client, int options)
 	sigaddset(&sigmask, SIGCHLD);
 	ret = pselect(client->sock + 1, rfds, wfds, NULL, ptimeout, &sigmask);
 #endif
+
 	if (ret == 0)
 	{
-		ret = EINCOMPLETE;
-		errno = EAGAIN;
+		if (options & WAIT_ACCEPT)
+		{
+			ret = EREJECT;
+		}
+		else if (options & WAIT_SEND)
+		{
+			ret = EINCOMPLETE;
+			errno = EAGAIN;
+		}
+		else
+		{
+			client->timeout -= 100 * WAIT_TIMER;
+			if (client->timeout <  0)
+				ret = EREJECT;
+			ret = EINCOMPLETE;
+			errno = EAGAIN;
+		}
 	}
 	else if (ret > 0)
 	{
@@ -1565,7 +1572,9 @@ int httpclient_wait(http_client_t *client, int options)
 		{
 			ret = client->ops.status(client);
 			if ((options & WAIT_SEND) || ret == ESUCCESS)
+			{
 				ret = client->sock;
+			}
 			else
 			{
 				err("httpclient_wait %p socket closed ", client);
@@ -1656,10 +1665,10 @@ static int _httpclient_run(http_client_t *client)
 	{
 		case CLIENT_NEW:
 		{
-			//request_ret = httpclient_wait(client, WAIT_ACCEPT);
-			//if (request_ret == client->sock)
-			//	request_ret = ESUCCESS;
-			request_ret = client->ops.status(client);
+			request_ret = httpclient_wait(client, WAIT_ACCEPT);
+			if (request_ret == client->sock)
+				request_ret = ESUCCESS;
+			//request_ret = client->ops.status(client);
 
 			if (request_ret == EREJECT)
 			{
@@ -1772,6 +1781,14 @@ static int _httpclient_run(http_client_t *client)
 			request_ret = ECONTINUE;
 			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_WAITING)
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+			/**
+			 * WAIT_ACCEPT does the first initialization
+			 * otherwise the return is EREJECT
+			 */
+			int timer = WAIT_TIMER * 3;
+			if (client->server->config->keepalive)
+				timer = client->server->config->keepalive;
+			client->timeout = timer * 100;
 		}
 		else if ( size == ECONTINUE)
 		{
@@ -1965,6 +1982,10 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 			errno = EBADF;
 		}
 #endif
+		if (client->timeout < 0)
+		{
+			client->state |= CLIENT_STOPPED;
+		}
 #ifndef VTHREAD
 		if (FD_ISSET(httpclient_socket(client), pefds))
 		{
@@ -2219,40 +2240,37 @@ static int _httpserver_run(http_server_t *server)
 					}
 					else
 					{
-						FD_SET(server->poll_set[i].fd, &rfds);
-						FD_SET(server->poll_set[i].fd, &efds);
+						FD_SET(server->poll_set[j].fd, &rfds);
+						FD_SET(server->poll_set[j].fd, &efds);
 					}
-					server->poll_set[i].revents &= ~POLLHUP;
+					server->poll_set[j].revents &= ~POLLHUP;
 				}
-				if (server->poll_set[i].revents)
-					err("server %p fd %d poll %x/%x", server, server->poll_set[i].fd, server->poll_set[i].revents, POLLHUP);
+				if (server->poll_set[j].revents)
+					err("server %p fd %d poll %x", server, server->poll_set[j].fd, server->poll_set[j].revents);
 			}
 		}
-		prfds = &rfds;
-		pwfds = &wfds;
-		pefds = &efds;
 #else
 		if (maxfd > 0)
 			nbselect = pselect(maxfd +1, &server->fds[0],
 						&server->fds[1], &server->fds[2], ptimeout, NULL);
-		prfds = &server->fds[0];
-		pwfds = &server->fds[1];
-		pefds = &server->fds[2];
 #endif
 
-#ifndef VTHREAD
-		i = 0;
-		while ( _servers[i] != NULL)
-		{
-			http_server_t *server = _servers[i];
-			i++;
-			if (!server->run)
-				continue;
-#endif
 		if (nbselect == 0)
 		{
 #ifdef VTHREAD
 			//vthread_yield(server->thread);
+#else
+			int checkclients = 0;
+			http_client_t *client = server->clients;
+			while (client != NULL)
+			{
+				client->timeout -= WAIT_TIMER * 100;
+				if (client->timeout < 0)
+					checkclients = 1;
+				client = client->next;
+			}
+			if (checkclients)
+				_httpserver_checkclients(server, prfds, pwfds, pefds);
 #endif
 		}
 		else if (nbselect < 0)
