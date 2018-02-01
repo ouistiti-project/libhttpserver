@@ -1902,7 +1902,6 @@ static int _httpserver_prepare(http_server_t *server)
 
 	int checksockets = 1;
 	maxfd = server->sock;
-	server->numfds = 0;
 
 	http_client_t *client = server->clients;
 #ifndef VTHREAD
@@ -2155,112 +2154,84 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	return ret;
 }
 
-#ifndef VTHREAD
-static http_server_t *_servers[MAXSERVERS + 1] = {NULL};
-static int _httpserver_connect(http_server_t *server)
-{
-	int ret = EREJECT;
-	int i = 0;
-	while (_servers[i] != NULL) i++;
-	if (i < MAXSERVERS)
-	{
-		_servers[i] = server;
-		ret = ESUCCESS;
-	}
-	return ret;
-}
-#else
 static int _httpserver_connect(http_server_t *server)
 {
 	return ESUCCESS;
 }
-#endif
 
 static int _httpserver_run(http_server_t *server)
 {
 	int ret = ESUCCESS;
 	int run = 0;
 
-#ifndef VTHREAD
-	int i;
-	i = 0;
-	while ( _servers[i] != NULL)
-	{
-		_servers[i]->run = 1;
-		i++;
-		run++;
-	}
-#else
 	server->run = 1;
 	run = 1;
-#endif
+
 	while(run > 0)
 	{
 		struct timespec *ptimeout = NULL;
 		int maxfd = 0;
+		fd_set *prfds, *pwfds, *pefds;
 #ifdef USE_POLL
+		fd_set rfds, wfds, efds;
+
+		prfds = &rfds;
+		pwfds = &wfds;
+		pefds = &efds;
 #else
-		FD_ZERO(&server->fds[0]);
-		FD_ZERO(&server->fds[1]);
-		FD_ZERO(&server->fds[2]);
+		prfds = &server->fds[0];
+		pwfds = &server->fds[1];
+		pefds = &server->fds[2];
 #endif
+		FD_ZERO(prfds);
+		FD_ZERO(pwfds);
+		FD_ZERO(pefds);
 
 #ifndef VTHREAD
 		struct timespec timeout;
 		if (server->config->keepalive)
 		{
-			timeout.tv_sec = server->config->keepalive;
+			timeout.tv_sec = WAIT_TIMER;
 			timeout.tv_nsec = 0;
 			ptimeout = &timeout;
 		}
-
-		i = 0;
-		while ( _servers[i] != NULL)
-		{
-			http_server_t *server = _servers[i];
-			i++;
-			if (!server->run)
-				continue;
-
-			if (maxfd < 0)
-				break;
 #endif
+
+		server->numfds = 0;
 		int lastfd = _httpserver_prepare(server);
 		if (lastfd > 0)
 			maxfd = (maxfd > lastfd)?maxfd:lastfd;
 		else
 			maxfd = lastfd;
-#ifndef VTHREAD
-		} //while ( _servers[i] != NULL)
-#endif
 
-		int nbselect;
-		fd_set *prfds, *pwfds, *pefds;
+		int nbselect = server->numfds;
 #ifdef USE_POLL
-		fd_set rfds, wfds, efds;
 		//nbselect = poll(server->poll_set, server->numfds, -1);
-		nbselect = ppoll(server->poll_set, server->numfds, ptimeout, NULL);
-		FD_ZERO(&rfds);
-		FD_ZERO(&wfds);
-		FD_ZERO(&efds);
+		if (maxfd > 0)
+			nbselect = ppoll(server->poll_set, server->numfds, ptimeout, NULL);
 		if (nbselect > 0)
 		{
-			int i;
-			for (i = 0; i < server->numfds; i++)
+			int j;
+			for (j = 0; j < server->numfds; j++)
 			{
-				if (server->poll_set[i].revents & POLLIN)
+				if (server->poll_set[j].revents & POLLIN)
 				{
-					FD_SET(server->poll_set[i].fd, &rfds);
-					server->poll_set[i].revents &= ~POLLIN;
+					FD_SET(server->poll_set[j].fd, &rfds);
+					server->poll_set[j].revents &= ~POLLIN;
 				}
-				if (server->poll_set[i].revents & POLLOUT)
+				if (server->poll_set[j].revents & POLLOUT)
 				{
-					FD_SET(server->poll_set[i].fd, &wfds);
-					server->poll_set[i].revents &= ~POLLOUT;
+					FD_SET(server->poll_set[j].fd, &wfds);
+					server->poll_set[j].revents &= ~POLLOUT;
 				}
-				if (server->poll_set[i].revents & POLLHUP)
+				if (server->poll_set[j].revents & POLLERR)
 				{
-					if (server->poll_set[i].fd == server->sock)
+					FD_SET(server->poll_set[j].fd, &rfds);
+					FD_SET(server->poll_set[j].fd, &efds);
+				}
+				if (server->poll_set[j].revents & POLLHUP)
+				{
+					if (server->poll_set[j].fd == server->sock)
 					{
 						nbselect = -1;
 						server->run = 0;
@@ -2357,9 +2328,6 @@ static int _httpserver_run(http_server_t *server)
 			run--;
 			server->ops->close(server);
 		}
-#ifndef VTHREAD
-		} //while ( _servers[i] != NULL)
-#endif
 	}
 	return ret;
 }
