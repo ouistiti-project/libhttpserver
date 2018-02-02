@@ -1206,6 +1206,8 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		ret = _httpmessage_parserequest(request, client->sockdata);
 	if (ret == EREJECT)
 	{
+		if (request->result == RESULT_200)
+			request->result = RESULT_400;
 		/**
 		 * the parsing found an error in the request
 		 * the treatment is completed and is successed
@@ -1291,11 +1293,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 	if (request->response == NULL)
 	{
 		request->response = _httpmessage_create(client, request, client->server->config->chunksize);
-#ifdef RESULT_500
-		httpmessage_result(request->response, RESULT_500);
-#else
-		httpmessage_result(request->response, RESULT_400);
-#endif
 		request->response->state = GENERATE_ERROR;
 	}
 
@@ -1382,10 +1379,10 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				ret = size;
 				break;
 			}
-			if (request->method->id != MESSAGE_TYPE_HEAD)
-				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
-			else
+			if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
 				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+			else
+				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
 			client->ops.flush(client);
 		}
 		break;
