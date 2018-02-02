@@ -1269,18 +1269,24 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 			}
 			if (request->response->result > 299)
 				request->response->state = GENERATE_ERROR;
+			request->response->state = PARSE_END | (request->response->state & ~PARSE_MASK);
 		}
 		break;
 		case EREJECT:
 		{
+			request->response->state = PARSE_END | (request->response->state & ~PARSE_MASK);
 			ret = ESUCCESS;
 		}
 		break;
 		case ECONTINUE:
+		{
+			request->response->state = PARSE_END | (request->response->state & ~PARSE_MASK);
+		}
+		//break;
 		case EINCOMPLETE:
 		{
-			if ((request->state & PARSE_MASK) == PARSE_END)
-				ret = ESUCCESS;
+//			if ((request->state & PARSE_MASK) == PARSE_END)
+//				ret = ESUCCESS;
 		}
 		break;
 	}
@@ -1309,8 +1315,11 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				if (response->header == NULL)
 					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
 				buffer_t *buffer = response->header;
-				response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
-				_httpmessage_buildresponse(response, client->server->config->version, buffer);
+				if ((request->response->state & PARSE_MASK) >= PARSE_END)
+				{
+					response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
+					_httpmessage_buildresponse(response, client->server->config->version, buffer);
+				}
 			}
 			else
 			{
