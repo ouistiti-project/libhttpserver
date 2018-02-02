@@ -1644,6 +1644,7 @@ static int _httpclient_run(http_client_t *client)
 			if (client->request_queue->response->mode & HTTPMESSAGE_LOCKED)
 			{
 				client->state |= CLIENT_LOCKED;
+				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			if (response_ret == ESUCCESS)
 			{
