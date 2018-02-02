@@ -2793,7 +2793,7 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, http_cli
 
 char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 {
-	dbentry_t *sessioninfo;
+	dbentry_t *sessioninfo = NULL;
 	if (message->client == NULL)
 		return NULL;
 
@@ -2851,6 +2851,8 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 				_buffer_append(message->client->session->storage, value, strlen(value) + 1);
 	}
 	else if (sessioninfo == NULL)
+	{
 		return default_value;
+	}
 	return sessioninfo->value;
 }
