@@ -607,6 +607,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			}
 			break;
 		}
+		//dbg("parse %x %x %d", next, message->state, ret);
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
 			if (next < PARSE_CONTENT)
@@ -1477,6 +1478,9 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			response->state &= ~PARSE_CONTINUE;
 			ret = ECONTINUE;
+		}
+		else if (ret == EINCOMPLETE)
+		{
 		}
 	}
 
