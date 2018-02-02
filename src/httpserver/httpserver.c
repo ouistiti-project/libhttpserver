@@ -702,15 +702,16 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	tempo.offset = data;
 	tempo.length = *size;
 	tempo.size = *size;
-	if (message->state == PARSE_INIT)
+	if ((message->state & PARSE_MASK) == PARSE_INIT)
 		message->state = PARSE_STATUS;
+	message->content_length = -1;
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length - (tempo.offset - tempo.data);
 	if (*size > 0)
 		_buffer_shrink(&tempo);
-	if ((message->state & PARSE_MASK) > PARSE_PRECONTENT)
+	if ((message->state & PARSE_MASK) >= PARSE_PRECONTENT)
 		ret = ECONTINUE;
-	if (message->state == PARSE_END)
+	if ((message->state & PARSE_MASK) == PARSE_END)
 	{
 		if (*size > 0)
 		{
