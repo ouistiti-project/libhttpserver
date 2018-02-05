@@ -14,7 +14,15 @@ lib-$(DLIB_HTTPSERVER)+=httpserver
 slib-$(SLIB_HTTPSERVER)+=httpserver
 httpserver_SOURCES+=httpserver.c tcpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
+# SERVER_DEFER_ACCEPT may protect the client connection from some exceptions.
+# But it still decrease the speed of the answers.
+httpserver_CFLAGS+=-DSERVER_DEFER_ACCEPT
+httpserver_CFLAGS+=-DUSE_POLL
 httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
+
+ifneq ($(MAX_SERVERS),)
+httpserver_CFLAGS+=-DMAXSERVERS=$(MAX_SERVERS)
+endif
 
 ifneq ($(MAXCHUNKS_HEADER),)
 httpserver_CFLAGS+=-DMAXCHUNKS_HEADER=$(MAXCHUNKS_HEADER)
@@ -24,6 +32,11 @@ httpserver_CFLAGS+=-DMAXCHUNKS_SESSION=$(MAXCHUNKS_SESSION)
 endif
 ifneq ($(MAXCHUNKS_URI),)
 httpserver_CFLAGS+=-DMAXCHUNKS_URI=$(MAXCHUNKS_URI)
+endif
+ifneq ($(MAXWEBSOCKETS),)
+httpserver_CFLAGS+=-DMAXWEBSOCKETS=$(MAXWEBSOCKETS)
+else
+httpserver_CFLAGS+=-DMAXWEBSOCKETS=10
 endif
 
 ifeq ($(VTHREAD_TYPE),)
@@ -53,3 +66,5 @@ websocket_CFLAGS-$(DEBUG)+=-g -DDEBUG
 ifeq ($(WIN32),1)
 httpserver_LDFLAGS+=-lws2_32
 endif
+
+httpserver_LDFLAGS-$(DEBUG)+=-lrt

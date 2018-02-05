@@ -29,17 +29,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <errno.h>
 
+#include "httpserver/log.h"
 #include "httpserver/httpserver.h"
 #include "httpserver/utils.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-#define dbg(...)
-#endif
 
 static const char *_mimetype[] =
 {
@@ -89,12 +83,15 @@ static const mime_entry_t *mime_entry =
 &(mime_entry_t){
 	.ext = ".jpg",
 	.mime = "image/jpeg",
-	.next =
+	.next = NULL
+}}}}}}};
+
+static const mime_entry_t *mime_default =
 &(mime_entry_t){
 	.ext = "*",
 	.mime = "application/octet-stream",
 	.next = NULL
-}}}}}}}};
+};
 
 static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case);
 
@@ -115,7 +112,7 @@ void utils_addmime(const char *ext, const char*mime)
 	}
 }
 
-const char *utils_getmime(char *filepath)
+const char *utils_getmime(const char *filepath)
 {
 	mime_entry_t *mime = (mime_entry_t *)mime_entry;
 	while (mime)
@@ -128,12 +125,12 @@ const char *utils_getmime(char *filepath)
 	}
 	if (mime)
 		return mime->mime;
-	return NULL;
+	return mime_default->mime;
 }
 
 char *str_location = "Location";
 
-char *utils_urldecode(char *encoded)
+char *utils_urldecode(const char *encoded)
 {
 	if (encoded == NULL)
 		return NULL;
@@ -301,7 +298,8 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	return ret;
 }
 
-char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext, struct stat *filestat)
+char *utils_buildpath(const char *docroot, const char *path_info, 
+			const char *filename, const char *ext, struct stat *filestat)
 {
 	char *filepath;
 	int length;
@@ -320,6 +318,7 @@ char *utils_buildpath(char *docroot, char *path_info, char *filename, char *ext,
 		memset(filestat, 0, sizeof(*filestat));
 		if (stat(filepath, filestat))
 		{
+			dbg("stat error on %s : %s", filepath, strerror(errno));
 			free(filepath);
 			return NULL;
 		}

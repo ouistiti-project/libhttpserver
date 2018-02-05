@@ -62,16 +62,10 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 #else
 #error MBEDTLS not found
 #endif
+
+#include "log.h"
 #include "httpserver.h"
 #include "mod_mbedtls.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-#define dbg(...)
-#endif
 
 #define HANDSHAKE 0x01
 #define RECV_COMPLETE 0x02
@@ -268,7 +262,7 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 		{
 			char error[256];
 			mbedtls_strerror(ret, error, 256);
-			warn("TLS Handshake error %X %s", ret, error);
+			warn("TLS Handshake error %X %s", -ret, error);
 			mbedtls_ssl_free(&ctx->ssl);
 			free(ctx);
 			ctx = NULL;
@@ -281,6 +275,11 @@ static void _mod_mbedtls_freectx(void *vctx)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
+	if (vctx == NULL)
+	{
+		dbg("mbedtls: close from error on Handshake");
+		return;
+	}
 	while ((ret = mbedtls_ssl_close_notify(&ctx->ssl)) == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
 	dbg("TLS Close");
 	mbedtls_ssl_free(&ctx->ssl);
@@ -301,7 +300,7 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
 	}
 	if (ret == MBEDTLS_ERR_SSL_WANT_READ)
-		ret = EINCOMPLETE;
+		ret = ECONTINUE;
 	else if (ret < 0)
 	{
 		ret = EREJECT;

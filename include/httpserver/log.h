@@ -1,5 +1,5 @@
 /*****************************************************************************
- * utils.h: http utils  for modules
+ * log.h: simple log macros
  * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
@@ -26,27 +26,15 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __HTTPSERVER_LOG_H__
+#define __HTTPSERVER_LOG_H__
 
-extern char *str_location;
+#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#ifdef DEBUG
+# define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#else
+# define dbg(...)
+#endif
 
-typedef enum
-{
-	MIME_TEXTPLAIN,
-	MIME_TEXTHTML,
-	MIME_TEXTCSS,
-	MIME_TEXTJSON,
-	MIME_APPLICATIONJAVASCRIPT,
-	MIME_IMAGEPNG,
-	MIME_IMAGEJPEG,
-	MIME_APPLICATIONOCTETSTREAM,
-} utils_mimetype_enum;
-const char *utils_getmime(const char *path);
-void utils_addmime(const char *ext, const char*mime);
-
-char *utils_urldecode(const char *encoded);
-int utils_searchexp(const char *haystack, const char *needleslist);
-char *utils_buildpath(const char *docroot, const char *path_info,
-					const char *filename, const char *ext, struct stat *filestat);
 #endif

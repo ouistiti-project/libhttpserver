@@ -27,61 +27,123 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <signal.h>
 #include <sched.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 
+#include "log.h"
+#include "httpserver.h"
 #include "valloc.h"
 #include "vthread.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-# define dbg(...)
-#endif
 
 struct vthread_s
 {
 	pid_t pid;
 };
 
+#include <signal.h>
+static void handler(int sig, siginfo_t *si, void *arg)
+{
+}
+
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {
-	int ret = 0;
+	int ret = ESUCCESS;
 	vthread_t vthread;
+
+	/**
+	 * SIGCHLD must be catched to wake up the server when a client terminated.
+	 */
+	struct sigaction action;
+	action.sa_flags = SA_SIGINFO;
+	sigemptyset(&action.sa_mask);
+	//action.sa_sigaction = handler;
+	/**
+	 * ignore SIGCHLD allows the child to die without to create a zombie.
+	 */
+	action.sa_handler = SIG_IGN;
+	sigaction(SIGCHLD, &action, NULL);
+
 	vthread = vcalloc(1, sizeof(struct vthread_s));
-	sched_yield();
-	if ((vthread->pid = fork()) == 0)
+
+	if (vthread && (vthread->pid = fork()) == 0)
 	{
+#ifdef TIME_PROFILER
+		struct timeval date1, date2;
+		gettimeofday(&date1, NULL);
+#endif
 		ret = (int)start_routine(arg);
-		exit(ret);
+#ifdef TIME_PROFILER
+		gettimeofday(&date2, NULL);
+		date2.tv_sec -= date1.tv_sec;
+		if (date2.tv_usec > date1.tv_usec)
+			date2.tv_usec -= date1.tv_usec;
+		else
+		{
+			date2.tv_sec += 1;
+			date2.tv_usec = date1.tv_usec - date2.tv_usec;
+		}
+		printf("time %d:%d\n", date2.tv_sec, date2.tv_usec);
+#endif
+ 		exit(ret);
 	}
-	*thread = vthread;
+	else if ( (vthread == NULL) || (vthread->pid == -1))
+	{
+		err("fork error %s", strerror(errno));
+		ret = EREJECT;
+	}
+	else
+	{
+		sched_yield();
+		*thread = vthread;
+	}
 	return ret;
 }
 
 int vthread_join(vthread_t thread, void **value_ptr)
 {
 	int ret = 0;
-	kill( thread->pid, SIGKILL);
-	waitpid(thread->pid, &ret, 0);
+	if (thread->pid > 0)
+	{
+			pid_t pid;
+			pid = waitpid(thread->pid, &ret, 0);
+	}
 	vfree(thread);
-	return ret;
+	return WEXITSTATUS(ret);
 }
 
 int vthread_exist(vthread_t thread)
 {
-	int ret = 0;
-	int pid;
-	pid = waitpid(thread->pid, &ret, WNOHANG);
-	if (pid == -1)
-		return 0;
-	return (pid != thread->pid);
+	int pid = -1;
+	if (thread->pid > 0)
+	{
+		pid = waitpid(thread->pid, NULL, WNOHANG);
+		if (pid < 0)
+		{
+			if (errno == ECHILD)
+			{
+				thread->pid = 0;
+				err("vthread exist NO with ECHILD %d", pid == 0);
+			}
+			else
+				err("vthread_exist error %s", strerror(errno));
+		}
+		if (pid == thread->pid)
+		{
+			/**
+			 * thread died previously
+			 * Don't try to wait again into vthread_join
+			 */
+			thread->pid = 0;
+				err("vthread exist NO with SIGCHLD %d", pid == 0);
+		}
+	}
+	return (pid == 0);
 }
 
 void vthread_wait(vthread_t threads[], int nbthreads)
@@ -90,7 +152,7 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 	int i;
 	for (i = 0; i < nbthreads; i++) 
 	{
-		waitpid(threads[i]->pid, &ret, 0);
+		vthread_join(threads[i], NULL);
 	}
 }
 

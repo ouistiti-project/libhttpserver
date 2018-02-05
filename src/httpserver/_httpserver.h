@@ -44,10 +44,13 @@ typedef struct buffer_s buffer_t;
 typedef struct http_connector_list_s http_connector_list_t;
 typedef struct http_client_modctx_s http_client_modctx_t;
 typedef struct http_message_method_s http_message_method_t;
+typedef struct http_server_session_s http_server_session_t;
 
 typedef int (*http_connect_t)(void *ctl, char *addr, int port);
+typedef int (*http_status_t)(void *ctl);
 typedef void (*http_flush_t)(void *ctl);
-typedef void (*http_close_t)(void *ctl);
+typedef void (*http_disconnect_t)(void *ctl);
+typedef void (*http_destroy_t)(void *ctl);
 typedef struct httpclient_ops_s httpclient_ops_t;
 
 struct httpclient_ops_s
@@ -55,8 +58,10 @@ struct httpclient_ops_s
 	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */
+	http_status_t status; /* callback to get the socket status*/
 	http_flush_t flush; /* callback to flush the socket */
-	http_close_t close; /* callback to close the socket */
+	http_disconnect_t disconnect; /* callback to close the socket */
+	http_destroy_t destroy; /* callback to close the socket */
 };
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
@@ -68,20 +73,19 @@ struct httpclient_ops_s
 #define CLIENT_KEEPALIVE 0x8000
 #define CLIENT_MACHINEMASK 0x000F
 #define CLIENT_NEW 0x0000
-#define CLIENT_REQUEST 0x0001
-#define CLIENT_PUSHREQUEST 0x0002
-#define CLIENT_PARSER1 0x0003
-#define CLIENT_PARSER2 0x0004
-#define CLIENT_RESPONSEHEADER 0x0005
-#define CLIENT_RESPONSECONTENT 0x0006
-#define CLIENT_PARSERERROR 0x0007
-#define CLIENT_COMPLETE 0x0008
+#define CLIENT_READING 0x0001
+#define CLIENT_WAITING 0x0002
+#define CLIENT_SENDING 0x0003
 #define CLIENT_EXIT 0x0009
 #define CLIENT_DEAD 0x000A
+
+#define WAIT_TIMER 2 //seconds
+
 struct http_client_s
 {
 	int sock;
 	int state;
+	int timeout;
 	http_server_t *server; /* the server which create the client */
 	vthread_t thread; /* The thread of socket management during the live of the connection */
 
@@ -96,8 +100,7 @@ struct http_client_s
 
 	buffer_t *sockdata;
 
-	dbentry_t *session;
-	buffer_t *session_storage;
+	http_server_session_t *session;
 #ifndef WIN32
 	struct sockaddr_un addr;
 #elif defined IPV6
@@ -135,6 +138,12 @@ struct http_server_s
 	http_server_mod_t *mod;
 	httpserver_ops_t *ops;
 	http_message_method_t *methods;
+#ifdef USE_POLL
+	struct pollfd *poll_set;
+#else
+	fd_set fds[3];
+#endif
+	int numfds;
 };
 
 typedef enum

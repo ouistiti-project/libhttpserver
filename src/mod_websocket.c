@@ -38,6 +38,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/ioctl.h>
+#include <signal.h>
 
 #if defined(MBEDTLS)
 # include <mbedtls/sha1.h>
@@ -91,19 +92,12 @@ typedef struct SHA1_ctx_s{ char *input; int inputlen;} SHA1_ctx;
 	}while(0)		 
 #endif
 
+#include "httpserver/log.h"
 #include "httpserver/httpserver.h"
 #include "httpserver/uri.h"
 #include "httpserver/mod_websocket.h"
 #include "httpserver/utils.h"
 #include "httpserver/websocket.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-#define dbg(...)
-#endif
 
 typedef struct _mod_websocket_s _mod_websocket_t;
 typedef struct _mod_websocket_ctx_s _mod_websocket_ctx_t;
@@ -209,7 +203,6 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 
 				if (ret == ESUCCESS)
 				{
-					ctx->socket = httpmessage_lock(response);
 					_mod_websocket_handshake(ctx, request, response);
 					httpmessage_addheader(response, str_connection, (char *)str_upgrade);
 					httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
@@ -230,6 +223,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 	}
 	else
 	{
+		ctx->socket = httpmessage_lock(response);
 		ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->protocol, request);
 		free(ctx->protocol);
 		ctx->protocol = NULL;
@@ -422,7 +416,22 @@ int default_websocket_run(void *arg, int socket, char *protocol, http_message_t 
 		info.sendresp = httpclient_addsender(ctl, NULL, NULL);
 
 		websocket_init(&_wsdefaul_config);
-		_websocket_main(&info);
+		/**
+		 * ignore SIGCHLD allows the child to die without to create a zombie.
+		 */
+		struct sigaction action;
+		action.sa_flags = SA_SIGINFO;
+		sigemptyset(&action.sa_mask);
+		action.sa_handler = SIG_IGN;
+		sigaction(SIGCHLD, &action, NULL);
+
+		pid_t pid;
+
+		if ((pid = fork()) == 0)
+		{
+			_websocket_main(&info);
+			exit(0);
+		}
 	}
 	else
 	{

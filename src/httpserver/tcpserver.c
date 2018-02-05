@@ -38,6 +38,8 @@
 # include <netinet/tcp.h>
 # include <arpa/inet.h>
 # include <netdb.h>
+# include <fcntl.h>
+#include <signal.h>
 
 #else
 
@@ -63,16 +65,9 @@ extern "C" {
 
 #endif
 
+#include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
-
-#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#ifdef DEBUG
-#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
-#else
-# define dbg(...)
-#endif
 
 #ifdef HTTPCLIENT_FEATURES
 static int tcpclient_connect(void *ctl, char *addr, int port)
@@ -119,6 +114,7 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 			ret = EINCOMPLETE;
 		else
 			ret = EREJECT;
+		//err("client %p recv error %s %d", client, strerror(errno), ret);
 	}
 	return ret;
 }
@@ -134,8 +130,25 @@ static int tcpclient_send(void *ctl, char *data, int length)
 			ret = EINCOMPLETE;
 		else
 			ret = EREJECT;
+		//err("client %p send error %s %d", client, strerror(errno), ret);
 	}
 	return ret;
+}
+
+static int tcpclient_status(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+	if (client->sock < 0)
+		return EREJECT;
+	int nbbytes = 0;
+	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
+	//ret = read(client->sock, NULL, 0);
+	//dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
+	if (ret < 0)
+		return EREJECT;
+	if (nbbytes == 0)
+		return EINCOMPLETE;
+	return ESUCCESS;
 }
 
 static void tcpclient_flush(void *ctl)
@@ -144,15 +157,35 @@ static void tcpclient_flush(void *ctl)
 	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 }
 
-static void tcpclient_close(void *ctl)
+static void tcpclient_disconnect(void *ctl)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	if (client->sock > -1)
 	{
+		/**
+		 * the client must receive information about the closing,
+		 * but the rest of this software needs to be aware too.
+		 * The real closing is done outside.
+		 */
 		shutdown(client->sock, SHUT_RDWR);
 		warn("client %p shutdown", client);
+	}
+}
+
+static void tcpclient_destroy(void *ctl)
+{
+	http_client_t *client = (http_client_t *)ctl;
+	if (client->sock > 0)
+	{
+		/**
+		 * Every body is aware about the closing.
+		 * And the socket is really closed now.
+		 * The socket must be close to free the
+		 * file descriptor of the kernel.
+		 */
+		warn("client %p close", client);
 #ifndef WIN32
-//		close(client->sock);
+		close(client->sock);
 #else
 		closesocket(client->sock);
 #endif
@@ -165,9 +198,15 @@ httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,
 	.sendresp = tcpclient_send,
+	.status = tcpclient_status,
 	.flush = tcpclient_flush,
-	.close = tcpclient_close,
+	.disconnect = tcpclient_disconnect,
+	.destroy = tcpclient_destroy,
 };
+
+static void handler(int sig, siginfo_t *si, void *arg)
+{
+}
 
 static int _tcpserver_start(http_server_t *server)
 {
@@ -176,6 +215,19 @@ static int _tcpserver_start(http_server_t *server)
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#else
+/**
+ * If the socket is open into more than one process, the sending on it
+ * may return a SIGPIPE.
+ * It is possible to disable the signal or to close the socket into
+ * all process except the sender.
+	struct sigaction action;
+	action.sa_flags = SA_SIGINFO;
+	sigemptyset(&action.sa_mask);
+	//action.sa_sigaction = handler;
+	action.sa_handler = SIG_IGN;
+	sigaction(SIGPIPE, &action, NULL);
+ */
 #endif
 	if (server->config->addr == NULL)
 	{
@@ -190,6 +242,14 @@ static int _tcpserver_start(http_server_t *server)
 			return -1;
 		}
 
+#ifdef SERVER_DEFER_ACCEPT
+		if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
+				warn("setsockopt(TCP_DEFER_ACCEPT) failed");
+#endif
+#ifdef SERVER_NODELAY
+		if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
+				warn("setsockopt(TCP_NODELAY) failed");
+#endif
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
@@ -259,7 +319,7 @@ static int _tcpserver_start(http_server_t *server)
 
 	if (!status)
 	{
-		status = listen(server->sock, server->config->maxclients);
+		status = listen(server->sock, SOMAXCONN);//server->config->maxclients);
 	}
 	if (status)
 	{
@@ -276,12 +336,19 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 {
 	http_client_t * client = httpclient_create(server, tcpclient_ops, server->config->chunksize);
 
+	if (server->sock < 0)
+		return NULL;
+
 	// Client connection request recieved
 	// Create new client socket to communicate
 	client->addr_size = sizeof(client->addr);
 	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
 	if (client->sock == -1)
 	{
+		if (errno != EINTR)
+		{
+			err("tcpserver accept error %s", strerror(errno));
+		}
 		httpclient_destroy(client);
 		return NULL;
 	}
@@ -293,7 +360,12 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 		NI_NUMERICHOST | NI_NUMERICSERV);
 
 	if (rc == 0) 
-		warn("new connection %p from %s %d", client, hoststr, server->config->port);
+		warn("new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
+#ifndef BLOCK_SOCKET
+	int flags;
+	flags = fcntl(httpclient_socket(client), F_GETFL, 0);
+	fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK | O_CLOEXEC);
+#endif
 	return client;
 }
 
@@ -303,10 +375,14 @@ static void _tcpserver_close(http_server_t *server)
 	while (client != NULL)
 	{
 		http_client_t *next = client->next;
-		client->ops.close(client);
+		client->ops.disconnect(client);
+		client->ops.destroy(client);
 		client = next;
 	}
-	shutdown(server->sock, SHUT_RDWR);
+	if (server->sock > 0)
+		shutdown(server->sock, SHUT_RDWR);
+	warn("server %p close", server);
+	server->sock = -1;
 #ifdef WIN32
 	WSACleanup();
 #endif

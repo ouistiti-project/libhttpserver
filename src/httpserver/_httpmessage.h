@@ -79,12 +79,21 @@ struct http_message_s
 		PARSE_PRECONTENT,
 		PARSE_CONTENT,
 		PARSE_END,
-		PARSE_MASK = 0x00FF,
+		PARSE_MASK = 0x000F,
+		GENERATE_INIT = 0x0010,
+		GENERATE_RESULT = 0x0020,
+		GENERATE_HEADER = 0x0030,
+		GENERATE_SEPARATOR = 0x0040,
+		GENERATE_CONTENT = 0x0050,
+		GENERATE_ERROR = 0x00E0,
+		GENERATE_END = 0x00F0,
+		GENERATE_MASK = 0x00F0,
 		PARSE_CONTINUE = 0x0100,
 	}
 	state;
 	int chunksize;
 	buffer_t *content;
+	buffer_t *header;
 	int content_length;
 	buffer_t *uri;
 	char *query;
