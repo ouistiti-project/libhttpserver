@@ -25,6 +25,11 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
+/**
+ * CAUTION!!!
+ * Websocket module is not able to run on TLS socket if VTHREAD is not
+ * activated.
+ */
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,6 +44,7 @@
 #include <sys/un.h>
 #include <sys/ioctl.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 #if defined(MBEDTLS)
 # include <mbedtls/sha1.h>
@@ -115,6 +121,7 @@ struct _mod_websocket_ctx_s
 	_mod_websocket_t *mod;
 	char *protocol;
 	int socket;
+	pid_t pid;
 };
 
 static const char str_connection[] = "Connection";
@@ -224,9 +231,10 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 	else
 	{
 		ctx->socket = httpmessage_lock(response);
-		ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->protocol, request);
+		ctx->pid = ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->protocol, request);
 		free(ctx->protocol);
 		ctx->protocol = NULL;
+
 		ret = ESUCCESS;
 	}
 	return ret;
@@ -247,6 +255,23 @@ static void _mod_websocket_freectx(void *arg)
 {
 	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)arg;
 
+	if (ctx->pid > 0)
+	{
+#ifdef VTHREAD
+		dbg("websocket: waitpid");
+		waitpid(ctx->pid, NULL, 0);
+		warn("websocket: freectx");
+#else
+		/**
+		 * ignore SIGCHLD allows the child to die without to create a z$
+		 */
+		struct sigaction action;
+		action.sa_flags = SA_SIGINFO;
+		sigemptyset(&action.sa_mask);
+		action.sa_handler = SIG_IGN;
+		sigaction(SIGCHLD, &action, NULL);
+#endif
+	}
 	free(ctx);
 }
 
@@ -328,21 +353,25 @@ static void *_websocket_main(void *arg)
 
 	while (!end)
 	{
+		int ret;
 		fd_set rdfs;
 		int maxfd = socket;
 		FD_ZERO(&rdfs);
 		FD_SET(socket, &rdfs);
 		maxfd = (maxfd > client)?maxfd:client;
 		FD_SET(client, &rdfs);
-		int ret = select(maxfd + 1, &rdfs, NULL, NULL, NULL);
+
+		ret = select(maxfd + 1, &rdfs, NULL, NULL, NULL);
 		if (ret > 0 && FD_ISSET(socket, &rdfs))
 		{
 			int length = 0;
+
 			ret = ioctl(socket, FIONREAD, &length);
 			if (ret == 0 && length > 0)
 			{
 				char *buffer = calloc(1, length);
 				ret = info->recvreq(info->ctx, (char *)buffer, length);
+				//char buffer[64];
 				//ret = read(socket, buffer, 63);
 				if (ret > 0)
 				{
@@ -351,10 +380,21 @@ static void *_websocket_main(void *arg)
 					ret = send(client, out, ret, MSG_NOSIGNAL);
 					free(out);
 				}
+				else if (ret < 0)
+				{
+					warn("websocket: %d %d error %s", ret, length, strerror(errno));
+					end = 1;
+				}
 				free(buffer);
 			}
 			else
+			{
+				char buffer[64];
+				ret = read(socket, buffer, 63);
+				warn("websocket: %d %d error %s", ret, length, strerror(errno));
+				pause();
 				end = 1;
+			}
 		}
 		else if (ret > 0 && FD_ISSET(client, &rdfs))
 		{
@@ -389,6 +429,7 @@ static void *_websocket_main(void *arg)
 		}
 		else if (errno != EAGAIN)
 		{
+			warn("websocket: error %s", strerror(errno));
 			end = 1;
 		}
 	}
@@ -405,6 +446,7 @@ static websocket_t _wsdefaul_config =
 };
 int default_websocket_run(void *arg, int socket, char *protocol, http_message_t *request)
 {
+	pid_t pid;
 	int wssock = _websocket_socket(arg, protocol);
 
 	if (wssock > 0)
@@ -416,26 +458,14 @@ int default_websocket_run(void *arg, int socket, char *protocol, http_message_t 
 		info.sendresp = httpclient_addsender(ctl, NULL, NULL);
 
 		websocket_init(&_wsdefaul_config);
-		/**
-		 * ignore SIGCHLD allows the child to die without to create a zombie.
-		 */
-		struct sigaction action;
-		action.sa_flags = SA_SIGINFO;
-		sigemptyset(&action.sa_mask);
-		action.sa_handler = SIG_IGN;
-		sigaction(SIGCHLD, &action, NULL);
-
-		pid_t pid;
 
 		if ((pid = fork()) == 0)
 		{
 			_websocket_main(&info);
+			err("websocket: process died");
 			exit(0);
 		}
+		close(wssock);
 	}
-	else
-	{
-		close(socket);
-	}
-	return wssock;
+	return pid;
 }
