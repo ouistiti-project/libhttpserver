@@ -65,6 +65,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	//action.sa_sigaction = handler;
 	/**
 	 * ignore SIGCHLD allows the child to die without to create a zombie.
+	 * But the parent doesn't receive information.
 	 */
 	action.sa_handler = SIG_IGN;
 	sigaction(SIGCHLD, &action, NULL);
