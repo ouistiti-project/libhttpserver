@@ -1756,12 +1756,15 @@ static int _httpclient_run(http_client_t *client)
 			/**
 			 * the modules need to be free before any
 			 * socket closing.
-			 * This part may not be into destroy function.
+			 * This part may not be into destroy function, because this 
+			 * one is called by the vthread parent after that the client
+			 * died.
 			 */
 			http_client_modctx_t *modctx = client->modctx;
 			while (modctx)
 			{
 				http_client_modctx_t *next = modctx->next;
+				dbg("free module instance %s", modctx->name);
 				if (modctx->freectx)
 				{
 					modctx->freectx(modctx->ctx);
