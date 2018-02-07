@@ -75,6 +75,7 @@ struct http_server_mod_s
 struct http_client_modctx_s
 {
 	void *ctx;
+	const char *name;
 	http_freectx_t freectx;
 	http_client_modctx_t *next;
 };
@@ -1895,6 +1896,7 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 				ret = EREJECT;
 		}
 		modctx->freectx = mod->freectx;
+		modctx->name = mod->name;
 		mod = mod->next;
 		if (client->modctx == NULL)
 			client->modctx = modctx;
