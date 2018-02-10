@@ -34,14 +34,15 @@ extern "C"
 {
 #endif
 
-typedef int (*mod_websocket_run_t)(void *arg, int socket, char *protocol, http_message_t *request);
-int default_websocket_run(void *arg, int socket, char *protocol, http_message_t *request);
+typedef int (*mod_websocket_run_t)(void *arg, int socket, char *filepath, http_message_t *request);
+int default_websocket_run(void *arg, int socket, char *filepath, http_message_t *request);
 
 typedef struct mod_websocket_s mod_websocket_t;
 struct mod_websocket_s
 {
-	char *services;
-	char *path;
+	char *docroot;
+	char *allow;
+	char *deny;
 	int options;
 };
 
