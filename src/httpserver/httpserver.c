@@ -75,6 +75,7 @@ struct http_server_mod_s
 struct http_client_modctx_s
 {
 	void *ctx;
+	const char *name;
 	http_freectx_t freectx;
 	http_client_modctx_t *next;
 };
@@ -1648,7 +1649,17 @@ static int _httpclient_run(http_client_t *client)
 			if (client->request_queue->response->mode & HTTPMESSAGE_LOCKED)
 			{
 				client->state |= CLIENT_LOCKED;
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				if (!(client->request_queue->response->state & PARSE_CONTINUE))
+				{
+					/**
+					 * On connector ESUCCESS
+					 * a normal connector has to continue while the content
+					 * is not fully sent.
+					 * a locked connector has to stop.
+					 */
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					response_ret = ESUCCESS;
+				}
 			}
 			if (response_ret == ESUCCESS)
 			{
@@ -1755,14 +1766,23 @@ static int _httpclient_run(http_client_t *client)
 			/**
 			 * the modules need to be free before any
 			 * socket closing.
-			 * This part may not be into destroy function.
+			 * This part may not be into destroy function, because this 
+			 * one is called by the vthread parent after that the client
+			 * died.
 			 */
 			http_client_modctx_t *modctx = client->modctx;
 			while (modctx)
 			{
 				http_client_modctx_t *next = modctx->next;
+				dbg("free module instance %s", modctx->name);
 				if (modctx->freectx)
 				{
+					/**
+					 * The module may be used by the locked client.
+					 * Example: it's forbidden to free TLS while the
+					 * client is running
+					 * But after is impossible to free the module.
+					 */
 					modctx->freectx(modctx->ctx);
 				}
 				free(modctx);
@@ -1895,6 +1915,7 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 				ret = EREJECT;
 		}
 		modctx->freectx = mod->freectx;
+		modctx->name = mod->name;
 		mod = mod->next;
 		if (client->modctx == NULL)
 			client->modctx = modctx;

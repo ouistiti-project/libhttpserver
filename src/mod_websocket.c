@@ -25,6 +25,11 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
+/**
+ * CAUTION!!!
+ * Websocket module is not able to run on TLS socket if VTHREAD is not
+ * activated.
+ */
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,6 +44,7 @@
 #include <sys/un.h>
 #include <sys/ioctl.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 #if defined(MBEDTLS)
 # include <mbedtls/sha1.h>
@@ -113,8 +119,9 @@ struct _mod_websocket_s
 struct _mod_websocket_ctx_s
 {
 	_mod_websocket_t *mod;
-	char *protocol;
+	char *filepath;
 	int socket;
+	pid_t pid;
 };
 
 static const char str_connection[] = "Connection";
@@ -143,34 +150,18 @@ static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *
 	}
 }
 
-static int _mod_websocket_check(_mod_websocket_ctx_t *ctx, char * protocol)
+static int _checkname(mod_websocket_t *config, char *pathname)
 {
-	int ret = EREJECT;
-
-	if (protocol)
+	if (pathname[0] == '.')
 	{
-		char *service = ctx->mod->config->services;
-		int length = 0;
-		char *end = service;
-
-		while (end != NULL)
-		{
-			end = strchr(service, ',');
-			if (end)
-				length = end - service;
-			else
-				length = strlen(service);
-
-			if (strlen(protocol) == length && !strncmp(protocol, service, length))
-			{
-				ret = ESUCCESS;
-				break;
-			}
-			service += length + 1;
-		}
+		return  EREJECT;
 	}
-
-	return ret;
+	if (utils_searchexp(pathname, config->deny) == ESUCCESS &&
+		utils_searchexp(pathname, config->allow) != ESUCCESS)
+	{
+		return  EREJECT;
+	}
+	return ESUCCESS;
 }
 
 static int websocket_connector(void *arg, http_message_t *request, http_message_t *response)
@@ -178,7 +169,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 	int ret = EREJECT;
 	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)arg;
 
-	if (ctx->protocol == NULL)
+	if (ctx->filepath == NULL)
 	{
 		char *connection = httpmessage_REQUEST(request, str_connection);
 
@@ -188,21 +179,38 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 
 			if (strcasestr(upgrade, str_websocket))
 			{
-				char *protocol = httpmessage_REQUEST(request, str_protocol);
-				if (protocol[0] != '\0')
+				char *protocol = NULL;
+				char *uri = utils_urldecode(httpmessage_REQUEST(request, "uri"));
+				if (_checkname(ctx->mod->config, uri) == ESUCCESS)
 				{
-					ctx->protocol = malloc(strlen(protocol) + 1);
-					strcpy(ctx->protocol, protocol);
-					httpmessage_addheader(response, str_protocol, ctx->protocol);
-				}
-				else
-				{
-					ctx->protocol = utils_urldecode(httpmessage_REQUEST(request, "uri"));
-				}
-				ret = _mod_websocket_check(ctx, ctx->protocol);
+					struct stat filestat;
+					char *filepath = utils_buildpath(ctx->mod->config->docroot, uri, "", "", &filestat);
 
-				if (ret == ESUCCESS)
+					protocol = httpmessage_REQUEST(request, str_protocol);
+					if (protocol == NULL || protocol[0] == '\0')
+					{
+						protocol = basename(uri);
+					}
+					if (filepath == NULL)
+					{
+						filepath = utils_buildpath(ctx->mod->config->docroot, protocol, "", "", &filestat);
+					}
+					else if (S_ISDIR(filestat.st_mode))
+					{
+						filepath = utils_buildpath(ctx->mod->config->docroot, uri, protocol, "", &filestat);
+					}
+					if (filepath && S_ISSOCK(filestat.st_mode))
+						ctx->filepath = filepath;
+					else if (filepath)
+					{
+						free(filepath);
+					}
+				}
+				if (ctx->filepath)
 				{
+					if (protocol != NULL)
+						httpmessage_addheader(response, str_protocol, protocol);
+
 					_mod_websocket_handshake(ctx, request, response);
 					httpmessage_addheader(response, str_connection, (char *)str_upgrade);
 					httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
@@ -214,19 +222,19 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 				else
 				{
 					httpmessage_result(response, RESULT_404);
-					free(ctx->protocol);
-					ctx->protocol = NULL;
 					ret = ESUCCESS;
 				}
+				free(uri);
 			}
 		}
 	}
 	else
 	{
 		ctx->socket = httpmessage_lock(response);
-		ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->protocol, request);
-		free(ctx->protocol);
-		ctx->protocol = NULL;
+		ctx->pid = ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->filepath, request);
+		free(ctx->filepath);
+		ctx->filepath = NULL;
+
 		ret = ESUCCESS;
 	}
 	return ret;
@@ -247,6 +255,23 @@ static void _mod_websocket_freectx(void *arg)
 {
 	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)arg;
 
+	if (ctx->pid > 0)
+	{
+#ifdef VTHREAD
+		dbg("websocket: waitpid");
+		waitpid(ctx->pid, NULL, 0);
+		warn("websocket: freectx");
+#else
+		/**
+		 * ignore SIGCHLD allows the child to die without to create a z$
+		 */
+		struct sigaction action;
+		action.sa_flags = SA_SIGINFO;
+		sigemptyset(&action.sa_mask);
+		action.sa_handler = SIG_IGN;
+		sigaction(SIGCHLD, &action, NULL);
+#endif
+	}
 	free(ctx);
 }
 
@@ -259,7 +284,7 @@ void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod
 	mod->run = run;
 	mod->runarg = runarg;
 	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod, str_websocket);
-	warn("websocket support %s %s", mod->config->path, mod->config->services);
+	warn("websocket support %s", mod->config->docroot);
 	return mod;
 }
 
@@ -268,14 +293,13 @@ void mod_websocket_destroy(void *data)
 	free(data);
 }
 
-static int _websocket_socket(void *arg, char *protocol)
+static int _websocket_socket(char *filepath)
 {
-	mod_websocket_t *config = (mod_websocket_t *)arg;
 	int sock;
 	struct sockaddr_un addr;
 	memset(&addr, 0, sizeof(struct sockaddr_un));
 	addr.sun_family = AF_UNIX;
-	snprintf(addr.sun_path, sizeof(addr.sun_path) - 1, "%s/%s", config->path, protocol);
+	strncpy(addr.sun_path, filepath, sizeof(addr.sun_path) - 1);
 
 	dbg("websocket %s", addr.sun_path);
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -328,21 +352,25 @@ static void *_websocket_main(void *arg)
 
 	while (!end)
 	{
+		int ret;
 		fd_set rdfs;
 		int maxfd = socket;
 		FD_ZERO(&rdfs);
 		FD_SET(socket, &rdfs);
 		maxfd = (maxfd > client)?maxfd:client;
 		FD_SET(client, &rdfs);
-		int ret = select(maxfd + 1, &rdfs, NULL, NULL, NULL);
+
+		ret = select(maxfd + 1, &rdfs, NULL, NULL, NULL);
 		if (ret > 0 && FD_ISSET(socket, &rdfs))
 		{
 			int length = 0;
+
 			ret = ioctl(socket, FIONREAD, &length);
 			if (ret == 0 && length > 0)
 			{
 				char *buffer = calloc(1, length);
 				ret = info->recvreq(info->ctx, (char *)buffer, length);
+				//char buffer[64];
 				//ret = read(socket, buffer, 63);
 				if (ret > 0)
 				{
@@ -351,10 +379,20 @@ static void *_websocket_main(void *arg)
 					ret = send(client, out, ret, MSG_NOSIGNAL);
 					free(out);
 				}
+				else if (ret < 0)
+				{
+					warn("websocket: %d %d error %s", ret, length, strerror(errno));
+					end = 1;
+				}
 				free(buffer);
 			}
 			else
+			{
+				char buffer[64];
+				ret = read(socket, buffer, 63);
+				warn("websocket: %d %d error %s", ret, length, strerror(errno));
 				end = 1;
+			}
 		}
 		else if (ret > 0 && FD_ISSET(client, &rdfs))
 		{
@@ -389,6 +427,7 @@ static void *_websocket_main(void *arg)
 		}
 		else if (errno != EAGAIN)
 		{
+			warn("websocket: error %s", strerror(errno));
 			end = 1;
 		}
 	}
@@ -403,9 +442,10 @@ static websocket_t _wsdefaul_config =
 	.onping = websocket_pong,
 	.type = WS_TEXT,
 };
-int default_websocket_run(void *arg, int socket, char *protocol, http_message_t *request)
+int default_websocket_run(void *arg, int socket, char *filepath, http_message_t *request)
 {
-	int wssock = _websocket_socket(arg, protocol);
+	pid_t pid;
+	int wssock = _websocket_socket(filepath);
 
 	if (wssock > 0)
 	{
@@ -416,26 +456,14 @@ int default_websocket_run(void *arg, int socket, char *protocol, http_message_t 
 		info.sendresp = httpclient_addsender(ctl, NULL, NULL);
 
 		websocket_init(&_wsdefaul_config);
-		/**
-		 * ignore SIGCHLD allows the child to die without to create a zombie.
-		 */
-		struct sigaction action;
-		action.sa_flags = SA_SIGINFO;
-		sigemptyset(&action.sa_mask);
-		action.sa_handler = SIG_IGN;
-		sigaction(SIGCHLD, &action, NULL);
-
-		pid_t pid;
 
 		if ((pid = fork()) == 0)
 		{
 			_websocket_main(&info);
+			err("websocket: process died");
 			exit(0);
 		}
+		close(wssock);
 	}
-	else
-	{
-		close(socket);
-	}
-	return wssock;
+	return pid;
 }
