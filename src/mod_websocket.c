@@ -349,7 +349,6 @@ static void *_websocket_main(void *arg)
 	int socket = info->socket;
 	int client = info->client;
 	int end = 0;
-
 	while (!end)
 	{
 		int ret;
