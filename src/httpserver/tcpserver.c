@@ -244,7 +244,7 @@ static int _tcpserver_start(http_server_t *server)
 #ifdef IPV6
 	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
 #else
-	hints.ai_family = AF_INET;    /* Allow IPv4 or IPv6 */
+	hints.ai_family = AF_INET;
 #endif
 	hints.ai_socktype = SOCK_STREAM; /* Stream socket */
 	hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;    /* For wildcard IP address */
@@ -255,8 +255,7 @@ static int _tcpserver_start(http_server_t *server)
 
 	status = getaddrinfo(server->config->addr, "http", &hints, &result);
 	if (status != 0) {
-		err("getaddrinfo: %s\n", gai_strerror(status));
-		return -1;
+		result = &hints;
 	}
 
 	for (rp = result; rp != NULL; rp = rp->ai_next)
@@ -272,12 +271,55 @@ static int _tcpserver_start(http_server_t *server)
 				warn("setsockopt(SO_REUSEPORT) failed");
 #endif
 
-		((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
-		if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
-			break;                  /* Success */
+		int ret;
+		if (!rp->ai_addr)
+		{
+			struct sockaddr *saddr;
+			int saddrlen;
+#ifdef IPV6
+			if (rp->ai_family == AF_INET6)
+			{
+				struct sockaddr_in6 saddr_in6;
+				saddr_in6.sin6_port = htons(server->config->port);
+				saddr_in6.sin6_flowinfo = 0;
+				saddr_in6.sin6_addr = in6addr_any;
+				saddr = (struct sockaddr *)&saddr_in6;
+				saddrlen = sizeof(saddr_in6);
+			}
+			else if (rp->ai_family == AF_INET)
+#endif
+			{
+				struct sockaddr_in saddr_in;
+				saddr_in.sin_family = AF_INET;
+				saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
+				saddr_in.sin_port = htons(server->config->port);
+				saddr = (struct sockaddr *)&saddr_in;
+				saddrlen = sizeof(saddr_in);
+			}
+
+			status = bind(server->sock, saddr, saddrlen);
+		}
+		else
+		{
+#ifdef IPV6
+			if (rp->ai_family == AF_INET6)
+			{
+				((struct sockaddr_in6 *)rp->ai_addr)->sin6_port = htons(server->config->port);
+			}
+			else if (rp->ai_family == AF_INET)
+#endif
+			{
+				((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
+			}
+			status = bind(server->sock, rp->ai_addr, rp->ai_addrlen);
+		}
+		if (status == 0)
+			/* Success */
+			break;
 		server->ops->close(server);
 	}
-	freeaddrinfo(result);
+	if (result != &hints)
+		freeaddrinfo(result);
 
 #ifdef SERVER_DEFER_ACCEPT
 	if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
