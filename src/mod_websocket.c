@@ -421,6 +421,12 @@ static void *_websocket_main(void *arg)
 					}
 					free(out);
 				}
+				if (ret <= 0)
+				{
+					end = 1;
+					length = 0;
+					warn("websocket server died");
+				}
 				free(buffer);
 			}
 		}
