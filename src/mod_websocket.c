@@ -349,7 +349,6 @@ static void *_websocket_main(void *arg)
 	int socket = info->socket;
 	int client = info->client;
 	int end = 0;
-
 	while (!end)
 	{
 		int ret;
@@ -421,6 +420,12 @@ static void *_websocket_main(void *arg)
 						size += length;
 					}
 					free(out);
+				}
+				if (ret <= 0)
+				{
+					end = 1;
+					length = 0;
+					warn("websocket server died");
 				}
 				free(buffer);
 			}

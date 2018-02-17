@@ -74,17 +74,24 @@ static int tcpclient_connect(void *ctl, char *addr, int port)
 {
 	http_client_t *client = (http_client_t *)ctl;
 
+#ifdef IPV6
+	struct sockaddr_in6 *saddr;
+	saddr = (struct sockaddr_in6 *)&client->addr;
+	saddr.sin6_family = AF_INET6;
+	saddr.sin6_port = htons(port);
+	inet_pton(addr, &saddr->sin6_addr);
+#else
 	struct sockaddr_in *saddr;
-
-	client->addr_size = sizeof(*saddr);
 	saddr = (struct sockaddr_in *)&client->addr;
 	saddr->sin_family = AF_INET;
 	saddr->sin_port = htons(port);
 	inet_aton(addr, &saddr->sin_addr);
+#endif
+	client->addr_size = sizeof(*saddr);
 
 	if (client->sock != 0)
 		return EREJECT;
-	client->sock = socket(AF_INET, SOCK_STREAM, 0);
+	client->sock = socket(saddr->sin_family, SOCK_STREAM, 0);
 	if (client->sock == -1)
 	{
 		client->sock = 0;
@@ -229,27 +236,34 @@ static int _tcpserver_start(http_server_t *server)
 	sigaction(SIGPIPE, &action, NULL);
  */
 #endif
-	if (server->config->addr == NULL)
-	{
-#ifdef IPV6
-		server->sock = socket(AF_INET6, SOCK_STREAM, IPPROTO_IP);
-#else
-		server->sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP);
-#endif
-		if ( server->sock < 0 )
-		{
-			warn("Error creating socket");
-			return -1;
-		}
 
-#ifdef SERVER_DEFER_ACCEPT
-		if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
-				warn("setsockopt(TCP_DEFER_ACCEPT) failed");
+	struct addrinfo hints;
+	struct addrinfo *result, *rp;
+
+	memset(&hints, 0, sizeof(struct addrinfo));
+#ifdef IPV6
+	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
+#else
+	hints.ai_family = AF_INET;
 #endif
-#ifdef SERVER_NODELAY
-		if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
-				warn("setsockopt(TCP_NODELAY) failed");
-#endif
+	hints.ai_socktype = SOCK_STREAM; /* Stream socket */
+	hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;    /* For wildcard IP address */
+	hints.ai_protocol = 0;          /* Any protocol */
+	hints.ai_canonname = NULL;
+	hints.ai_addr = NULL;
+	hints.ai_next = NULL;
+
+	status = getaddrinfo(server->config->addr, "http", &hints, &result);
+	if (status != 0) {
+		result = &hints;
+	}
+
+	for (rp = result; rp != NULL; rp = rp->ai_next)
+	{
+		server->sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if (server->sock == -1)
+			continue;
+
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
@@ -257,65 +271,64 @@ static int _tcpserver_start(http_server_t *server)
 				warn("setsockopt(SO_REUSEPORT) failed");
 #endif
 
-		int socklen = sizeof(struct sockaddr_in);
-#ifdef IPV6
-		struct sockaddr_in6saddr;
-		saddr.sin6_family = AF_INET6;
-		saddr.sin6_port = htons(server->config->port);
-		saddr.sin6_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
-#else
-		struct sockaddr_in saddr;
-
-		saddr.sin_family = AF_INET;
-		saddr.sin_port = htons(server->config->port);
-		saddr.sin_addr.s_addr = htonl(INADDR_ANY); // bind socket to any interface
-#endif
-		status = bind(server->sock, (struct sockaddr *)&saddr, socklen);
-	}
-	else
-	{
-		struct addrinfo hints;
-		struct addrinfo *result, *rp;
-
-		memset(&hints, 0, sizeof(struct addrinfo));
-#ifdef IPV6
-		hints.ai_family = AF_INET6;    /* Allow IPv4 or IPv6 */
-#else
-		hints.ai_family = AF_INET;    /* Allow IPv4 or IPv6 */
-#endif
-		hints.ai_socktype = SOCK_STREAM; /* Stream socket */
-		hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
-		hints.ai_protocol = 0;          /* Any protocol */
-		hints.ai_canonname = NULL;
-		hints.ai_addr = NULL;
-		hints.ai_next = NULL;
-
-		status = getaddrinfo(server->config->addr, NULL, &hints, &result);
-		if (status != 0) {
-			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-			return -1;
-		}
-
-		for (rp = result; rp != NULL; rp = rp->ai_next)
+		int ret;
+		if (!rp->ai_addr)
 		{
-			server->sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-			if (server->sock == -1)
-				continue;
-
-			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
-					warn("setsockopt(SO_REUSEADDR) failed");
-#ifdef SO_REUSEPORT
-			if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEPORT, (void *)&(int){ 1 }, sizeof(int)) < 0)
-					warn("setsockopt(SO_REUSEPORT) failed");
+			struct sockaddr *saddr;
+			int saddrlen;
+#ifdef IPV6
+			if (rp->ai_family == AF_INET6)
+			{
+				struct sockaddr_in6 saddr_in6;
+				saddr_in6.sin6_port = htons(server->config->port);
+				saddr_in6.sin6_flowinfo = 0;
+				saddr_in6.sin6_addr = in6addr_any;
+				saddr = (struct sockaddr *)&saddr_in6;
+				saddrlen = sizeof(saddr_in6);
+			}
+			else if (rp->ai_family == AF_INET)
 #endif
+			{
+				struct sockaddr_in saddr_in;
+				saddr_in.sin_family = AF_INET;
+				saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
+				saddr_in.sin_port = htons(server->config->port);
+				saddr = (struct sockaddr *)&saddr_in;
+				saddrlen = sizeof(saddr_in);
+			}
 
-			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
-			if (bind(server->sock, rp->ai_addr, rp->ai_addrlen) == 0)
-				break;                  /* Success */
-			server->ops->close(server);
+			status = bind(server->sock, saddr, saddrlen);
 		}
-		freeaddrinfo(result); 
+		else
+		{
+#ifdef IPV6
+			if (rp->ai_family == AF_INET6)
+			{
+				((struct sockaddr_in6 *)rp->ai_addr)->sin6_port = htons(server->config->port);
+			}
+			else if (rp->ai_family == AF_INET)
+#endif
+			{
+				((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
+			}
+			status = bind(server->sock, rp->ai_addr, rp->ai_addrlen);
+		}
+		if (status == 0)
+			/* Success */
+			break;
+		server->ops->close(server);
 	}
+	if (result != &hints)
+		freeaddrinfo(result);
+
+#ifdef SERVER_DEFER_ACCEPT
+	if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
+			warn("setsockopt(TCP_DEFER_ACCEPT) failed");
+#endif
+#ifdef SERVER_NODELAY
+	if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
+			warn("setsockopt(TCP_NODELAY) failed");
+#endif
 
 	if (!status)
 	{

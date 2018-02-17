@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <byteswap.h>
 
 #include "log.h"
 #include "websocket.h"
@@ -96,15 +97,15 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 		payloadlen = frame.payloadlen;
 		if (frame.payloadlen == 126)
 		{
-			uint32_t *more = (uint32_t *)payload;
-			payloadlen = *more;
-			payload += sizeof(*more);
+			uint16_t more = __bswap_16(*(uint16_t *)payload);
+			payloadlen = more;
+			payload += sizeof(more);
 		}
 		else if (frame.payloadlen == 127)
 		{
-			uint64_t *more = (uint64_t *)payload;
-			payloadlen += *more;
-			payload += sizeof(*more);
+			uint64_t more = __bswap_32(*(uint64_t *)payload);
+			payloadlen += more;
+			payload += sizeof(more);
 		}
 		else
 			payloadlen = frame.payloadlen;
