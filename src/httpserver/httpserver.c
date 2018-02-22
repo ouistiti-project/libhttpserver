@@ -579,8 +579,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					 * Is possible to use the buffer with the function
 					 *  httpmessage_content
 					 */
-					//int length = data->length -(data->offset - data->data);
-					int length = data->length;
+					int length = data->length -(data->offset - data->data);
+					//int length = data->length;
 					message->content = data;
 
 					/**
@@ -688,12 +688,20 @@ http_client_t *httpmessage_client(http_message_t *message)
 int httpmessage_content(http_message_t *message, char **data, int *size)
 {
 	*size = 0;
-	if (message->content)
+	if (message->state < PARSE_CONTENT)
+		return EINCOMPLETE;
+	if (message->state > PARSE_CONTENT)
+		return EREJECT;
+	if (data && message->content)
 	{
 		*data = message->content->data;
 		*size = message->content->length;
 	}
-	return message->content_length + *size;
+	/**
+	 * message->content_length decreases when the message parser
+	 * receives a new chunk of data.
+	 */
+	return message->content_length;
 }
 
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
@@ -1305,7 +1313,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 	}
 
 	http_message_t *response = request->response;
-
 	switch (response->state & GENERATE_MASK)
 	{
 		case GENERATE_INIT:
@@ -1815,7 +1822,7 @@ static int _httpclient_run(http_client_t *client)
 		if (size > 0)
 		{
 			client->sockdata->length += size;
-			client->sockdata->data[client->sockdata->length] = 0;
+			client->sockdata->offset[size] = 0;
 			request_ret = ECONTINUE;
 			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_WAITING)
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
