@@ -253,7 +253,7 @@ static int _tcpserver_start(http_server_t *server)
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
 
-	status = getaddrinfo(server->config->addr, "http", &hints, &result);
+	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
 	if (status != 0) {
 		result = &hints;
 	}

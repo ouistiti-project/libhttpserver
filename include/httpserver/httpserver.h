@@ -91,6 +91,7 @@ typedef struct http_client_s http_client_t;
 extern const char *str_get;
 extern const char *str_post;
 extern const char *str_head;
+extern const char *str_defaultscheme;
 
 typedef enum
 {
@@ -231,7 +232,7 @@ http_server_t *httpserver_create(http_server_config_t *config);
  * @return the value of the attribut or a empty string
  */
 
-char *httpserver_INFO(http_server_t *server, const char *key);
+const char *httpserver_INFO(http_server_t *server, const char *key);
 
 /**
  * @brief add a HTTP method to manage
@@ -471,7 +472,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
  * @return the value of the attribut or a empty string
  */
 
-char *httpmessage_SERVER(http_message_t *message, const char *key);
+const char *httpmessage_SERVER(http_message_t *message, const char *key);
 
 /**
  * @brief get value for different attributs of the request
@@ -483,7 +484,7 @@ char *httpmessage_SERVER(http_message_t *message, const char *key);
  *
  * @return the value of the attribut or a empty string
  */
-char *httpmessage_REQUEST(http_message_t *message, const char *key);
+const char *httpmessage_REQUEST(http_message_t *message, const char *key);
 
 /**
  * @brief get value of each cookie of the request
@@ -493,7 +494,7 @@ char *httpmessage_REQUEST(http_message_t *message, const char *key);
  *
  * @return the value of the attribut or a null pointer
  */
-char *httpmessage_COOKIE(http_message_t *message, const char *key);
+const char *httpmessage_COOKIE(http_message_t *message, const char *key);
 
 /**
  * @brief get value for the session used by the request
@@ -506,7 +507,7 @@ char *httpmessage_COOKIE(http_message_t *message, const char *key);
  *
  * @return the value of the attribut or a empty string
  */
-char *httpmessage_SESSION(http_message_t *message, const char *key, char *value);
+const char *httpmessage_SESSION(http_message_t *message, const char *key, char *value);
 
 /**********************************************************************/
 typedef struct httpclient_ops_s httpclient_ops_t;

@@ -109,6 +109,10 @@ static http_server_config_t defaultconfig = {
 const char *str_get = "GET";
 const char *str_post = "POST";
 const char *str_head = "HEAD";
+#ifndef DEFAULTSCHEME
+#define DEFAULTSCHEME
+const char *str_defaultscheme = "http";
+#endif
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
@@ -1173,7 +1177,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 		vhost = iterator->vhost;
 		if (vhost != NULL)
 		{
-			char *host = httpmessage_REQUEST(request, "host");
+			const char *host = httpmessage_REQUEST(request, "Host");
 			if (!strcasecmp(vhost, host))
 				vhost = NULL;
 		}
@@ -2575,12 +2579,11 @@ void httpserver_destroy(http_server_t *server)
 }
 /***********************************************************************/
 
-static char default_value[8] = {0};
+static const char default_value[8] = {0};
 static char host[NI_MAXHOST], service[NI_MAXSERV];
-char *httpserver_INFO(http_server_t *server, const char *key)
+const char *httpserver_INFO(http_server_t *server, const char *key)
 {
-	char *value = default_value;
-	memset(default_value, 0, sizeof(default_value));
+	const char *value = default_value;
 
 	if (!strcasecmp(key, "name"))
 	{
@@ -2622,9 +2625,9 @@ char *httpserver_INFO(http_server_t *server, const char *key)
 	return value;
 }
 
-char *httpmessage_COOKIE(http_message_t *message, const char *key)
+const char *httpmessage_COOKIE(http_message_t *message, const char *key)
 {
-	char *value = NULL;
+	const char *value = NULL;
 	if (message->client == NULL)
 		return NULL;
 	if (message->cookies == NULL)
@@ -2707,12 +2710,11 @@ char *httpmessage_COOKIE(http_message_t *message, const char *key)
 	return value;
 }
 
-char *httpmessage_SERVER(http_message_t *message, const char *key)
+const char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
 	if (message->client == NULL)
 		return NULL;
-	char *value = default_value;
-	memset(default_value, 0, sizeof(default_value));
+	const char *value = default_value;
 
 	if (!strcasecmp(key, "port"))
 	{
@@ -2749,9 +2751,9 @@ char *httpmessage_SERVER(http_message_t *message, const char *key)
 	return value;
 }
 
-char *httpmessage_REQUEST(http_message_t *message, const char *key)
+const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 {
-	char *value = default_value;
+	const char *value = default_value;
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
@@ -2764,11 +2766,11 @@ char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
-		strcpy(value, "http");
+		value = str_defaultscheme;
 	}
 	else if (!strcasecmp(key, "version"))
 	{
-		strcpy(value, _http_message_version[(message->version & HTTPVERSION_MASK)]);
+		value = _http_message_version[(message->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "method"))
 	{
@@ -2831,7 +2833,7 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, http_cli
 	return session;
 }
 
-char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
+const char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 {
 	dbentry_t *sessioninfo = NULL;
 	if (message->client == NULL)
@@ -2894,5 +2896,5 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 	{
 		return default_value;
 	}
-	return sessioninfo->value;
+	return (const char *)sessioninfo->value;
 }

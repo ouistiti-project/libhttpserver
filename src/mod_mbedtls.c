@@ -159,10 +159,10 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 			mbedtls_ssl_conf_ca_chain(&config->conf, &config->cachain, NULL);
 	}
 
-	char *pers = httpserver_INFO(server, "name");
+	const char *pers = httpserver_INFO(server, "name");
 	if (! pers)
 	{
-		pers = (char *)str_mbedtls;
+		pers = str_mbedtls;
 	}
 	if (pers)
 	{

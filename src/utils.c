@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "httpserver/log.h"
 #include "httpserver/httpserver.h"
@@ -312,7 +313,6 @@ char *utils_buildpath(const char *docroot, const char *path_info,
 	snprintf(filepath, length + 1, "%s/%s%s%s", docroot, path_info, filename, ext);
 
 	filepath[length] = '\0';
-
 	if (filestat)
 	{
 		memset(filestat, 0, sizeof(*filestat));

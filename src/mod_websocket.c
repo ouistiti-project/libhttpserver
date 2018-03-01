@@ -133,7 +133,7 @@ static const char str_key[] = "Sec-WebSocket-Key";
 
 static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *request, http_message_t *response)
 {
-	char *key = httpmessage_REQUEST(request, str_key);
+	const char *key = httpmessage_REQUEST(request, str_key);
 	if (key && key[0] != 0)
 	{
 		char accept[20] = {0};
@@ -171,15 +171,15 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 
 	if (ctx->filepath == NULL)
 	{
-		char *connection = httpmessage_REQUEST(request, str_connection);
+		const char *connection = httpmessage_REQUEST(request, str_connection);
 
 		if (strcasestr(connection, str_upgrade))
 		{
-			char *upgrade = httpmessage_REQUEST(request, str_upgrade);
+			const char *upgrade = httpmessage_REQUEST(request, str_upgrade);
 
 			if (strcasestr(upgrade, str_websocket))
 			{
-				char *protocol = NULL;
+				const char *protocol = NULL;
 				char *uri = utils_urldecode(httpmessage_REQUEST(request, "uri"));
 				if (_checkname(ctx->mod->config, uri) == ESUCCESS)
 				{
