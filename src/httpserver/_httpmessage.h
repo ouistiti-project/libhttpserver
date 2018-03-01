@@ -94,7 +94,7 @@ struct http_message_s
 	int chunksize;
 	buffer_t *content;
 	buffer_t *header;
-	int content_length;
+	unsigned long long content_length;
 	buffer_t *uri;
 	char *query;
 	http_message_version_e version;

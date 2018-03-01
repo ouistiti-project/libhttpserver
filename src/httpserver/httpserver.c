@@ -689,23 +689,23 @@ http_client_t *httpmessage_client(http_message_t *message)
 	return message->client;
 }
 
-int httpmessage_content(http_message_t *message, char **data, int *size)
+int httpmessage_content(http_message_t *message, char **data, unsigned long long *content_length)
 {
-	*size = 0;
-	if (message->state < PARSE_CONTENT)
-		return EINCOMPLETE;
-	if (message->state > PARSE_CONTENT)
-		return EREJECT;
-	if (data && message->content)
+	int size = 0;
+	int state = message->state & PARSE_MASK;
+	if (message->content)
 	{
-		*data = message->content->data;
-		*size = message->content->length;
+		if (data)
+			*data = message->content->data;
+		size = message->content->length;
 	}
-	/**
-	 * message->content_length decreases when the message parser
-	 * receives a new chunk of data.
-	 */
-	return message->content_length;
+	if (content_length)
+		*content_length = message->content_length;
+	if (state < PARSE_CONTENT)
+		return EINCOMPLETE;
+	if (size == 0 && state > PARSE_CONTENT)
+		return EREJECT;
+	return size;
 }
 
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)

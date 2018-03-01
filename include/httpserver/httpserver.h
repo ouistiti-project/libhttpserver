@@ -394,12 +394,12 @@ char *httpmessage_appendcontent(http_message_t *message, char *content, int leng
  * @brief returns the content of the request message
  *
  * @param message the request message
- * @param content the data of the content
- * @param length the length of the bitstream of the content
+ * @param contentpart the data of the content
+ * @param contentlenght the rest size of the content to read
  * 
- * @return the length of the content not already read
+ * @return the length of data pop into contentpart
  */
-int httpmessage_content(http_message_t *message, char **content, int *length);
+int httpmessage_content(http_message_t *message, char **contentpart, unsigned long long *contentlenght);
 
 /**
  * @brief set the Keep-Alive connection
