@@ -1419,7 +1419,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			else
 			{
 				buffer->offset = buffer->data;
-				do {
+				while (buffer->length > 0)
+				{
 					size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
 					if (size == EINCOMPLETE)
 					{
@@ -1427,14 +1428,14 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 					}
 					if (size < 0)
 					{
-						err("client %p CONTENT send error %s", client, strerror(errno));
+						err("client %p CONTENT rest %d send error %s", client, buffer->length, strerror(errno));
 						response->state &= ~PARSE_CONTINUE;
 						ret = size;
 						break;
 					}
 					buffer->length -= size;
 					buffer->offset += size;
-				} while (buffer->length > 0);
+				}
 				_buffer_reset(buffer);
 			}
 			/**
@@ -1760,6 +1761,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				if (client->server->config->keepalive &&
 						!(client->state & CLIENT_LOCKED) &&
+						!(client->state & CLIENT_ERROR) &&
 						(client->state & CLIENT_KEEPALIVE))
 				{
 					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK & ~CLIENT_RESPONSEREADY);
@@ -1887,9 +1889,24 @@ static int _httpclient_run(http_client_t *client)
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				return EINCOMPLETE;
 			}
-			if (request_ret == ESUCCESS || request_ret == ECONTINUE)
+			if (request_ret == ESUCCESS)
 			{
+				/**
+				 * request is detected as error, but it still contain data.
+				 * It is useless to read all data, because the response is
+				 * ready, but it is mandatory to stop the transfer to
+				 * close the connection
+				 */
+				if ((client->request->state & PARSE_MASK) < PARSE_END)
+				{
+					client->state |= CLIENT_ERROR;
+				}
 				_httpclient_pushrequest(client, client->request);
+				client->request = NULL;
+			}
+			if (request_ret == ECONTINUE)
+			{
+ 				_httpclient_pushrequest(client, client->request);
 				client->request = NULL;
 			}
 		}
