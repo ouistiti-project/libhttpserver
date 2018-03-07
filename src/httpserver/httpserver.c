@@ -1317,6 +1317,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 	}
 
 	http_message_t *response = request->response;
+
 	switch (response->state & GENERATE_MASK)
 	{
 		case GENERATE_INIT:
@@ -1776,6 +1777,12 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_EXIT:
 		{
+			/**
+			 * flush the output socket
+			 */
+			if (client->ops.flush != NULL)
+				client->ops.flush(client);
+
 			/**
 			 * the modules need to be free before any
 			 * socket closing.
