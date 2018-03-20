@@ -172,6 +172,7 @@ char *utils_urldecode(const char *encoded)
 		}
 		else if (encoded[0] == '.' && encoded[1] == '.' && encoded[2] == '/')
 		{
+			// back into previous directory
 			encoded+=3;
 			if (offset > decoded && *(offset - 1) == '/')
 			{
@@ -180,7 +181,15 @@ char *utils_urldecode(const char *encoded)
 			}
 			offset = strrchr(decoded, '/');
 			if (offset == NULL)
-				offset = decoded;
+			{
+				if (decoded[0] == 0)
+				{
+					free(decoded);
+					return NULL;
+				}
+				else
+					offset = decoded;
+			}
 		}
 		else if (*encoded == '?')
 		{
