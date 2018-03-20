@@ -1321,10 +1321,6 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 	if (client->sockdata->length > 0)
 	{
 		int ret = _httpmessage_parserequest(*prequest, client->sockdata);
-		if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
-			_buffer_reset(client->sockdata);
-		else
-			_buffer_shrink(client->sockdata);
 
 		switch (ret)
 		{
@@ -1481,6 +1477,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		(response->state & PARSE_CONTINUE))
 	{
 		ret = _httpmessage_runconnector(request, response);
+
 		switch (ret)
 		{
 		case ESUCCESS:
@@ -1851,6 +1848,18 @@ static int _httpclient_run(http_client_t *client)
 	int recv_ret = ECONTINUE;
 	int send_ret = ECONTINUE;
 	int wait_option = 0;
+
+	/**
+	 * The best place to reset the socket buffer. The connector of the current request
+	 * is running and may need the content data.
+	 * In some cases the buffer needs to be reset after _httpclient_message and in some
+	 * othe cases it needs to be reset after _httpmessage_runconnector.
+	 */
+	if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
+		_buffer_reset(client->sockdata);
+	else
+		_buffer_shrink(client->sockdata);
+
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
 		case CLIENT_NEW:
