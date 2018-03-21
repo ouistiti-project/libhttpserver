@@ -129,7 +129,7 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 	 * Embeded version may use the nbchunk with special vcalloc.
 	 * The idea is to create a pool of chunks into the stack.
 	 */
-	buffer->data = vcalloc(1, chunksize);
+	buffer->data = vcalloc(1, chunksize + 1);
 	if (buffer->data == NULL)
 	{
 		free(buffer);
@@ -144,14 +144,14 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 	if (ChunkSize == 0)
 		ChunkSize = chunksize;
 	buffer->maxchunks = nbchunks;
-	buffer->size = chunksize;
+	buffer->size = chunksize + 1;
 	buffer->offset = buffer->data;
 	return buffer;
 }
 
 static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
-	if (buffer->data + buffer->size <= buffer->offset + length + 1)
+	if (buffer->data + buffer->size < buffer->offset + length + 1)
 	{
 		char *data = buffer->data;
 		int nbchunks = length / ChunkSize + 1;
