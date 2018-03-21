@@ -746,7 +746,6 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
  */
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
-	buffer_t *content = message->content;
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
@@ -754,23 +753,30 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	tempo.size = *size;
 	if ((message->state & PARSE_MASK) == PARSE_INIT)
 		message->state = PARSE_STATUS;
-	message->content_length = (typeof(message->content_length))-1;
+	if (message->content_length == 0)
+		message->content_length = (typeof(message->content_length))-1;
 
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length - (tempo.offset - tempo.data);
 	if (*size > 0)
 		_buffer_shrink(&tempo);
 
-	if ((message->state & PARSE_MASK) >= PARSE_PRECONTENT)
-		ret = ECONTINUE;
 	if ((message->state & PARSE_MASK) == PARSE_END)
 	{
 		if (*size > 0)
 		{
 			*size = 0;
 		}
+		/**
+		 * The request may not contain the ContentLength.
+		 * In this case the function must continue after the end.
+		 * The caller must stop by itself
+		 */
+		if (message->content_length == (typeof(message->content_length))-1)
+			ret = ECONTINUE;
+		else
+			message->content = NULL;
 	}
-	message->content = content;
 	return ret;
 }
 
@@ -1099,12 +1105,12 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 	request->client = client;
 	response->client = client;
 	httpmessage_addheader(request, "Host", httpmessage_REQUEST(request, "remote_host"));
-	char *method = httpmessage_REQUEST(request, "method");
+	const char *method = httpmessage_REQUEST(request, "method");
 	_buffer_append(data, method, strlen(method));
 	_buffer_append(data, " ", 1);
-	char *uri = httpmessage_REQUEST(request, "uri");
+	const char *uri = httpmessage_REQUEST(request, "uri");
 	_buffer_append(data, uri, strlen(uri));
-	char *version = httpmessage_REQUEST(request, "version");
+	const char *version = httpmessage_REQUEST(request, "version");
 	if (version)
 	{
 		_buffer_append(data, " ", 1);
