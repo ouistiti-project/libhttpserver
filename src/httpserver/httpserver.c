@@ -879,7 +879,7 @@ HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key,
 	}
 }
 
-char *httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
+int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
 {
 	if (message->content == NULL)
 	{
@@ -908,12 +908,17 @@ char *httpmessage_addcontent(http_message_t *message, const char *type, char *co
 		message->content_length = length;
 	}
 	if (message->content != NULL && message->content->data != NULL )
-		return message->content->data;
-	return NULL;
+		return message->content->size - message->content->length;
+	return message->client->server->config->chunksize;
 }
 
-char *httpmessage_appendcontent(http_message_t *message, char *content, int length)
+int httpmessage_appendcontent(http_message_t *message, char *content, int length)
 {
+	if (message->content == NULL && content != NULL)
+	{
+		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
+	}
+
 	if (message->content != NULL && content != NULL)
 	{
 		if (length == -1)
@@ -925,10 +930,10 @@ char *httpmessage_appendcontent(http_message_t *message, char *content, int leng
 				message->content_length = length;
 			else
 				message->content_length += length;
-			return message->content->data;
+			return message->content->size - message->content->length;
 		}
 	}
-	return NULL;
+	return message->client->server->config->chunksize;
 }
 
 int httpmessage_keepalive(http_message_t *message)

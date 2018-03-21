@@ -375,9 +375,9 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
  * @param content the data of the content
  * @param length the length of the bitstream of the content
  * 
- * @return the storage pointer of the content
+ * @return the space available into the chunk of content
  */
-char *httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length);
+int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length);
 
 /**
  * @brief append data to content of the response message before sending
@@ -386,9 +386,9 @@ char *httpmessage_addcontent(http_message_t *message, const char *type, char *co
  * @param content the data of the content
  * @param length the length of the bitstream of the content
  * 
- * @return the storage pointer of the content
+ * @return the space available into the chunk of content
  */
-char *httpmessage_appendcontent(http_message_t *message, char *content, int length);
+int httpmessage_appendcontent(http_message_t *message, char *content, int length);
 
 /**
  * @brief returns the content of the request message
