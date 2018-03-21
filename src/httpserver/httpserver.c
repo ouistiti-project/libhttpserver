@@ -571,27 +571,29 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					next = PARSE_END;
 					dbg("no content inside request");
 				}
+//				else if (!(message->state & PARSE_CONTINUE))
+//					message->state |= PARSE_CONTINUE;
 				else
 				{
 					next = PARSE_PRECONTENT;
+					message->state &= ~PARSE_CONTINUE;
 				}
 			}
 			break;
 			case PARSE_PRECONTENT:
 			{
-#if 0
+				/**
+				 * data may contain some first bytes from the content
+				 * We need to get out from this function use them by
+				 * the connector
+				 */
 				if (!(message->state & PARSE_CONTINUE))
-				{
 					message->state |= PARSE_CONTINUE;
-				}
 				else
 				{
 					next = PARSE_CONTENT;
 					message->state &= ~PARSE_CONTINUE;
 				}
-#else
-				next = PARSE_CONTENT;
-#endif
 			}
 			break;
 			case PARSE_CONTENT:
@@ -612,7 +614,6 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					int length = data->length -(data->offset - data->data);
 					//int length = data->length;
 					message->content = data;
-
 					/**
 					 * At the end of the parsing the content_length of request 
 					 * is zero. But it is false, the true value is
