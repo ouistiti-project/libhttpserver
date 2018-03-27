@@ -22,6 +22,7 @@ export LIBUTILS LIBWEBSOCKET
 
 subdir-y+=src/httpserver
 subdir-y+=include
+subdir-$(WOLFTLS)+=src/mod_wolftls.mk
 subdir-$(MBEDTLS)+=src/mod_mbedtls.mk
 subdir-$(WEBSOCKET)+=src/mod_websocket.mk
 subdir-$(FORMPARSER)+=src/mod_formparser.mk
