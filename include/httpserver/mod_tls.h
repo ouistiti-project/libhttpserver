@@ -1,5 +1,5 @@
 /*****************************************************************************
- * mod_mbedtls.h: Simple HTTPS module
+ * mod_tls.h: Simple HTTPS module
  * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
@@ -26,25 +26,25 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef __MOD_MBEDTLS_H__
-#define __MOD_MBEDTLS_H__
+#ifndef __MOD_TLS_H__
+#define __MOD_TLS_H__
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-typedef struct mod_mbedtls_s mod_tls_t;
-typedef struct mod_mbedtls_s
+typedef struct mod_tls_s mod_tls_t;
+struct mod_tls_s
 {
 	char *crtfile;
 	char *pemfile;
 	char *cachain;
 	char *dhmfile;
-} mod_mbedtls_t;
+};
 
-void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig);
-void mod_mbedtls_destroy(void *mod);
+void *mod_tls_create(http_server_t *server, mod_tls_t *modconfig);
+void mod_tls_destroy(void *mod);
 
 #ifdef __cplusplus
 }

@@ -65,7 +65,7 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 
 #include "log.h"
 #include "httpserver.h"
-#include "mod_mbedtls.h"
+#include "mod_tls.h"
 
 #define HANDSHAKE 0x01
 #define RECV_COMPLETE 0x02
@@ -100,7 +100,7 @@ static void _mod_mbedtls_freectx(void *vctx);
 static int _mod_mbedtls_recv(void *vctx, char *data, int size);
 static int _mod_mbedtls_send(void *vctx, char *data, int size);
 
-void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
+void *mod_mbedtls_create(http_server_t *server, mod_tls_t *modconfig)
 {
 	int ret;
 	int is_set_pemkey = 0;
@@ -192,6 +192,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config, str_mbedtls);
 	return config;
 }
+void *mod_tls_create(http_server_t *server, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_mbedtls_create")));
 
 void mod_mbedtls_destroy(void *mod)
 {
@@ -206,6 +207,7 @@ void mod_mbedtls_destroy(void *mod)
 	mbedtls_ssl_config_free(&config->conf);
 	mbedtls_free(config);
 }
+void mod_tls_destroy(void *arg) __attribute__ ((weak, alias ("mod_mbedtls_destroy")));
 
 static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 {
