@@ -3013,11 +3013,12 @@ const char *httpmessage_SESSION(http_message_t *message, const char *key, char *
 					next = next->next;
 				}
 				message->client->session->storage->length -= length;
+				sessioninfo->key = 
+					_buffer_append(message->client->session->storage, key, strlen(key) + 1);
 			}
 		}
-		else
-			sessioninfo->value = 
-				_buffer_append(message->client->session->storage, value, strlen(value) + 1);
+		sessioninfo->value = 
+			_buffer_append(message->client->session->storage, value, strlen(value) + 1);
 	}
 	else if (sessioninfo == NULL)
 	{
