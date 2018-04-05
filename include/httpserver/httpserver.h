@@ -505,9 +505,9 @@ const char *httpmessage_COOKIE(http_message_t *message, const char *key);
  * @param key the name of the attribut
  * @param value the value to set with the key or NULL
  *
- * @return the value of the attribut or a empty string
+ * @return the value of the attribute or NULL
  */
-const char *httpmessage_SESSION(http_message_t *message, const char *key, char *value);
+const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value);
 
 /**********************************************************************/
 typedef struct httpclient_ops_s httpclient_ops_t;

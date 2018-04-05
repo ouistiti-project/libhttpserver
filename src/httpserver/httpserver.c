@@ -2960,7 +2960,7 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, http_cli
 	return session;
 }
 
-const char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
+const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value)
 {
 	dbentry_t *sessioninfo = NULL;
 	if (message->client == NULL)
@@ -2975,6 +2975,7 @@ const char *httpmessage_SESSION(http_message_t *message, const char *key, char *
 			sessioninfo = sessioninfo->next;
 		}
 	}
+
 	if (value != NULL)
 	{
 		if (!message->client->session)
@@ -2992,37 +2993,14 @@ const char *httpmessage_SESSION(http_message_t *message, const char *key, char *
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
 		}
-		if (sessioninfo->value)
+		if (sessioninfo->value != (char *)value)
 		{
-			dbentry_t *next = sessioninfo->next;
-			if (strlen(value) <= strlen(sessioninfo->value))
-			{
-				strcpy(sessioninfo->value, value);
-			}
-			else if (next != NULL)
-			{
-				char *data = message->client->session->storage->data;
-				int length = message->client->session->storage->length;
-				length -= next->key - data;
-				memmove(sessioninfo->key, next->key, length);
-				length = next->key - sessioninfo->key;
-				while (next != NULL)
-				{
-					next->key -= length;
-					next->value -= length;
-					next = next->next;
-				}
-				message->client->session->storage->length -= length;
-				sessioninfo->key = 
-					_buffer_append(message->client->session->storage, key, strlen(key) + 1);
-			}
+			sessioninfo->value = (char *)value;
 		}
-		sessioninfo->value = 
-			_buffer_append(message->client->session->storage, value, strlen(value) + 1);
 	}
 	else if (sessioninfo == NULL)
 	{
-		return default_value;
+		return NULL;
 	}
-	return (const char *)sessioninfo->value;
+	return (const void *)sessioninfo->value;
 }
