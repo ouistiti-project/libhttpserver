@@ -49,4 +49,26 @@ char *utils_urldecode(const char *encoded);
 int utils_searchexp(const char *haystack, const char *needleslist);
 char *utils_buildpath(const char *docroot, const char *path_info,
 					const char *filename, const char *ext, struct stat *filestat);
+
+/**
+ * @brief get value of each cookie of the request
+ *
+ * The function may accept NULL key in this case
+ * it returns the first cookie available and
+ * the next call to the function will return the next one.
+ * The return is not directly the value of the cookie but
+ * the key followed by the value separated by "=".
+ * Example:
+ * keyvalue = cookie_get(request, "foo");
+ * strcmp(keyvalue, "foo=bar") == 0
+ * 
+ * @param message the request message received
+ * @param key the name of the cookie or NULL
+ *
+ * @return the key and value corresponding or a null pointer
+ */
+const char *cookie_get(http_message_t *request, const char *key);
+
+void cookie_set(http_message_t *response, const char *key, char *value);
+
 #endif

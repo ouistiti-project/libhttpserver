@@ -384,3 +384,28 @@ int main()
 	return 0;
 }
 #endif
+
+#ifndef COOKIE
+static const char str_Cookie[] = "Cookie";
+static const char str_SetCookie[] = "Set-Cookie";
+
+const char *cookie_get(http_message_t *request, const char *key)
+{
+	const char *value = NULL;
+	const char *cookie = NULL;
+	cookie = httpmessage_REQUEST(request, str_Cookie);
+	if (cookie != NULL)
+	{
+		value = strstr(cookie, key);
+	}
+	return value;
+}
+
+void cookie_set(http_message_t *response, const char *key, char *value)
+{
+	char *keyvalue = malloc(strlen(key) + 1 + strlen(value) + 1);
+	sprintf(keyvalue, "%s=%s", key, value);
+	httpmessage_addheader(response, str_SetCookie, keyvalue);
+	free(keyvalue);
+}
+#endif

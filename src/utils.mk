@@ -10,6 +10,7 @@ modules-$(DLIB_UTILS)+=utils_mod
 slib-$(SLIB_UTILS)+=utils_mod
 utils_mod_SOURCES=utils.c
 utils_mod_CFLAGS+=-I../include 
+utils_mod_CFLAGS-$(COOKIE)+=-DCOOKIE
 
 utils_mod_CFLAGS-$(DEBUG)+=-g -DDEBUG
 

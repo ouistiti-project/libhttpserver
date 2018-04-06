@@ -27,6 +27,7 @@ subdir-$(MBEDTLS)+=src/mod_mbedtls.mk
 subdir-$(WEBSOCKET)+=src/mod_websocket.mk
 subdir-$(FORMPARSER)+=src/mod_formparser.mk
 subdir-$(DATE)+=src/mod_date.mk
+subdir-$(COOKIE)+=src/mod_cookie.mk
 subdir-$(TEST)+=src/test.mk
 subdir-y+=src/utils.mk
 
