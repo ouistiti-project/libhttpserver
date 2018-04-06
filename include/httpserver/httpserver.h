@@ -487,16 +487,6 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key);
 const char *httpmessage_REQUEST(http_message_t *message, const char *key);
 
 /**
- * @brief get value of each cookie of the request
- *
- * @param message the request message received
- * @param key the name of the cookie
- *
- * @return the value of the attribut or a null pointer
- */
-const char *httpmessage_COOKIE(http_message_t *message, const char *key);
-
-/**
  * @brief get value for the session used by the request
  *
  * the value are stored by mod with the same function.
