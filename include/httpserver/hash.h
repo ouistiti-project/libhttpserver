@@ -41,6 +41,8 @@ extern base64_t *base64;
 typedef struct hash_s hash_t;
 struct hash_s
 {
+	int size;
+	const char *name;
 	void *(*init)();
 	void (*update)(void *ctx, const char *in, size_t len);
 	int (*finish)(void *ctx, char *out);
@@ -48,5 +50,6 @@ struct hash_s
 
 extern hash_t *hash_md5;
 extern hash_t *hash_sha1;
+extern hash_t *hash_sha256;
 
 #endif

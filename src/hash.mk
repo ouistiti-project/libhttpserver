@@ -3,7 +3,6 @@ DLIBHASH:=$(DYNAMIC)
 
 lib-$(DLIBHASH)+=hash_mod
 slib-$(SLIBHASH)+=hash_mod
-hash_mod_SOURCES=hash.c
 hash_mod_SOURCES-$(MBEDTLS)=hash_mbedtls.c
 ifneq ($(MBEDTLS),y)
 NOMBEDTLS=y

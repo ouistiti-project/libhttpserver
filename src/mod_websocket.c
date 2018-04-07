@@ -93,7 +93,7 @@ static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *
 		hash_sha1->finish(ctx, accept);
 
 		char out[40];
-		base64->encode(accept, 20, out, 40);
+		base64->encode(accept, hash_sha1->size, out, hash_sha1->size * 2);
 
 		httpmessage_addheader(response, str_accept, out);
 	}
