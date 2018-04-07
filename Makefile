@@ -1,5 +1,7 @@
 include scripts.mk
 
+LIBHASH=y
+
 ifneq ($(MBEDTLS),)
 LIBUTILS=y
 endif
@@ -30,6 +32,7 @@ subdir-$(DATE)+=src/mod_date.mk
 subdir-$(COOKIE)+=src/mod_cookie.mk
 subdir-$(TEST)+=src/test.mk
 subdir-y+=src/utils.mk
+subdir-y+=src/hash.mk
 
 ifeq ($(CC),mingw32-gcc)
 WIN32:=1
