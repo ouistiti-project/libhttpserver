@@ -50,6 +50,8 @@ struct hash_s
 
 extern hash_t *hash_md5;
 extern hash_t *hash_sha1;
+extern hash_t *hash_sha224;
 extern hash_t *hash_sha256;
+extern hash_t *hash_sha512;
 
 #endif

@@ -29,6 +29,7 @@
 
 # include <mbedtls/md5.h>
 # include <mbedtls/sha1.h>
+# include <mbedtls/sha256.h>
 # include <mbedtls/base64.h>
 
 #include "httpserver/hash.h"
@@ -47,7 +48,7 @@ int MD5_finish(void *ctx, char *out);
 hash_t *hash_md5 = &(hash_t)
 {
 	.size = 16,
-	.name = "md5";
+	.name = "MD5",
 	.init = MD5_init,
 	.update = MD5_update,
 	.finish = MD5_finish,
@@ -59,13 +60,27 @@ int SHA1_finish(void *ctx, char *out);
 hash_t *hash_sha1 = &(hash_t)
 {
 	.size = 20,
-	.name = "sha1";
+	.name = "SHA1",
 	.init = SHA1_init,
 	.update = SHA1_update,
 	.finish = SHA1_finish,
 };
 
-hash_t *hash_sha256 = NULL;
+hash_t *hash_sha224 = NULL;
+
+void *SHA256_init();
+void SHA256_update(void *ctx, const char *in, size_t len);
+int SHA256_finish(void *ctx, char *out);
+hash_t *hash_sha256 = &(hash_t)
+{
+	.size = 32,
+	.name = "SHA-256",
+	.init = SHA1_init,
+	.update = SHA1_update,
+	.finish = SHA1_finish,
+};
+
+hash_t *hash_sha512 = NULL;
 
 void *MD5_init()
 {
@@ -106,6 +121,27 @@ int SHA1_finish(void *ctx, char *out)
 	mbedtls_sha1_context *pctx = (mbedtls_sha1_context *)ctx;
 	mbedtls_sha1_finish(pctx, out);
 	mbedtls_sha1_free(pctx);
+	free(pctx);
+}
+
+void *SHA256_init()
+{
+	mbedtls_sha256_context *pctx;
+	pctx = calloc(1, sizeof(*pctx));
+	mbedtls_sha256_init(pctx);
+	mbedtls_sha256_starts(pctx, 0);
+	return pctx;
+}
+void SHA256_update(void *ctx, const char *in, size_t len)
+{
+	mbedtls_sha256_context *pctx = (mbedtls_sha256_context *)ctx;
+	mbedtls_sha256_update(pctx, in, len);
+}
+int SHA256_finish(void *ctx, char *out)
+{
+	mbedtls_sha256_context *pctx = (mbedtls_sha256_context *)ctx;
+	mbedtls_sha256_finish(pctx, out);
+	mbedtls_sha256_free(pctx);
 	free(pctx);
 }
 

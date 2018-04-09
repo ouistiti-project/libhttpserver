@@ -43,14 +43,16 @@ int MD5_finish(void *ctx, char *out);
 hash_t *hash_md5 = &(hash_t)
 {
 	.size = 16,
-	.name = "md5";
+	.name = "MD5";
 	.init = MD5_init,
 	.update = MD5_update,
 	.finish = MD5_finish,
 };
 
 hash_t *hash_sha1 = NULL;
+hash_t *hash_sha224 = NULL;
 hash_t *hash_sha256 = NULL;
+hash_t *hash_sha512 = NULL;
 
 #if defined (MD5_RONRIVEST)
 
