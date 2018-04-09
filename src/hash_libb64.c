@@ -29,67 +29,31 @@
 
 #include "httpserver/hash.h"
 
-void *MD5_init();
-void MD5_update(void *ctx, const char *in, size_t len);
-int MD5_finish(void *ctx, char *out);
-hash_t *hash_md5 = &(hash_t)
+# include "b64/cencode.h"
+# include "b64/cdecode.h"
+
+void BASE64_encode(const char *in, int inlen, char *out, int outlen);
+void BASE64_decode(const char *in, int inlen, char *out, int outlen);
+base64_t *base64 = &(base64_t)
 {
-	.size = 16,
-	.name = "MD5";
-	.init = MD5_init,
-	.update = MD5_update,
-	.finish = MD5_finish,
+	.encode = BASE64_encode,
+	.decode = BASE64_decode,
 };
 
-hash_t *hash_sha1 = NULL;
-hash_t *hash_sha224 = NULL;
-hash_t *hash_sha256 = NULL;
-hash_t *hash_sha512 = NULL;
-
-#if defined (MD5_RONRIVEST)
-
-# include "md5-c/global.h"
-# include "md5-c/md5.h"
-
-void *MD5_init()
+void BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
-	MD5_CTX *pctx;
-	pctx = calloc(1, sizeof(*pctx));
-	MD5Init(pctx);
-	return pctx;
-}
-void MD5_update(void *ctx, const char *in, size_t len)
-{
-	MD5_CTX *pctx = (MD5_CTX *)ctx;
-	MD5Update(pctx, in, len);
-}
-int MD5_finish(void *ctx, char *out)
-{
-	MD5_CTX *pctx = (MD5_CTX *)ctx;
-	MD5Final(out, pctx);
-	free(pctx);
+	base64_encodestate state;
+	base64_init_encodestate(&state);
+	int cnt = base64_encode_block(in, inlen, out, &state);
+	cnt = base64_encode_blockend(out + cnt, &state);
+	out[cnt - 1] = '\0';
 }
 
-#else
+void BASE64_decode(const char *in, int inlen, char *out, int outlen)
+{
+	base64_decodestate decoder;
+	base64_init_decodestate(&decoder);
+	int cnt = base64_decode_block(in, inlen, out, &decoder);
+	out[cnt - 1] = '\0';
+}
 
-# include "md5/md5.h"
-
-void *MD5_init()
-{
-	md5_state_t *pctx;
-	pctx = calloc(1, sizeof(*pctx));
-	md5_init(pctx);
-	return pctx;
-}
-void MD5_update(void *ctx, const char *in, size_t len)
-{
-	md5_state_t *pctx = (md5_state_t *)ctx;
-	md5_append(pctx, in, len);
-}
-int MD5_finish(void *ctx, char *out)
-{
-	md5_state_t *pctx = (md5_state_t *)ctx;
-	md5_finish(pctx, out);
-	free(pctx);
-}
-#endif
