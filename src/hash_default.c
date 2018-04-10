@@ -35,7 +35,7 @@ int MD5_finish(void *ctx, char *out);
 hash_t *hash_md5 = &(hash_t)
 {
 	.size = 16,
-	.name = "MD5";
+	.name = "MD5",
 	.init = MD5_init,
 	.update = MD5_update,
 	.finish = MD5_finish,
