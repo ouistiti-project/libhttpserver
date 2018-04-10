@@ -44,5 +44,7 @@ libmd5_dir:=$(realpath $(LIBMD5_DIR))
 hash_mod_CFLAGS+=-I$(libmd5_dir)/../
 hash_mod_CFLAGS+=-DMD5_RONRIVEST
 hash_mod_SOURCES+=$(libmd5_dir)/md5c.c
+else
+hash_mod_SOURCES+=md5/md5.c
 endif
 endif
