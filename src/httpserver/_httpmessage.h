@@ -113,7 +113,6 @@ struct _http_message_result_s
 typedef struct _http_message_result_s _http_message_result_t;
 
 HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[];
-HTTPMESSAGE_DECL const char *_http_message_version[];
 
 HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize);
 HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message);
@@ -252,14 +251,6 @@ HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[] =
 	&(_http_message_result_t){RESULT_511, " 511 Network Authentication Required"},
 #endif
 	NULL
-};
-
-HTTPMESSAGE_DECL const char *_http_message_version[] =
-{
-	"HTTP/0.9",
-	"HTTP/1.0",
-	"HTTP/1.1",
-	"HTTP/2",
 };
 
 HTTPMESSAGE_DECL const char str_connection[] = "Connection";

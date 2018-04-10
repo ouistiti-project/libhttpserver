@@ -104,6 +104,17 @@ typedef enum
 	HTTP_PIPELINE = 0x0100,
 } http_message_version_e;
 
+extern const char *httpversion[];
+/**
+{
+	"HTTP/0.9",
+	"HTTP/1.0",
+	"HTTP/1.1",
+	"HTTP/2",
+	NULL,
+};
+**/
+
 typedef int http_message_result_e;
 #define RESULT_200 200
 #define RESULT_400 400
@@ -195,6 +206,7 @@ typedef struct http_server_config_s
 	int chunksize;
 	/** the version of the HTTP server. */
 	http_message_version_e version;
+	const char *versionstr;
 	/** the keepalive timeout **/
 	int keepalive;
 } http_server_config_t;

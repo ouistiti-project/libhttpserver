@@ -106,6 +106,15 @@ static http_server_config_t defaultconfig = {
 	.version = HTTP10,
 };
 
+const char *httpversion[] =
+{
+	"HTTP/0.9",
+	"HTTP/1.0",
+	"HTTP/1.1",
+	"HTTP/2",
+	NULL,
+};
+
 const char *str_get = "GET";
 const char *str_post = "POST";
 const char *str_head = "HEAD";
@@ -446,8 +455,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				int i;
 				for (i = HTTP09; i < HTTPVERSIONS; i++)
 				{
-					int length = strlen(_http_message_version[i]);
-					if (!strncasecmp(data->offset, _http_message_version[i], length))
+					int length = strlen(httpversion[i]);
+					if (!strncasecmp(data->offset, httpversion[i], length))
 					{
 						message->version = i;
 						data->offset += length;
@@ -481,8 +490,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				int i;
 				for (i = HTTP09; i < HTTPVERSIONS; i++)
 				{
-					int length = strlen(_http_message_version[i]);
-					if (!strncasecmp(version, _http_message_version[i], length))
+					int length = strlen(httpversion[i]);
+					if (!strncasecmp(version, httpversion[i], length))
 					{
 						data->offset += length;
 						if (*data->offset == '\r')
@@ -659,7 +668,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 	http_message_version_e _version = message->version;
 	if (message->version > (version & HTTPVERSION_MASK))
 		_version = (version & HTTPVERSION_MASK);
-	_buffer_append(header, _http_message_version[_version], strlen(_http_message_version[_version]));
+	_buffer_append(header, httpversion[_version], strlen(httpversion[_version]));
 
 	char *status = _httpmessage_status(message);
 	_buffer_append(header, status, strlen(status));
@@ -2722,7 +2731,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = (char *)_http_message_version[(server->config->version & HTTPVERSION_MASK)];
+		value = (char *)httpversion[(server->config->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "port"))
 	{
@@ -2812,7 +2821,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, "version"))
 	{
-		value = _http_message_version[(message->version & HTTPVERSION_MASK)];
+		value = httpversion[(message->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "method"))
 	{
