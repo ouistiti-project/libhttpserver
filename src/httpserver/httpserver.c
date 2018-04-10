@@ -1636,7 +1636,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			if (size < 0)
 			{
 				err("client %p SEPARATOR send error %s", client, strerror(errno));
-				ret EREJECT;
+				ret = EREJECT;
 				break;
 			}
 			if (request->method && request->method->id == MESSAGE_TYPE_HEAD)

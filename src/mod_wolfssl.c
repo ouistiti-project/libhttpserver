@@ -82,9 +82,9 @@ void *mod_wolftls_create(http_server_t *server, mod_tls_t *modconfig)
 	if (modconfig->crtfile)
 	{
 		ret = wolfSSL_CTX_use_certificate_file(mod->ctx, modconfig->crtfile, SSL_FILETYPE_PEM);
-		if (ret)
+		if (ret != WOLFSSL_SUCCESS)
 		{
-			err("wolftls: CTX_use_certificate_file %d\n", ret);
+			err("wolftls: CTX_use_certificate_file %d %d\n", ret, WOLFSSL_SUCCESS);
 			goto wolfftls_out_certfile;
 		}
 	}
@@ -92,9 +92,18 @@ void *mod_wolftls_create(http_server_t *server, mod_tls_t *modconfig)
 	if (modconfig->pemfile)
 	{
 		ret =  wolfSSL_CTX_use_PrivateKey_file(mod->ctx, modconfig->pemfile, SSL_FILETYPE_PEM);
-		if (ret)
+		if (ret != WOLFSSL_SUCCESS)
 		{
 			err("wolftls: CTX_use_PrivateKey_file pem %d\n", ret);
+			goto wolfftls_out_certfile;
+		}
+	}
+	if (modconfig->cachain)
+	{
+		ret = wolfSSL_CTX_use_certificate_chain_file(mod->ctx, modconfig->cachain);
+		if (ret != WOLFSSL_SUCCESS)
+		{
+			err("wolftls: CTX_use_certificate_chain_file cachain %d\n", ret);
 			goto wolfftls_out_certfile;
 		}
 	}
@@ -168,8 +177,11 @@ static int _mod_wolftls_recv(void *vctx, char *data, int size)
 #endif
 	{
 		ret = wolfSSL_read(ctx->ssl, (unsigned char *)data, size);
+warn("wolfssl read %d", ret);
 	}
-	if (ret == 0 && wolfSSL_get_error(ctx->ssl, ret) == SSL_ERROR_WANT_READ)
+	int err = wolfSSL_get_error(ctx->ssl, ret);
+warn("wolfssl err %d", err);
+	if (ret != WOLFSSL_SUCCESS && err == SSL_ERROR_WANT_READ)
 		ret = EINCOMPLETE;
 	else if (ret < 0)
 	{
