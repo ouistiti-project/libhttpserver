@@ -63,9 +63,9 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 #error MBEDTLS not found
 #endif
 
-#include "log.h"
-#include "httpserver.h"
-#include "mod_tls.h"
+#include "httpserver/log.h"
+#include "httpserver/httpserver.h"
+#include "httpserver/mod_tls.h"
 
 #define HANDSHAKE 0x01
 #define RECV_COMPLETE 0x02

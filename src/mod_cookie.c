@@ -34,8 +34,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "log.h"
-#include "httpserver.h"
+#include "httpserver/log.h"
+#include "httpserver/httpserver.h"
 #include "httpserver/mod_cookie.h"
 
 typedef struct _mod_cookie_ctx_s _mod_cookie_ctx_t;
