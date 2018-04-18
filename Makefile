@@ -20,8 +20,8 @@ subdir-$(FORMPARSER)+=src/mod_formparser.mk
 subdir-$(DATE)+=src/mod_date.mk
 subdir-$(COOKIE)+=src/mod_cookie.mk
 subdir-$(TEST)+=src/test.mk
-subdir-y+=src/utils.mk
-subdir-y+=src/hash.mk
+subdir-$(LIBUTILS)+=src/utils.mk
+subdir-$(LIBHASH)+=src/hash.mk
 
 ifeq ($(CC),mingw32-gcc)
 WIN32:=1
