@@ -224,14 +224,17 @@ static void _mod_websocket_freectx(void *arg)
 	free(ctx);
 }
 
-void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod_websocket_run_t run, void *runarg)
+void *mod_websocket_create(http_server_t *server, char *vhost, mod_websocket_t *config)
 {
 	_mod_websocket_t *mod = calloc(1, sizeof(*mod));
 
+	mod_websocket_run_t run = config->run;
+	if (run == NULL)
+		run = default_websocket_run;
 	mod->vhost = vhost;
 	mod->config = config;
 	mod->run = run;
-	mod->runarg = runarg;
+	mod->runarg = config;
 	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod, str_websocket);
 	warn("websocket support %s", mod->config->docroot);
 	return mod;

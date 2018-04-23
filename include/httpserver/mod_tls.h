@@ -43,7 +43,7 @@ struct mod_tls_s
 	char *dhmfile;
 };
 
-void *mod_tls_create(http_server_t *server, mod_tls_t *modconfig);
+void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig);
 void mod_tls_destroy(void *mod);
 
 #ifdef __cplusplus

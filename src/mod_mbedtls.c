@@ -100,7 +100,7 @@ static void _mod_mbedtls_freectx(void *vctx);
 static int _mod_mbedtls_recv(void *vctx, char *data, int size);
 static int _mod_mbedtls_send(void *vctx, char *data, int size);
 
-void *mod_mbedtls_create(http_server_t *server, mod_tls_t *modconfig)
+void *mod_mbedtls_create(http_server_t *server, char *unused, mod_tls_t *modconfig)
 {
 	int ret;
 	int is_set_pemkey = 0;
@@ -192,7 +192,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_tls_t *modconfig)
 	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config, str_mbedtls);
 	return config;
 }
-void *mod_tls_create(http_server_t *server, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_mbedtls_create")));
+void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_mbedtls_create")));
 
 void mod_mbedtls_destroy(void *mod)
 {

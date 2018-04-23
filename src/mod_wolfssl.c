@@ -63,7 +63,7 @@ static void _mod_wolftls_freectx(void *vctx);
 static int _mod_wolftls_recv(void *vctx, char *data, int size);
 static int _mod_wolftls_send(void *vctx, char *data, int size);
 
-void *mod_wolftls_create(http_server_t *server, mod_tls_t *modconfig)
+void *mod_wolftls_create(http_server_t *server, char *unused, mod_tls_t *modconfig)
 {
 	int ret;
 	_mod_wolftls_t *mod;
@@ -117,7 +117,7 @@ wolfftls_out_ctx:
 	free(mod);
 	return NULL;
 }
-void *mod_tls_create(http_server_t *server, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_wolftls_create")));
+void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_wolftls_create")));
 
 void mod_wolftls_destroy(void *arg)
 {
