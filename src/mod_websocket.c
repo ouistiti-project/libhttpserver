@@ -424,3 +424,10 @@ int default_websocket_run(void *arg, int socket, char *filepath, http_message_t 
 	}
 	return pid;
 }
+
+const module_t mod_websocket =
+{
+	.name = str_websocket,
+	.create = (module_create_t)mod_websocket_create,
+	.destroy = mod_websocket_destroy
+};

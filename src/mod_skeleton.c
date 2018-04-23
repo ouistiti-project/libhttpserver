@@ -138,3 +138,10 @@ static int _skeleton_connector(void *arg, http_message_t *request, http_message_
 	httpmessage_addheader(response, config->header_key, config->header_value);
 	return ECONTINUE;
 }
+
+const module_t mod_skeleton =
+{
+	.name = str_skeleton,
+	.create = (module_create_t)mod_skeleton_create,
+	.destroy = mod_skeleton_destroy
+};

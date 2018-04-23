@@ -45,6 +45,7 @@ static void *_mod_cookie_getctx(void *arg, http_client_t *ctl, struct sockaddr *
 static void _mod_cookie_freectx(void *vctx);
 static int _cookie_connector(void *arg, http_message_t *request, http_message_t *response);
 
+static const char str_cookie[] = "cookie";
 static const char str_Cookie[] = "Cookie";
 static const char str_SetCookie[] = "Set-Cookie";
 
@@ -66,7 +67,7 @@ void *mod_cookie_create(http_server_t *server, char *vhost, mod_cookie_t *modcon
 	mod = calloc(1, sizeof(*mod));
 	mod->vhost = vhost;
 
-	httpserver_addmod(server, _mod_cookie_getctx, _mod_cookie_freectx, mod, str_Cookie);
+	httpserver_addmod(server, _mod_cookie_getctx, _mod_cookie_freectx, mod, str_cookie);
 
 	return mod;
 }
@@ -85,7 +86,7 @@ static void *_mod_cookie_getctx(void *arg, http_client_t *ctl, struct sockaddr *
 	ctx->ctl = ctl;
 	ctx->mod = mod;
 
-	httpclient_addconnector(ctl, NULL, _cookie_connector, ctx, str_Cookie);
+	httpclient_addconnector(ctl, NULL, _cookie_connector, ctx, str_cookie);
 
 	return ctx;
 }
@@ -241,3 +242,10 @@ void cookie_set(http_message_t *response, const char *key, char *value)
 	httpmessage_addheader(response, str_SetCookie, keyvalue);
 	free(keyvalue);
 }
+
+const module_t mod_cookie =
+{
+	.name = str_cookie,
+	.create = (module_create_t)mod_cookie_create,
+	.destroy = mod_cookie_destroy
+};

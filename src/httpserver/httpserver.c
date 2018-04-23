@@ -2023,6 +2023,7 @@ static int _httpclient_run(http_client_t *client)
 			}
 			else if (ret == EREJECT)
 			{
+				err("client should exit");
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			else

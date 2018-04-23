@@ -321,3 +321,10 @@ static int _mod_mbedtls_send(void *vctx, char *data, int size)
 		ret = EREJECT;
 	return ret;
 }
+
+const module_t mod_tls =
+{
+	.name = str_mbedtls,
+	.create = (module_create_t)mod_tls_create,
+	.destroy = mod_tls_destroy,
+};
