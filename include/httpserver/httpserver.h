@@ -130,6 +130,7 @@ typedef int http_message_result_e;
 #define RESULT_403 403
 #define RESULT_414 414
 #define RESULT_416 416
+#define RESULT_500 500
 #define RESULT_505 505
 #define RESULT_511 511
 #endif
