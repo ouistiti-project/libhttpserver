@@ -42,7 +42,7 @@ endif
 
 ifeq ($(VTHREAD_TYPE),)
 VTHREAD_TYPE:=fork
-elifeq ($(VTHREAD_TYPE),pthread)
+else ifeq ($(VTHREAD_TYPE),pthread)
 httpserver_LIBRARY-$(VTHREAD)+=pthread
 endif
 httpserver_SOURCES-$(VTHREAD)+=vthread_$(VTHREAD_TYPE).c

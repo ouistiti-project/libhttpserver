@@ -44,9 +44,11 @@ struct mod_websocket_s
 	char *allow;
 	char *deny;
 	int options;
+	mod_websocket_run_t run;
 };
 
-void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod_websocket_run_t run, void *runarg);
+extern const module_t mod_websocket;
+void *mod_websocket_create(http_server_t *server, char *vhost, mod_websocket_t *config);
 void mod_websocket_destroy(void *data);
 
 #ifdef __cplusplus

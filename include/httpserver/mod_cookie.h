@@ -1,5 +1,5 @@
 /*****************************************************************************
- * mod_skeleton.h: Simple HTTP module
+ * mod_cookie.h: cookie parser
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
@@ -25,23 +25,19 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef __MOD_SKELETON_H__
-#define __MOD_SKELETON_H__
+#ifndef __MOD_COOKIE_H__
+#define __MOD_COOKIE_H__
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-typedef struct mod_skeleton_s
-{
-	char version_h;
-	char version_l;
-} mod_skeleton_t;
+typedef void mod_cookie_t;
 
-extern const module_t mod_skeleton;
-void *mod_skeleton_create(http_server_t *server, mod_skeleton_t *modconfig);
-void mod_skeleton_destroy(void *mod);
+extern const module_t mod_cookie;
+void *mod_cookie_create(http_server_t *server, char *vhost, mod_cookie_t *modconfig);
+void mod_cookie_destroy(void *mod);
 
 #ifdef __cplusplus
 }

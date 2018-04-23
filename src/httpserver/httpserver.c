@@ -106,9 +106,22 @@ static http_server_config_t defaultconfig = {
 	.version = HTTP10,
 };
 
+const char *httpversion[] =
+{
+	"HTTP/0.9",
+	"HTTP/1.0",
+	"HTTP/1.1",
+	"HTTP/2",
+	NULL,
+};
+
 const char *str_get = "GET";
 const char *str_post = "POST";
 const char *str_head = "HEAD";
+#ifndef DEFAULTSCHEME
+#define DEFAULTSCHEME
+const char *str_defaultscheme = "http";
+#endif
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
@@ -125,7 +138,7 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 	 * Embeded version may use the nbchunk with special vcalloc.
 	 * The idea is to create a pool of chunks into the stack.
 	 */
-	buffer->data = vcalloc(1, chunksize);
+	buffer->data = vcalloc(1, chunksize + 1);
 	if (buffer->data == NULL)
 	{
 		free(buffer);
@@ -140,14 +153,14 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 	if (ChunkSize == 0)
 		ChunkSize = chunksize;
 	buffer->maxchunks = nbchunks;
-	buffer->size = chunksize;
+	buffer->size = chunksize + 1;
 	buffer->offset = buffer->data;
 	return buffer;
 }
 
 static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
-	if (buffer->data + buffer->size <= buffer->offset + length + 1)
+	if (buffer->data + buffer->size < buffer->offset + length + 1)
 	{
 		char *data = buffer->data;
 		int nbchunks = length / ChunkSize + 1;
@@ -258,6 +271,7 @@ HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, htt
 		message->result = RESULT_200;
 		message->client = client;
 		message->chunksize = chunksize;
+//		message->content_length = (typeof(message->content_length)-1);
 		if (parent)
 		{
 			parent->response = message;
@@ -303,6 +317,26 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 	vfree(message);
 }
 
+/**
+ * @brief this function parse several data chunk to extract elements of the request.
+ * 
+ * "parserequest" is able to reconstitue the request, and read
+ *  - method (GET, HEAD, DELETE, PUT, OPTIONS...)
+ *  - version (HTTP0.9 HTTP1.0 HTTP1.1)
+ *  - header elements (ContentType, ContentLength, UserAgent...)
+ *  - content
+ * The element may be retreive with the httpmessage_REQUEST.
+ * The function will returns when the header is completed without treat the rest of the chunck.
+ * The next call should contain this rest for the content parsing.
+ * 
+ * @param message the structure to fill.
+ * @param data the buffer containing the chunk of the request.
+ * 
+ * @return EINCOMPLETE : the request received is to small and the header is not fully received.
+ * ECONTINUE : the header of the request is complete and may be use to begin the treatment.
+ * ESUCCESS : the content is fully received and the next chunk is not a part of this request.
+ * EREJECT : the chunck contains a syntax error, message->result may be use for more information.
+ */
 HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 {
 	int ret = ECONTINUE;
@@ -310,6 +344,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 	do
 	{
 		int next = message->state  & PARSE_MASK;
+
 		switch (next)
 		{
 			case PARSE_INIT:
@@ -335,7 +370,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					data->offset++;
 					message->version = message->client->server->config->version;
 					message->result = RESULT_405;
-					ret = EREJECT;
+					next = PARSE_END;
 				}
 			}
 			break;
@@ -393,7 +428,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 #else
 						message->result = RESULT_400;
 #endif
-						ret = EREJECT;
+						next = PARSE_END;
 						warn("parse reject uri too long 2: %s %s", message->uri->data, data->data);
 					}
 				}
@@ -409,7 +444,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					{
 						message->version = message->client->server->config->version;
 						message->result = RESULT_400;
-						ret = EREJECT;
+						next = PARSE_END;
 						warn("parse reject uri too short");
 					}
 				}
@@ -420,8 +455,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				int i;
 				for (i = HTTP09; i < HTTPVERSIONS; i++)
 				{
-					int length = strlen(_http_message_version[i]);
-					if (!strncasecmp(data->offset, _http_message_version[i], length))
+					int length = strlen(httpversion[i]);
+					if (!strncasecmp(data->offset, httpversion[i], length))
 					{
 						message->version = i;
 						data->offset += length;
@@ -455,8 +490,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				int i;
 				for (i = HTTP09; i < HTTPVERSIONS; i++)
 				{
-					int length = strlen(_http_message_version[i]);
-					if (!strncasecmp(version, _http_message_version[i], length))
+					int length = strlen(httpversion[i]);
+					if (!strncasecmp(version, httpversion[i], length))
 					{
 						data->offset += length;
 						if (*data->offset == '\r')
@@ -468,7 +503,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						}
 						else
 						{
-							ret = EREJECT;
+							next = PARSE_END;
 							message->result = RESULT_400;
 							warn("bad request %s", data->data);
 						}
@@ -478,7 +513,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				}
 				if (i == HTTPVERSIONS)
 				{
-					ret = EREJECT;
+					next = PARSE_END;
 					message->result = RESULT_400;
 					warn("request bad protocol version %s", version);
 				}
@@ -536,27 +571,33 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			{
 				if (_httpmessage_fillheaderdb(message) != ESUCCESS)
 				{
-					ret = EREJECT;
+					next = PARSE_END;
 					message->result = RESULT_400;
 					warn("request bad header %s", message->headers_storage);
 				}
-				else if (message->content_length == 0)
+				else if (message->content_length == (typeof(message->content_length))-1)
 				{
 					next = PARSE_END;
 					dbg("no content inside request");
 				}
+//				else if (!(message->state & PARSE_CONTINUE))
+//					message->state |= PARSE_CONTINUE;
 				else
 				{
 					next = PARSE_PRECONTENT;
+					message->state &= ~PARSE_CONTINUE;
 				}
 			}
 			break;
 			case PARSE_PRECONTENT:
 			{
+				/**
+				 * data may contain some first bytes from the content
+				 * We need to get out from this function use them by
+				 * the connector
+				 */
 				if (!(message->state & PARSE_CONTINUE))
-				{
 					message->state |= PARSE_CONTINUE;
-				}
 				else
 				{
 					next = PARSE_CONTENT;
@@ -579,10 +620,9 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					 * Is possible to use the buffer with the function
 					 *  httpmessage_content
 					 */
-					//int length = data->length -(data->offset - data->data);
-					int length = data->length;
+					int length = data->length -(data->offset - data->data);
+					//int length = data->length;
 					message->content = data;
-
 					/**
 					 * At the end of the parsing the content_length of request 
 					 * is zero. But it is false, the true value is
@@ -604,20 +644,21 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_END:
 			{
-				ret = ESUCCESS;
+				if (message->result == RESULT_200)
+					ret = ESUCCESS;
+				else
+					ret = EREJECT;
 			}
 			break;
 		}
-		//dbg("parse %x %x %d", next, message->state, ret);
+
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
-			if (next < PARSE_CONTENT)
+			if (next < PARSE_PRECONTENT)
 				ret = EINCOMPLETE;
-			break;
+			break; // get out of the while (ret == ECONTINUE) loop
 		}
 		message->state = (message->state & ~PARSE_MASK) | next;
-		if (ret == EREJECT)
-			message->state = PARSE_END;
 	} while (ret == ECONTINUE);
 	return ret;
 }
@@ -627,11 +668,12 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 	http_message_version_e _version = message->version;
 	if (message->version > (version & HTTPVERSION_MASK))
 		_version = (version & HTTPVERSION_MASK);
-	_buffer_append(header, _http_message_version[_version], strlen(_http_message_version[_version]));
+	_buffer_append(header, httpversion[_version], strlen(httpversion[_version]));
+
 	char *status = _httpmessage_status(message);
-	dbg("response %s", status);
 	_buffer_append(header, status, strlen(status));
 	_buffer_append(header, "\r\n", 2);
+
 	header->offset = header->data;
 	return ESUCCESS;
 }
@@ -643,8 +685,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t 
 	dbentry_t *headers = message->headers;
 	while (headers != NULL)
 	{
-		if ((message->content_length > 0) &&
-			(!strcmp(headers->key, str_contentlength)))
+		if (!strcmp(headers->key, str_contentlength))
 		{
 			headers = headers->next;
 			continue;
@@ -655,7 +696,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t 
 		_buffer_append(header, "\r\n", 2);
 		headers = headers->next;
 	}
-	if (message->content_length > 0)
+	if (message->content_length != (typeof(message->content_length))-1)
 	{
 		if (message->mode & HTTPMESSAGE_KEEPALIVE > 0)
 		{
@@ -685,20 +726,35 @@ http_client_t *httpmessage_client(http_message_t *message)
 	return message->client;
 }
 
-int httpmessage_content(http_message_t *message, char **data, int *size)
+int httpmessage_content(http_message_t *message, char **data, unsigned long long *content_length)
 {
-	*size = 0;
+	int size = 0;
+	int state = message->state & PARSE_MASK;
 	if (message->content)
 	{
-		*data = message->content->data;
-		*size = message->content->length;
+		if (data)
+			*data = message->content->data;
+		size = message->content->length;
 	}
-	return message->content_length + *size;
+	if (content_length)
+	{
+		if (message->content_length <= 0)
+			*content_length = 0;
+		else
+			*content_length = message->content_length;
+	}
+	if (state < PARSE_CONTENT)
+		return EINCOMPLETE;
+	if (size == 0 && state > PARSE_CONTENT)
+		return EREJECT;
+	return size;
 }
 
+/**
+ * @brief this function is symetric of "parserequest" to read a response
+ */
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
-	buffer_t *content = message->content;
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
@@ -706,21 +762,30 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	tempo.size = *size;
 	if ((message->state & PARSE_MASK) == PARSE_INIT)
 		message->state = PARSE_STATUS;
-	message->content_length = -1;
+	if (message->content_length == 0)
+		message->content_length = (typeof(message->content_length))-1;
+
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length - (tempo.offset - tempo.data);
 	if (*size > 0)
 		_buffer_shrink(&tempo);
-	if ((message->state & PARSE_MASK) >= PARSE_PRECONTENT)
-		ret = ECONTINUE;
+
 	if ((message->state & PARSE_MASK) == PARSE_END)
 	{
 		if (*size > 0)
 		{
 			*size = 0;
 		}
+		/**
+		 * The request may not contain the ContentLength.
+		 * In this case the function must continue after the end.
+		 * The caller must stop by itself
+		 */
+		if (message->content_length == (typeof(message->content_length))-1)
+			ret = ECONTINUE;
+		else
+			message->content = NULL;
 	}
-	message->content = content;
 	return ret;
 }
 
@@ -751,6 +816,7 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 		return ESUCCESS;
 	char *key = storage->data;
 	char *value = NULL;
+
 	for (i = 0; i < storage->length; i++)
 	{
 		if (storage->data[i] == ':' && value == NULL)
@@ -763,7 +829,10 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 		else if (storage->data[i] == '\0')
 		{
 			if (value == NULL)
+			{
+				warn("header key %s", key);
 				return EREJECT;
+			}
 			if (key[0] != 0)
 				_httpmessage_addheader(message, key, value);
 			key = storage->data + i + 1;
@@ -826,7 +895,7 @@ HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key,
 	}
 }
 
-char *httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
+int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
 {
 	if (message->content == NULL)
 	{
@@ -850,17 +919,22 @@ char *httpmessage_addcontent(http_message_t *message, const char *type, char *co
 			length = strlen(content);
 		_buffer_append(message->content, content, length);
 	}
-	if (message->content_length == 0)
+	if (message->content_length <= 0)
 	{
 		message->content_length = length;
 	}
 	if (message->content != NULL && message->content->data != NULL )
-		return message->content->data;
-	return NULL;
+		return message->content->size - message->content->length;
+	return message->client->server->config->chunksize;
 }
 
-char *httpmessage_appendcontent(http_message_t *message, char *content, int length)
+int httpmessage_appendcontent(http_message_t *message, char *content, int length)
 {
+	if (message->content == NULL && content != NULL)
+	{
+		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
+	}
+
 	if (message->content != NULL && content != NULL)
 	{
 		if (length == -1)
@@ -868,11 +942,14 @@ char *httpmessage_appendcontent(http_message_t *message, char *content, int leng
 		if (length + message->content->length <= message->content->size)
 		{
 			_buffer_append(message->content, content, length);
-			message->content_length += length;
-			return message->content->data;
+			if (message->content_length == (typeof(message->content_length))-1)
+				message->content_length = length;
+			else
+				message->content_length += length;
+			return message->content->size - message->content->length;
 		}
 	}
-	return NULL;
+	return message->client->server->config->chunksize;
 }
 
 int httpmessage_keepalive(http_message_t *message)
@@ -1037,12 +1114,12 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 	request->client = client;
 	response->client = client;
 	httpmessage_addheader(request, "Host", httpmessage_REQUEST(request, "remote_host"));
-	char *method = httpmessage_REQUEST(request, "method");
+	const char *method = httpmessage_REQUEST(request, "method");
 	_buffer_append(data, method, strlen(method));
 	_buffer_append(data, " ", 1);
-	char *uri = httpmessage_REQUEST(request, "uri");
+	const char *uri = httpmessage_REQUEST(request, "uri");
 	_buffer_append(data, uri, strlen(uri));
-	char *version = httpmessage_REQUEST(request, "version");
+	const char *version = httpmessage_REQUEST(request, "version");
 	if (version)
 	{
 		_buffer_append(data, " ", 1);
@@ -1165,7 +1242,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 		vhost = iterator->vhost;
 		if (vhost != NULL)
 		{
-			char *host = httpmessage_REQUEST(request, "host");
+			const char *host = httpmessage_REQUEST(request, "Host");
 			if (!strcasecmp(vhost, host))
 				vhost = NULL;
 		}
@@ -1188,35 +1265,144 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	return ret;
 }
 
+/**
+ * @brief This function push a request when it is "ready".
+ * 
+ * The request may be check by a connector when the header is fully received.
+ * At this moment the request may be push into the list of request to response.
+ * The request should contain the response into request->response.
+ * 
+ * @param client the client connection to response.
+ * @param request the request to response.
+ */
+static void _httpclient_pushrequest(http_client_t *client, http_message_t *request)
+{
+	http_message_t *iterator = client->request_queue;
+	request->state = GENERATE_INIT | (request->state & ~GENERATE_MASK);
+	if (iterator == NULL)
+	{
+		client->request_queue = request;
+	}
+	else
+	{
+		while (iterator->next != NULL) iterator = iterator->next;
+		iterator->next = request;
+	}
+}
+
+/**
+ * @brief This function receives data from the client connection and parse the request.
+ * 
+ * The data is received chunck by chunck. If the connection is closing during the reception
+ * the function will return EREJECT. If more data are mandatory the function return ECONTINUE.
+ * The request will be created for the reception if it is not allready done. But
+ * if the parsing if complete and the request is not complete (parsing error normaly or
+ * the size of the content is unknown and the content is treated by the connector)
+ * the request is reset.
+ * 
+ * @param client the client connection to receive the data.
+ * @param prequest the pointer to the request to create and to fill.
+ * 
+ * @return EINCOMPLETE : data is received and parsed, the function needs to be call again to read more data without waiting.
+ * ECONTINUE: not enough data for parsing, need to wait more data.
+ * ESUCCESS : the request is fully received and parsed. The request may be running.
+ */
+static int _httpclient_message(http_client_t *client, http_message_t **prequest)
+{
+	int size;
+	/**
+	 * here, it is the call to the recvreq callback from the
+	 * server configuration.
+	 * see http_server_config_t and httpserver_create
+	 */
+	size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
+	if (size > 0)
+	{
+		client->sockdata->length += size;
+		client->sockdata->offset[size] = 0;
+		client->sockdata->offset = client->sockdata->data;
+
+		if (*prequest == NULL)
+			*prequest = _httpmessage_create(client, NULL, client->server->config->chunksize);
+
+		/**
+		 * WAIT_ACCEPT does the first initialization
+		 * otherwise the return is EREJECT
+		 */
+		int timer = WAIT_TIMER * 3;
+		if (client->server->config->keepalive)
+			timer = client->server->config->keepalive;
+		client->timeout = timer * 100;
+		size = ESUCCESS;
+	}
+	else if (size == 0 || size == EINCOMPLETE)
+	{
+		size = ECONTINUE;
+	}
+	if (client->sockdata->length > 0)
+	{
+		int ret = _httpmessage_parserequest(*prequest, client->sockdata);
+
+		switch (ret)
+		{
+		case ESUCCESS:
+			if (((*prequest)->mode & HTTPMESSAGE_KEEPALIVE) &&
+				((*prequest)->version > HTTP10))
+			{
+				client->state |= CLIENT_KEEPALIVE;
+				size = ESUCCESS;
+			}
+		break;
+		case ECONTINUE:
+			return EINCOMPLETE;
+		break;
+		case EINCOMPLETE:
+			return EINCOMPLETE;
+		break;
+		case EREJECT:
+		{
+			if ((*prequest)->response == NULL)
+				(*prequest)->response = _httpmessage_create(client, *prequest, client->server->config->chunksize);
+
+			warn("bad resquest");
+			(*prequest)->response->state = PARSE_END | GENERATE_ERROR;
+			(*prequest)->state = PARSE_END;
+			// The response is an error and it is ready to be sent
+			size = ESUCCESS;
+		}
+		break;
+		}
+		/**
+		 * the request is not fully received.
+		 * The request must not run into _httpclient_request
+		 */
+		if (((*prequest)->state & PARSE_MASK)  < PARSE_END)
+			*prequest = NULL;
+	}
+	return size;
+}
+
+/**
+ * @brief This function run the connector with the request.
+ * 
+ * The request is "ready" (the header of the request is complete),
+ * it is possible to check the list of connectors to find the good one.
+ * If a connector returns EINCOMPLETE, the connector needs the content
+ * before to send the response. For all other cases, the request is pushed
+ * into the list of request to response.
+ * The request may be not completed and to be pushed. In this case, this
+ * function has not to do something.
+ * 
+ * @param client the client connection which receives the request.
+ * @param request the request to check.
+ * 
+ * @return ESUCCESS : the request is pushed and the response is ready.
+ * ECONTINUE : the request is pushed and the response needs to be build.
+ * EINCOMPLETE :  the request is not ready to be pushed.
+ */
 static int _httpclient_request(http_client_t *client, http_message_t *request)
 {
-	/**
-	 * By default the function has to wait more data on the socket
-	 * before to be call again.
-	 *  ECONTINUE means treatment (here is more data) is needed.
-	 *  EINCOMPLETE means the function needs to be call again ASAP.
-	 * This is the same meaning with the connectors.
-	 */
-	int ret = EINCOMPLETE;
-
-	/**
-	 * the receiving may complete the buffer, but the parser has
-	 * to check the whole buffer.
-	 **/
-	client->sockdata->offset = client->sockdata->data;
-	if (client->sockdata->length > 0)
-		ret = _httpmessage_parserequest(request, client->sockdata);
-	if (ret == EREJECT)
-	{
-		if (request->result == RESULT_200)
-			request->result = RESULT_400;
-		/**
-		 * the parsing found an error in the request
-		 * the treatment is completed and is successed
-		 **/
-		client->state |= CLIENT_RESPONSEREADY;
-		return ESUCCESS;
-	}
+	int ret = ESUCCESS;
 
 	/**
 	 * The request is partially read.
@@ -1227,107 +1413,159 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 	 * depending of the server. It may be dangerous, a hacker can send
 	 * a request with a very big header.
 	 */
-	if ((request->state & PARSE_MASK) > PARSE_POSTHEADER)
+	if (((request->state & PARSE_MASK) > PARSE_POSTHEADER) &&
+		((request->state & GENERATE_MASK) == 0))
 	{
 		if (request->response == NULL)
 			request->response = _httpmessage_create(client, request, client->server->config->chunksize);
-		if (request->connector == NULL)
-			ret = _httpclient_checkconnector(client, request, request->response);
-		else
-			ret = _httpmessage_runconnector(request, request->response);
-		if (ret == ESUCCESS)
-		{
-			client->state |= CLIENT_RESPONSEREADY;
-			request->response->state &= ~PARSE_CONTINUE;
-		}
-		else if (ret == EREJECT)
-		{
-			request->response->state = GENERATE_ERROR;
-#ifdef DEBUG
-			if (request->response->result != RESULT_200)
-				err("Result error may return ESUCCESS");
-#endif
-			request->response->result = RESULT_404;
-			warn("request not found %s from %p", request->uri->data, client);
-		}
-		else
-			request->response->state |= PARSE_CONTINUE;
-	}
-	/**
-	 * The request's content should be used by  "_httpclient_checkconnector"
-	 * if it is required. After that the content is not stored and useless.
-	 * The content is the "tempo" buffer, it is useless to free it.
-	 **/
-	client->request->content = NULL;
 
-	switch (ret)
+		/**
+		 * this condition is necessary for bad request parsing
+		 */
+		if ((request->response->state & PARSE_MASK) < PARSE_END)
+		{
+			if (request->connector == NULL)
+				ret = _httpclient_checkconnector(client, request, request->response);
+			else
+				ret = _httpmessage_runconnector(request, request->response);
+
+			/**
+			 * The request's content should be used by  "_httpclient_checkconnector"
+			 * if it is required. After that the content is not stored and useless.
+			 * The content is the "tempo" buffer, it is useless to free it.
+			 **/
+			request->content = NULL;
+			switch (ret)
+			{
+			case ESUCCESS:
+			{
+				client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
+				request->response->state = (PARSE_END | GENERATE_INIT) | (request->response->state & ~PARSE_MASK);
+				if (request->mode & HTTPMESSAGE_LOCKED)
+				{
+					client->state |= CLIENT_LOCKED;
+				}
+			}
+			break;
+			case ECONTINUE:
+				if ((request->response->state & PARSE_MASK) < PARSE_POSTHEADER)
+					request->response->state = PARSE_POSTHEADER | (request->response->state & ~PARSE_MASK);
+				request->response->state = GENERATE_INIT | (request->response->state & ~GENERATE_MASK);
+				request->response->state |= PARSE_CONTINUE;
+			break;
+			case EINCOMPLETE:
+				return EINCOMPLETE;
+			break;
+			case EREJECT:
+			{
+				if (request->response->result == RESULT_200)
+					request->response->result = RESULT_404;
+				request->response->state = (PARSE_END | GENERATE_ERROR) | (request->response->state & ~PARSE_MASK);
+				// The response is an error and it is ready to be sent
+				ret = ESUCCESS;
+			}
+			break;
+			}
+		}
+		_httpclient_pushrequest(client, request);
+	}
+	else
+		ret = EINCOMPLETE;
+	return ret;
+}
+
+/**
+ * @brief This function build and send the response of the request
+ * 
+ * This function contains 2 parts: the first one runs the connector while
+ * this one returns ECONTINUE (or EINCOMPLETE but it should not be the case).
+ * The second part send the data on the client connection.
+ * 
+ * @param client the client connection to response.
+ * @param request the request of the response to send.
+ * 
+ * @return ESUCCESS : the response is fully send.
+ * ECONTINUE : the response is sending, and the function should be call again ASAP.
+ * EINCOMPLETE : the connection is not ready to send data, and the function should be call again when it is ready.
+ * EREJECT : the connection is closing during the sending.
+ */
+static int _httpclient_response(http_client_t *client, http_message_t *request)
+{
+	int ret = ECONTINUE;
+	http_message_t *response = request->response;
+
+	if (((response->state & GENERATE_MASK) > GENERATE_SEPARATOR) &&
+		(response->state & PARSE_CONTINUE))
 	{
+		ret = _httpmessage_runconnector(request, response);
+
+		switch (ret)
+		{
 		case ESUCCESS:
 		{
-			if (!(client->state & CLIENT_RESPONSEREADY))
+			client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
+			response->state = PARSE_END | (response->state & ~PARSE_MASK);
+			if (response->mode & HTTPMESSAGE_LOCKED)
 			{
-				request->response->result = RESULT_405;
-				client->state |= CLIENT_RESPONSEREADY;
+				client->state |= CLIENT_LOCKED;
 			}
-			if (request->response->result > 299)
-				request->response->state = GENERATE_ERROR;
-			request->response->state = PARSE_END | (request->response->state & ~PARSE_MASK);
 		}
 		break;
 		case EREJECT:
 		{
-			request->response->state = PARSE_END | (request->response->state & ~PARSE_MASK);
-			ret = ESUCCESS;
+			if (response->result == RESULT_200)
+				response->result = RESULT_400;
+			response->state = (PARSE_END | GENERATE_ERROR) | (request->response->state & ~PARSE_MASK);
 		}
 		break;
 		case ECONTINUE:
 		{
-			request->response->state = PARSE_END | (request->response->state & ~PARSE_MASK);
-		}
-		//break;
-		case EINCOMPLETE:
-		{
-//			if ((request->state & PARSE_MASK) == PARSE_END)
-//				ret = ESUCCESS;
+			response->state |= PARSE_CONTINUE;
 		}
 		break;
+		case EINCOMPLETE:
+		{
+		}
+		break;
+		}
 	}
-	return ret;
-}
-
-static int _httpclient_response(http_client_t *client, http_message_t *request)
-{
-	int ret = ECONTINUE;
-	if (request->response == NULL)
-	{
-		request->response = _httpmessage_create(client, request, client->server->config->chunksize);
-		request->response->state = GENERATE_ERROR;
-	}
-
-	http_message_t *response = request->response;
 
 	switch (response->state & GENERATE_MASK)
 	{
-		case GENERATE_INIT:
+		case GENERATE_ERROR:
 		{
 			if (response->version == HTTP09)
+			{
 				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
-			else if (response->result < 300)
+			}
+			else
 			{
 				if (response->header == NULL)
 					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
 				buffer_t *buffer = response->header;
-				if ((request->response->state & PARSE_MASK) >= PARSE_END)
+				response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
+				_httpmessage_buildresponse(response, client->server->config->version, buffer);
+			}
+			response->state &= ~PARSE_CONTINUE;
+
+		}
+		break;
+		case GENERATE_INIT:
+		{
+			if (response->version == HTTP09)
+				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+			else
+			{
+				if (response->header == NULL)
+					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
+				buffer_t *buffer = response->header;
+				if ((request->response->state & PARSE_MASK) >= PARSE_POSTHEADER)
 				{
 					response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
 					_httpmessage_buildresponse(response, client->server->config->version, buffer);
 				}
 			}
-			else
-			{
-				response->state = GENERATE_ERROR;
-				ret = EINCOMPLETE;
-			}
+			ret = ECONTINUE;
 		}
 		break;
 		case GENERATE_RESULT:
@@ -1343,12 +1581,23 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			if (size < 0)
 			{
 				err("client %p RESULT send error %s", client, strerror(errno));
-				response->state &= ~PARSE_CONTINUE;
-				ret = size;
+				ret = EREJECT;
 				break;
 			}
 			buffer->offset += size;
 			buffer->length -= size;
+
+			/**
+			 * for error the content must be set before the header
+			 * generation to set the ContentLength
+			 */
+			if ((response->result > 399) &&
+				(response->content == NULL))
+			{
+				const char *value = _httpmessage_status(response);
+				httpmessage_addcontent(response, "text/plain", (char *)value, strlen(value));
+				httpmessage_appendcontent(response, (char *)"\n\r", 2);
+			}
 
 			if (buffer->length <= 0)
 			{
@@ -1356,6 +1605,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				_buffer_reset(buffer);
 				_httpmessage_buildheader(response, buffer);
 			}
+			ret = ECONTINUE;
 		}
 		break;
 		case GENERATE_HEADER:
@@ -1366,8 +1616,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			if (size < 0)
 			{
 				err("client %p HEADER send error %s", client, strerror(errno));
-				response->state &= ~PARSE_CONTINUE;
-				ret = size;
+				ret = EREJECT;
 				break;
 			}
 			buffer->offset += size;
@@ -1377,6 +1626,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			{
 				response->state = GENERATE_SEPARATOR | (response->state & ~GENERATE_MASK);
 			}
+			ret = ECONTINUE;
 		}
 		break;
 		case GENERATE_SEPARATOR:
@@ -1386,127 +1636,80 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			if (size < 0)
 			{
 				err("client %p SEPARATOR send error %s", client, strerror(errno));
-				response->state &= ~PARSE_CONTINUE;
-				ret = size;
+				ret = EREJECT;
 				break;
 			}
 			if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
 				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 			else
+			{
 				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+			}
 			client->ops.flush(client);
+			ret = ECONTINUE;
 		}
 		break;
 		case GENERATE_CONTENT:
 		{
 			int size;
 			buffer_t *buffer = response->content;
-			if (buffer == NULL)
+			if ((buffer == NULL) || (buffer->length == 0))
 			{
-				response->state &= ~PARSE_CONTINUE;
+				if ((response->state & PARSE_MASK) == PARSE_END)
+					response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 			}
 			else
 			{
 				buffer->offset = buffer->data;
-				do {
+				while (buffer->length > 0)
+				{
 					size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
 					if (size == EINCOMPLETE)
 					{
-						return size;
+						ret = EINCOMPLETE;
+						break;
 					}
-					if (size < 0)
+					else if (size < 0)
 					{
-						err("client %p CONTENT send error %s", client, strerror(errno));
-						response->state &= ~PARSE_CONTINUE;
-						ret = size;
+						err("client %p CONTENT rest %d send error %s", client, buffer->length, strerror(errno));
+						ret = EREJECT;
 						break;
 					}
 					buffer->length -= size;
 					buffer->offset += size;
-				} while (buffer->length > 0);
+				}
 				_buffer_reset(buffer);
+				ret = ECONTINUE;
 			}
-			/**
-			 * last data was prepared during the call to this function.
-			 * now the data is sending, and we can go to END
-			 */
-			if (!(response->state & PARSE_CONTINUE))
-			{
-				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
-			}
-		}
-		break;
-		case GENERATE_ERROR:
-		{
-			if (response->content == NULL)
-			{
-				const char *value = _httpmessage_status(response);
-				httpmessage_addcontent(response, "text/plain", (char *)value, strlen(value));
-			}
-			if (response->version == HTTP09)
-				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
-			else
-			{
-				if (response->header == NULL)
-					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
-				buffer_t *buffer = response->header;
-				response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
-				_httpmessage_buildresponse(response, client->server->config->version, buffer);
-			}
-			response->state &= ~PARSE_CONTINUE;
 		}
 		break;
 		case GENERATE_END:
 		{
-			response->state &= ~PARSE_CONTINUE;
+			http_connector_list_t *callback = request->connector;
+			const char *name = "server";
+			if (callback)
+				name = callback->name;
+			warn("response to %p from connector \"%s\" result %d", client, name, request->response->result);
 			ret = ESUCCESS;
 		}
 		break;
 	}
-
-	if (((response->state & GENERATE_MASK) > GENERATE_SEPARATOR) &&
-		(response->state & PARSE_CONTINUE))
-	{
-		ret = _httpmessage_runconnector(request, request->response);
-		if (ret == EREJECT || request->response->result > 299)
-		{
-			response->state = GENERATE_ERROR;
-			/** delete func to stop request after the error response **/
-			request->connector = NULL;
-			ret = ECONTINUE;
-		}
-		else if (ret == ESUCCESS)
-		{
-			response->state &= ~PARSE_CONTINUE;
-			ret = ECONTINUE;
-		}
-		else if (ret == EINCOMPLETE)
-		{
-		}
-	}
-
 	return ret;
 }
 
-static void _httpclient_pushrequest(http_client_t *client, http_message_t *request)
+/**
+ * @brief This function waits data on the client socket.
+ * 
+ * @param client the client connection to trigg
+ * @param options the bitsmask with WAIT_ACCEPT and WAIT_SEND
+ * 
+ * @return ESUCCESS : data are available.
+ * EINCOMPLETE : data is not available, wait again.
+ * EREJECT : connection must be close.
+ */
+static int _httpclient_wait(http_client_t *client, int options)
 {
-	http_message_t *iterator = client->request_queue;
-	if (request->response)
-		request->response->state = GENERATE_INIT | (request->response->state & ~GENERATE_MASK);
-	if (iterator == NULL)
-	{
-		client->request_queue = request;
-	}
-	else
-	{
-		while (iterator->next != NULL) iterator = iterator->next;
-		iterator->next = request;
-	}
-}
-
-int httpclient_wait(http_client_t *client, int options)
-{
-	int ret = client->sock;
+	int ret = ESUCCESS;
 
 #if defined(VTHREAD) && !defined(BLOCK_SOCKET)
 	struct timespec *ptimeout = NULL;
@@ -1515,13 +1718,15 @@ int httpclient_wait(http_client_t *client, int options)
 	{
 		timeout.tv_sec = 0;
 		timeout.tv_nsec = 10000000;
+		ptimeout = &timeout;
+		ptimeout = NULL;
 	}
 	else
 	{
 		timeout.tv_sec = WAIT_TIMER;
 		timeout.tv_nsec = 0;
+		ptimeout = &timeout;
 	}
-	ptimeout = &timeout;
 
 	fd_set fds;
 	FD_ZERO(&fds);
@@ -1545,9 +1750,13 @@ int httpclient_wait(http_client_t *client, int options)
 	sigaddset(&sigmask, SIGCHLD);
 	ret = ppoll(poll_set, numfds, ptimeout, NULL);
 	if (poll_set[0].revents & POLLIN)
+	{
 		FD_SET(client->sock, &fds);
+	}
 	else if (poll_set[0].revents & POLLOUT)
-		ret = client->sock;
+	{
+		FD_SET(client->sock, &fds);
+	}
 	else if (ret < 0)
 		err("client %p poll %x", client, poll_set[0].revents);
 #else
@@ -1580,7 +1789,8 @@ int httpclient_wait(http_client_t *client, int options)
 			client->timeout -= 100 * WAIT_TIMER;
 			if (client->timeout <  0)
 				ret = EREJECT;
-			ret = EINCOMPLETE;
+			else
+				ret = EINCOMPLETE;
 			errno = EAGAIN;
 		}
 	}
@@ -1589,11 +1799,11 @@ int httpclient_wait(http_client_t *client, int options)
 		if (FD_ISSET(client->sock, &fds))
 		{
 			ret = client->ops.status(client);
-			if ((options & WAIT_SEND) || ret == ESUCCESS)
+			if (options & WAIT_SEND)
 			{
-				ret = client->sock;
+				ret = ESUCCESS;
 			}
-			else
+			else if (ret != ESUCCESS)
 			{
 				err("httpclient_wait %p socket closed ", client);
 				ret = EREJECT;
@@ -1626,6 +1836,29 @@ int httpclient_wait(http_client_t *client, int options)
 	return ret;
 }
 
+int httpclient_wait(http_client_t *client, int options)
+{
+	int ret;
+	ret = _httpclient_wait(client, options);
+	if (ret == ESUCCESS)
+		ret = client->sock;
+	return ret;
+}
+
+/**
+ * @brief This function is the manager of the client's loop.
+ * 
+ * This function does:
+ *  - wait data if it is useful.
+ *  - read and parse data to build a request.
+ *  - check if the receiving request could be treat by a connector.
+ *  - treat the list of requests already ready to response.
+ * 
+ * @param client the client connection.
+ * 
+ * @return ESUCCESS : The client is closed and the loop may stop.
+ * ECONTINUE : The main loop must continue to run.
+ */
 static int _httpclient_run(http_client_t *client)
 {
 #ifdef DEBUG
@@ -1633,136 +1866,62 @@ static int _httpclient_run(http_client_t *client)
 	clock_gettime(CLOCK_MONOTONIC, &spec);
 	//dbg("\tclient %p state %X at %d:%d", client, client->state, spec.tv_sec, spec.tv_nsec);
 #endif
+	int recv_ret = ECONTINUE;
+	int send_ret = ECONTINUE;
+	int wait_option = 0;
 
-	if (!(client->state & CLIENT_LOCKED) &&
-		(client->state & CLIENT_MACHINEMASK) != CLIENT_EXIT)
-	{
-		if (client->request_queue)
-		{
-			int response_ret;
-			response_ret = _httpclient_response(client, client->request_queue);
-			if ((client->request_queue->response->mode & HTTPMESSAGE_KEEPALIVE) &&
-				(client->request_queue->response->version > HTTP10))
-			{
-				client->state |= CLIENT_KEEPALIVE;
-			}
-			if (client->request_queue->response->mode & HTTPMESSAGE_LOCKED)
-			{
-				client->state |= CLIENT_LOCKED;
-				if (!(client->request_queue->response->state & PARSE_CONTINUE))
-				{
-					/**
-					 * On connector ESUCCESS
-					 * a normal connector has to continue while the content
-					 * is not fully sent.
-					 * a locked connector has to stop.
-					 */
-					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-					response_ret = ESUCCESS;
-				}
-			}
-			if (response_ret == ESUCCESS)
-			{
-				http_connector_list_t *callback = client->request_queue->connector;
-				const char *name = "server";
-				if (callback)
-					name = callback->name;
-				warn("response to %p from connector \"%s\" result %d", client, name, client->request_queue->response->result);
-
-				/**
-				 * flush the output socket
-				 */
-				if (client->ops.flush != NULL)
-					client->ops.flush(client);
-
-				http_message_t *next = client->request_queue->next;
-				_httpmessage_destroy(client->request_queue);
-				client->request_queue = next;
-			}
-			else if (response_ret == EREJECT)
-			{
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				client->state |= CLIENT_ERROR;
-				return EINCOMPLETE;
-			}
-		}
-	}
-
-	int request_ret = EINCOMPLETE;
+	/**
+	 * The best place to reset the socket buffer. The connector of the current request
+	 * is running and may need the content data.
+	 * In some cases the buffer needs to be reset after _httpclient_message and in some
+	 * othe cases it needs to be reset after _httpmessage_runconnector.
+	 */
+	if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
+		_buffer_reset(client->sockdata);
+	else
+		_buffer_shrink(client->sockdata);
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
 		case CLIENT_NEW:
-		{
-			request_ret = httpclient_wait(client, WAIT_ACCEPT);
-			if (request_ret == client->sock)
-				request_ret = ESUCCESS;
-			//request_ret = client->ops.status(client);
-
-			if (request_ret == EREJECT)
-			{
-				err("client %p accept error %d", client, request_ret);
-				// timeout
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				client->state |= CLIENT_ERROR;
-				return EINCOMPLETE;
-			}
-			else if (request_ret == ESUCCESS)
-				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
-			else
-			{
-				dbg("client %p waits again first data", client);
-#ifdef VTHREAD
-				vthread_yield(client->thread);
-#endif
-			}
-		}
-		break;
+			wait_option = WAIT_ACCEPT;
 		case CLIENT_WAITING:
 		{
-			if (client->request_queue)
-				client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
-			else if ((request_ret = httpclient_wait(client, 0)) == EREJECT)
+			recv_ret = _httpclient_wait(client, wait_option);
+			if (recv_ret == ESUCCESS)
 			{
-				/* timeout */
+				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+			}
+			else if (recv_ret == EREJECT)
+			{
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				client->state |= CLIENT_ERROR;
-				return EINCOMPLETE;
 			}
-			else
-				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 		}
 		break;
 		case CLIENT_READING:
 		{
-			request_ret = client->ops.status(client);
-			if (request_ret == EINCOMPLETE)
-				client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);			
-			if (client->request_queue)
-				client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);			
+			/**
+			 * The modification of the client state is done after
+			 * _httpclient_message
+			 */
+			recv_ret = ESUCCESS;
 		}
 		break;
 		case CLIENT_SENDING:
 		{
-			request_ret = client->ops.status(client);
-			if (client->request_queue == NULL)
-			{
-				if (client->server->config->keepalive &&
-						!(client->state & CLIENT_LOCKED) &&
-						(client->state & CLIENT_KEEPALIVE))
-				{
-					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK & ~CLIENT_RESPONSEREADY);
-				}
-				else
-				{
-					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-					return EINCOMPLETE;
-				}
-			}
+			send_ret = _httpclient_wait(client, WAIT_SEND);
+			recv_ret = client->ops.status(client);
 		}
 		break;
 		case CLIENT_EXIT:
 		{
+			/**
+			 * flush the output socket
+			 */
+			if (client->ops.flush != NULL)
+				client->ops.flush(client);
+
 			/**
 			 * the modules need to be free before any
 			 * socket closing.
@@ -1797,98 +1956,87 @@ static int _httpclient_run(http_client_t *client)
 		break;
 	}
 
-	if (!(client->state & CLIENT_LOCKED) &&
-		((client->state & CLIENT_MACHINEMASK) < CLIENT_SENDING))
+	if (recv_ret == ESUCCESS)
 	{
-		if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
-			_buffer_reset(client->sockdata);
-		else
-			_buffer_shrink(client->sockdata);
-		int size = 0;
-		/**
-		 * here, it is the call to the recvreq callback from the
-		 * server configuration.
-		 * see http_server_config_t and httpserver_create
-		 */
-		size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
-
-		if (size > 0)
+		int ret = _httpclient_message(client, &client->request);
+		if (ret == ECONTINUE)
 		{
-			client->sockdata->length += size;
-			client->sockdata->data[client->sockdata->length] = 0;
-			request_ret = ECONTINUE;
-			if ((client->state & CLIENT_MACHINEMASK) == CLIENT_WAITING)
-				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
-			/**
-			 * WAIT_ACCEPT does the first initialization
-			 * otherwise the return is EREJECT
-			 */
-			int timer = WAIT_TIMER * 3;
-			if (client->server->config->keepalive)
-				timer = client->server->config->keepalive;
-			client->timeout = timer * 100;
-		}
-		else if ( size == ECONTINUE)
-		{
-			request_ret = EINCOMPLETE;
-		}
-		else if ( size == EINCOMPLETE)
-		{
-			//dbg("client %p recv EAGAIN", client);
 			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
 		}
+		else if (ret == EINCOMPLETE)
+		{
+			client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		else if (ret == EREJECT)
+			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+	}
+	
+	if (client->request != NULL)
+	{
+		int ret = _httpclient_request(client, client->request);
+		if (ret != EINCOMPLETE && (client->request->state & PARSE_MASK) == PARSE_END)
+		{
+			client->request = NULL;
+		}
+
+		if (ret == ESUCCESS || ret == ECONTINUE)
+		{
+			send_ret = _httpclient_wait(client, WAIT_SEND);
+			client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		else if (ret == EREJECT)
+			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+	}
+
+	if ((send_ret == ESUCCESS) && (client->request_queue))
+	{
+		http_message_t *request = client->request_queue;
+		if (request->response == NULL)
+		{
+			err("internal error: response should be created");
+			exit(0);
+		}
 		else
 		{
-			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-			client->state |= CLIENT_ERROR;
-			if ( size == 0)
-				err("client %p shutdown from outside 0x%X", client, client->state);
-			else
-				err("client %p recv error %s", client, strerror(errno));
-			return EINCOMPLETE;
-		}
-	}
-
-	if (!(client->state & CLIENT_LOCKED))
-	{
-
-		if((client->server->config->version >= (HTTP11 | HTTP_PIPELINE)) || 
-				((client->state & CLIENT_MACHINEMASK) < CLIENT_SENDING))
-		//if (request_ret == ESUCCESS)
-		{
-			if (client->request == NULL)
-				client->request = _httpmessage_create(client, NULL, client->server->config->chunksize);
-
-			request_ret = _httpclient_request(client, client->request);
-
-			if ((client->request->mode & HTTPMESSAGE_KEEPALIVE) &&
-				(client->request->version > HTTP10))
+			int ret = EINCOMPLETE;
+			do
 			{
-				client->state |= CLIENT_KEEPALIVE;
+				ret = _httpclient_response(client, request);
+			} while (ret == EINCOMPLETE);
+
+			if (ret == ESUCCESS)
+			{
+				if (client->state & CLIENT_LOCKED)
+				{
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				if ((request->state & PARSE_MASK) < PARSE_END)
+				{
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				else
+				{
+					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				client->request_queue = request->next;
+				_httpmessage_destroy(request);
 			}
-			if (client->request->mode & HTTPMESSAGE_LOCKED)
+			else if (ret == EREJECT)
 			{
-				client->state |= CLIENT_LOCKED;
-			}
-
-			if (request_ret == EREJECT)
-			{
+				err("client should exit");
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				return EINCOMPLETE;
 			}
-			if (request_ret == ESUCCESS || request_ret == ECONTINUE)
-			{
-				_httpclient_pushrequest(client, client->request);
-				client->request = NULL;
-			}
+			else
+				client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
 		}
 	}
-	return (client->state & CLIENT_STOPPED)?ESUCCESS:ECONTINUE;
+	return ECONTINUE;
 }
 
 void httpclient_shutdown(http_client_t *client)
 {
 	client->ops.disconnect(client);
+	client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 }
 
 /***********************************************************************
@@ -2568,12 +2716,11 @@ void httpserver_destroy(http_server_t *server)
 }
 /***********************************************************************/
 
-static char default_value[8] = {0};
+static const char default_value[8] = {0};
 static char host[NI_MAXHOST], service[NI_MAXSERV];
-char *httpserver_INFO(http_server_t *server, const char *key)
+const char *httpserver_INFO(http_server_t *server, const char *key)
 {
-	char *value = default_value;
-	memset(default_value, 0, sizeof(default_value));
+	const char *value = default_value;
 
 	if (!strcasecmp(key, "name"))
 	{
@@ -2585,7 +2732,7 @@ char *httpserver_INFO(http_server_t *server, const char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = (char *)_http_message_version[(server->config->version & HTTPVERSION_MASK)];
+		value = (char *)httpversion[(server->config->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "port"))
 	{
@@ -2615,97 +2762,11 @@ char *httpserver_INFO(http_server_t *server, const char *key)
 	return value;
 }
 
-char *httpmessage_COOKIE(http_message_t *message, const char *key)
-{
-	char *value = NULL;
-	if (message->client == NULL)
-		return NULL;
-	if (message->cookies == NULL)
-	{
-		char *cookie = NULL;
-		/**
-		 * same as httpmessage_REQUEST(message, "Cookie")
-		 * but disallow header access with
-		 * header->key = "#ookie";
-		 **/
-		dbentry_t *header = message->headers;
-		while (header != NULL)
-		{
-			if (!strcasecmp(header->key, "Cookie"))
-			{
-				header->key = "#ookie";
-				cookie = header->value;
-				break;
-			}
-			header = header->next;
-		}
-		if (cookie && cookie[0] != '\0')
-		{
-			while (*cookie == ' ')
-			{
-				cookie++;
-			}
-			char *key = cookie;
-			int length = strlen(cookie) + 1;
-			char *value = NULL;
-			int i;
-			for (i = 0; i < length; i++)
-			{
-				if (cookie[i] == '=' && value == NULL)
-				{
-					cookie[i] = '\0';
-					value = cookie + i + 1;
-					while (*value == ' ')
-					{
-						i++;
-						value++;
-					}
-				}
-				else if (cookie[i] == '\0' || cookie[i] == ';')
-				{
-					if (key[0] != 0 && value != NULL)
-					{
-						dbg("new cookie: %s => %s", key, value);
-						dbentry_t *headerinfo;
-						headerinfo = vcalloc(1, sizeof(dbentry_t));
-						headerinfo->key = key;
-						headerinfo->value = value;
-						headerinfo->next = message->cookies;
-						message->cookies = headerinfo;
-					}
-					key = cookie + i + 1;
-					while (*key == ' ')
-					{
-						i++;
-						key++;
-					}
-					value = NULL;
-				}
-			}
-		}
-	}
-	if (message->cookies != NULL)
-	{
-		dbentry_t *cookie = message->cookies;
-		while (cookie != NULL)
-		{
-			if (!strcasecmp(cookie->key, key))
-			{
-				value = cookie->value;
-				break;
-			}
-			cookie = cookie->next;
-		}
-	}
-	return value;
-}
-
-char *httpmessage_SERVER(http_message_t *message, const char *key)
+const char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
 	if (message->client == NULL)
 		return NULL;
-	char *value = default_value;
-	memset(default_value, 0, sizeof(default_value));
+	const char *value = default_value;
 
 	if (!strcasecmp(key, "port"))
 	{
@@ -2742,9 +2803,9 @@ char *httpmessage_SERVER(http_message_t *message, const char *key)
 	return value;
 }
 
-char *httpmessage_REQUEST(http_message_t *message, const char *key)
+const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 {
-	char *value = default_value;
+	const char *value = default_value;
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
@@ -2757,11 +2818,11 @@ char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
-		strcpy(value, "http");
+		value = str_defaultscheme;
 	}
 	else if (!strcasecmp(key, "version"))
 	{
-		strcpy(value, _http_message_version[(message->version & HTTPVERSION_MASK)]);
+		value = httpversion[(message->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "method"))
 	{
@@ -2824,7 +2885,7 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, http_cli
 	return session;
 }
 
-char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
+const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value)
 {
 	dbentry_t *sessioninfo = NULL;
 	if (message->client == NULL)
@@ -2839,6 +2900,7 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 			sessioninfo = sessioninfo->next;
 		}
 	}
+
 	if (value != NULL)
 	{
 		if (!message->client->session)
@@ -2856,36 +2918,14 @@ char *httpmessage_SESSION(http_message_t *message, const char *key, char *value)
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
 		}
-		if (sessioninfo->value)
+		if (sessioninfo->value != (char *)value)
 		{
-			dbentry_t *next = sessioninfo->next;
-			if (strlen(value) <= strlen(sessioninfo->value))
-			{
-				strcpy(sessioninfo->value, value);
-			}
-			else if (next != NULL)
-			{
-				char *data = message->client->session->storage->data;
-				int length = message->client->session->storage->length;
-				length -= next->key - data;
-				memmove(sessioninfo->key, next->key, length);
-				length = next->key - sessioninfo->key;
-				while (next != NULL)
-				{
-					next->key -= length;
-					next->value -= length;
-					next = next->next;
-				}
-				message->client->session->storage->length -= length;
-			}
+			sessioninfo->value = (char *)value;
 		}
-		else
-			sessioninfo->value = 
-				_buffer_append(message->client->session->storage, value, strlen(value) + 1);
 	}
 	else if (sessioninfo == NULL)
 	{
-		return default_value;
+		return NULL;
 	}
-	return sessioninfo->value;
+	return (const void *)sessioninfo->value;
 }

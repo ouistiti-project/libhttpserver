@@ -91,6 +91,7 @@ typedef struct http_client_s http_client_t;
 extern const char *str_get;
 extern const char *str_post;
 extern const char *str_head;
+extern const char *str_defaultscheme;
 
 typedef enum
 {
@@ -102,6 +103,17 @@ typedef enum
 	HTTPVERSION_MASK = 0x00FF,
 	HTTP_PIPELINE = 0x0100,
 } http_message_version_e;
+
+extern const char *httpversion[];
+/**
+{
+	"HTTP/0.9",
+	"HTTP/1.0",
+	"HTTP/1.1",
+	"HTTP/2",
+	NULL,
+};
+**/
 
 typedef int http_message_result_e;
 #define RESULT_200 200
@@ -118,6 +130,7 @@ typedef int http_message_result_e;
 #define RESULT_403 403
 #define RESULT_414 414
 #define RESULT_416 416
+#define RESULT_500 500
 #define RESULT_505 505
 #define RESULT_511 511
 #endif
@@ -194,6 +207,7 @@ typedef struct http_server_config_s
 	int chunksize;
 	/** the version of the HTTP server. */
 	http_message_version_e version;
+	const char *versionstr;
 	/** the keepalive timeout **/
 	int keepalive;
 } http_server_config_t;
@@ -231,7 +245,7 @@ http_server_t *httpserver_create(http_server_config_t *config);
  * @return the value of the attribut or a empty string
  */
 
-char *httpserver_INFO(http_server_t *server, const char *key);
+const char *httpserver_INFO(http_server_t *server, const char *key);
 
 /**
  * @brief add a HTTP method to manage
@@ -374,9 +388,9 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
  * @param content the data of the content
  * @param length the length of the bitstream of the content
  * 
- * @return the storage pointer of the content
+ * @return the space available into the chunk of content
  */
-char *httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length);
+int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length);
 
 /**
  * @brief append data to content of the response message before sending
@@ -385,20 +399,20 @@ char *httpmessage_addcontent(http_message_t *message, const char *type, char *co
  * @param content the data of the content
  * @param length the length of the bitstream of the content
  * 
- * @return the storage pointer of the content
+ * @return the space available into the chunk of content
  */
-char *httpmessage_appendcontent(http_message_t *message, char *content, int length);
+int httpmessage_appendcontent(http_message_t *message, char *content, int length);
 
 /**
  * @brief returns the content of the request message
  *
  * @param message the request message
- * @param content the data of the content
- * @param length the length of the bitstream of the content
+ * @param contentpart the data of the content
+ * @param contentlenght the rest size of the content to read
  * 
- * @return the length of the content not already read
+ * @return the length of data pop into contentpart
  */
-int httpmessage_content(http_message_t *message, char **content, int *length);
+int httpmessage_content(http_message_t *message, char **contentpart, unsigned long long *contentlenght);
 
 /**
  * @brief set the Keep-Alive connection
@@ -471,7 +485,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
  * @return the value of the attribut or a empty string
  */
 
-char *httpmessage_SERVER(http_message_t *message, const char *key);
+const char *httpmessage_SERVER(http_message_t *message, const char *key);
 
 /**
  * @brief get value for different attributs of the request
@@ -483,17 +497,7 @@ char *httpmessage_SERVER(http_message_t *message, const char *key);
  *
  * @return the value of the attribut or a empty string
  */
-char *httpmessage_REQUEST(http_message_t *message, const char *key);
-
-/**
- * @brief get value of each cookie of the request
- *
- * @param message the request message received
- * @param key the name of the cookie
- *
- * @return the value of the attribut or a null pointer
- */
-char *httpmessage_COOKIE(http_message_t *message, const char *key);
+const char *httpmessage_REQUEST(http_message_t *message, const char *key);
 
 /**
  * @brief get value for the session used by the request
@@ -504,9 +508,9 @@ char *httpmessage_COOKIE(http_message_t *message, const char *key);
  * @param key the name of the attribut
  * @param value the value to set with the key or NULL
  *
- * @return the value of the attribut or a empty string
+ * @return the value of the attribute or NULL
  */
-char *httpmessage_SESSION(http_message_t *message, const char *key, char *value);
+const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value);
 
 /**********************************************************************/
 typedef struct httpclient_ops_s httpclient_ops_t;
@@ -619,6 +623,14 @@ void httpclient_shutdown(http_client_t *client);
 #define WAIT_SEND 0x01
 #define WAIT_ACCEPT 0x02
 int httpclient_wait(http_client_t *client, int options);
+
+typedef void *(*module_create_t)(http_server_t *server, char *vhost, void *config);
+typedef struct module_s
+{
+	const char *name;
+	void *(*create)(http_server_t *server, char *vhost, void *config);
+	void (*destroy)(void*);
+} module_t;
 
 #ifdef __cplusplus
 }

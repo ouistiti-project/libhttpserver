@@ -1,7 +1,7 @@
 LIBB64_DIR=../libb64
 
-modules-$(DYNAMIC)+=mod_websocket
-slib-$(STATIC)+=mod_websocket
+modules-$(MODULES)+=mod_websocket
+slib-y+=mod_websocket
 mod_websocket_LDFLAGS+=-L../utils
 mod_websocket_SOURCES-$(WEBSOCKET)+=mod_websocket.c
 mod_websocket_CFLAGS+=-I../include

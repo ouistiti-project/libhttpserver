@@ -80,12 +80,12 @@ struct http_message_s
 		PARSE_CONTENT,
 		PARSE_END,
 		PARSE_MASK = 0x000F,
-		GENERATE_INIT = 0x0010,
-		GENERATE_RESULT = 0x0020,
-		GENERATE_HEADER = 0x0030,
-		GENERATE_SEPARATOR = 0x0040,
-		GENERATE_CONTENT = 0x0050,
-		GENERATE_ERROR = 0x00E0,
+		GENERATE_ERROR = 0x0010,
+		GENERATE_INIT = 0x0020,
+		GENERATE_RESULT = 0x0030,
+		GENERATE_HEADER = 0x0040,
+		GENERATE_SEPARATOR = 0x0050,
+		GENERATE_CONTENT = 0x0060,
 		GENERATE_END = 0x00F0,
 		GENERATE_MASK = 0x00F0,
 		PARSE_CONTINUE = 0x0100,
@@ -94,7 +94,7 @@ struct http_message_s
 	int chunksize;
 	buffer_t *content;
 	buffer_t *header;
-	int content_length;
+	unsigned long long content_length;
 	buffer_t *uri;
 	char *query;
 	http_message_version_e version;
@@ -113,7 +113,6 @@ struct _http_message_result_s
 typedef struct _http_message_result_s _http_message_result_t;
 
 HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[];
-HTTPMESSAGE_DECL const char *_http_message_version[];
 
 HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize);
 HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message);
@@ -252,14 +251,6 @@ HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[] =
 	&(_http_message_result_t){RESULT_511, " 511 Network Authentication Required"},
 #endif
 	NULL
-};
-
-HTTPMESSAGE_DECL const char *_http_message_version[] =
-{
-	"HTTP/0.9",
-	"HTTP/1.0",
-	"HTTP/1.1",
-	"HTTP/2",
 };
 
 HTTPMESSAGE_DECL const char str_connection[] = "Connection";

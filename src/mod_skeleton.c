@@ -29,9 +29,9 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "log.h"
-#include "httpserver.h"
-#include "mod_skeleton.h"
+#include "httpserver/log.h"
+#include "httpserver/httpserver.h"
+#include "httpserver/mod_skeleton.h"
 
 typedef struct _mod_skeleton_config_s _mod_skeleton_config_t;
 typedef struct _mod_skeleton_s _mod_skeleton_t;
@@ -138,3 +138,10 @@ static int _skeleton_connector(void *arg, http_message_t *request, http_message_
 	httpmessage_addheader(response, config->header_key, config->header_value);
 	return ECONTINUE;
 }
+
+const module_t mod_skeleton =
+{
+	.name = str_skeleton,
+	.create = (module_create_t)mod_skeleton_create,
+	.destroy = mod_skeleton_destroy
+};

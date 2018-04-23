@@ -46,60 +46,9 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-#if defined(MBEDTLS)
-# include <mbedtls/sha1.h>
-# define SHA1_ctx mbedtls_sha1_context
-# define SHA1_init(pctx) \
-	do { \
-		mbedtls_sha1_init((pctx)); \
-		mbedtls_sha1_starts((pctx)); \
-	} while(0)
-# define SHA1_update(pctx, in, len) \
-	mbedtls_sha1_update((pctx), in, len)
-# define SHA1_finish(out, pctx) \
-	do { \
-		mbedtls_sha1_finish((pctx), out); \
-		mbedtls_sha1_free((pctx)); \
-	} while(0)
-#else
-typedef struct SHA1_ctx_s{ char *input; int inputlen;} SHA1_ctx;
-# define SHA1_init(pctx)
-# define SHA1_update(pctx, in, len) \
-	do { \
-		(pctx)->input = in; \
-		(pctx)->inputlen = len; \
-	} while(0)
-# define SHA1_finish(out, pctx) \
-	do { \
-		memcpy(out, (pctx)->input, (pctx)->inputlen); \
-	} while(0)
-#endif
-#if defined(MBEDTLS)
-# include <mbedtls/base64.h>
-# define BASE64_encode(in, inlen, out, outlen) \
-	do { \
-		size_t cnt = 0; \
-		mbedtls_base64_encode(out, outlen, &cnt, in, inlen); \
-	}while(0)
-# define BASE64_decode(in, inlen, out, outlen) \
-	do { \
-		size_t cnt = 0; \
-		mbedtls_base64_decode(out, outlen, &cnt, in, inlen); \
-	}while(0)
-#else
-# include "b64/cencode.h"
-# define BASE64_encode(in, inlen, out, outlen) \
-	do { \
-		base64_encodestate state; \
-		base64_init_encodestate(&state); \
-		int cnt = base64_encode_block(in, inlen, out, &state); \
-		cnt += base64_encode_blockend(out + cnt, &state); \
-		out[cnt - 1] = '\0'; \
-	}while(0)		 
-#endif
-
 #include "httpserver/log.h"
 #include "httpserver/httpserver.h"
+#include "httpserver/hash.h"
 #include "httpserver/uri.h"
 #include "httpserver/mod_websocket.h"
 #include "httpserver/utils.h"
@@ -133,18 +82,18 @@ static const char str_key[] = "Sec-WebSocket-Key";
 
 static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *request, http_message_t *response)
 {
-	char *key = httpmessage_REQUEST(request, str_key);
+	const char *key = httpmessage_REQUEST(request, str_key);
 	if (key && key[0] != 0)
 	{
 		char accept[20] = {0};
-		SHA1_ctx ctx;
-		SHA1_init(&ctx);
-		SHA1_update(&ctx, key, strlen(key));
-		SHA1_update(&ctx, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", sizeof("258EAFA5-E914-47DA-95CA-C5AB0DC85B11") -1);
-		SHA1_finish(accept, &ctx);
+		void *ctx;
+		ctx = hash_sha1->init();
+		hash_sha1->update(ctx, key, strlen(key));
+		hash_sha1->update(ctx, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", sizeof("258EAFA5-E914-47DA-95CA-C5AB0DC85B11") -1);
+		hash_sha1->finish(ctx, accept);
 
 		char out[40];
-		BASE64_encode(accept, 20, out, 40);
+		base64->encode(accept, hash_sha1->size, out, hash_sha1->size * 2);
 
 		httpmessage_addheader(response, str_accept, out);
 	}
@@ -171,15 +120,15 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 
 	if (ctx->filepath == NULL)
 	{
-		char *connection = httpmessage_REQUEST(request, str_connection);
+		const char *connection = httpmessage_REQUEST(request, str_connection);
 
 		if (strcasestr(connection, str_upgrade))
 		{
-			char *upgrade = httpmessage_REQUEST(request, str_upgrade);
+			const char *upgrade = httpmessage_REQUEST(request, str_upgrade);
 
 			if (strcasestr(upgrade, str_websocket))
 			{
-				char *protocol = NULL;
+				const char *protocol = NULL;
 				char *uri = utils_urldecode(httpmessage_REQUEST(request, "uri"));
 				if (_checkname(ctx->mod->config, uri) == ESUCCESS)
 				{
@@ -275,14 +224,17 @@ static void _mod_websocket_freectx(void *arg)
 	free(ctx);
 }
 
-void *mod_websocket_create(http_server_t *server, char *vhost, void *config, mod_websocket_run_t run, void *runarg)
+void *mod_websocket_create(http_server_t *server, char *vhost, mod_websocket_t *config)
 {
 	_mod_websocket_t *mod = calloc(1, sizeof(*mod));
 
+	mod_websocket_run_t run = config->run;
+	if (run == NULL)
+		run = default_websocket_run;
 	mod->vhost = vhost;
 	mod->config = config;
 	mod->run = run;
-	mod->runarg = runarg;
+	mod->runarg = config;
 	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod, str_websocket);
 	warn("websocket support %s", mod->config->docroot);
 	return mod;
@@ -472,3 +424,10 @@ int default_websocket_run(void *arg, int socket, char *filepath, http_message_t 
 	}
 	return pid;
 }
+
+const module_t mod_websocket =
+{
+	.name = str_websocket,
+	.create = (module_create_t)mod_websocket_create,
+	.destroy = mod_websocket_destroy
+};

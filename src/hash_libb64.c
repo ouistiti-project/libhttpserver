@@ -1,5 +1,5 @@
 /*****************************************************************************
- * mod_mbedtls.h: Simple HTTPS module
+ * hash.c: hash functions for modules
  * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
@@ -25,29 +25,35 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
+#include <stdlib.h>
 
-#ifndef __MOD_MBEDTLS_H__
-#define __MOD_MBEDTLS_H__
+#include "httpserver/hash.h"
 
-#ifdef __cplusplus
-extern "C"
+# include "b64/cencode.h"
+# include "b64/cdecode.h"
+
+void BASE64_encode(const char *in, int inlen, char *out, int outlen);
+void BASE64_decode(const char *in, int inlen, char *out, int outlen);
+base64_t *base64 = &(base64_t)
 {
-#endif
+	.encode = BASE64_encode,
+	.decode = BASE64_decode,
+};
 
-typedef struct mod_mbedtls_s mod_tls_t;
-typedef struct mod_mbedtls_s
+void BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
-	char *crtfile;
-	char *pemfile;
-	char *cachain;
-	char *dhmfile;
-} mod_mbedtls_t;
-
-void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig);
-void mod_mbedtls_destroy(void *mod);
-
-#ifdef __cplusplus
+	base64_encodestate state;
+	base64_init_encodestate(&state);
+	int cnt = base64_encode_block(in, inlen, out, &state);
+	cnt = base64_encode_blockend(out + cnt, &state);
+	out[cnt - 1] = '\0';
 }
-#endif
 
-#endif
+void BASE64_decode(const char *in, int inlen, char *out, int outlen)
+{
+	base64_decodestate decoder;
+	base64_init_decodestate(&decoder);
+	int cnt = base64_decode_block(in, inlen, out, &decoder);
+	out[cnt - 1] = '\0';
+}
+

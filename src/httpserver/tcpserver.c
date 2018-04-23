@@ -149,7 +149,6 @@ static int tcpclient_status(void *ctl)
 		return EREJECT;
 	int nbbytes = 0;
 	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
-	//ret = read(client->sock, NULL, 0);
 	//dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
 	if (ret < 0)
 		return EREJECT;
@@ -253,7 +252,7 @@ static int _tcpserver_start(http_server_t *server)
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
 
-	status = getaddrinfo(server->config->addr, "http", &hints, &result);
+	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
 	if (status != 0) {
 		result = &hints;
 	}

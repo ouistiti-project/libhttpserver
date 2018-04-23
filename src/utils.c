@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "httpserver/log.h"
 #include "httpserver/httpserver.h"
@@ -171,6 +172,7 @@ char *utils_urldecode(const char *encoded)
 		}
 		else if (encoded[0] == '.' && encoded[1] == '.' && encoded[2] == '/')
 		{
+			// back into previous directory
 			encoded+=3;
 			if (offset > decoded && *(offset - 1) == '/')
 			{
@@ -179,7 +181,15 @@ char *utils_urldecode(const char *encoded)
 			}
 			offset = strrchr(decoded, '/');
 			if (offset == NULL)
-				offset = decoded;
+			{
+				if (decoded[0] == 0)
+				{
+					free(decoded);
+					return NULL;
+				}
+				else
+					offset = decoded;
+			}
 		}
 		else if (*encoded == '?')
 		{
@@ -312,7 +322,6 @@ char *utils_buildpath(const char *docroot, const char *path_info,
 	snprintf(filepath, length + 1, "%s/%s%s%s", docroot, path_info, filename, ext);
 
 	filepath[length] = '\0';
-
 	if (filestat)
 	{
 		memset(filestat, 0, sizeof(*filestat));
@@ -373,5 +382,30 @@ int main()
 	ret = utils_searchexp("test/public/toto.css.none", "public/*.js,public/*.css");
 	warn("21 ret %d/EREJECT", ret);
 	return 0;
+}
+#endif
+
+#ifndef COOKIE
+static const char str_Cookie[] = "Cookie";
+static const char str_SetCookie[] = "Set-Cookie";
+
+const char *cookie_get(http_message_t *request, const char *key)
+{
+	const char *value = NULL;
+	const char *cookie = NULL;
+	cookie = httpmessage_REQUEST(request, str_Cookie);
+	if (cookie != NULL)
+	{
+		value = strstr(cookie, key);
+	}
+	return value;
+}
+
+void cookie_set(http_message_t *response, const char *key, char *value)
+{
+	char *keyvalue = malloc(strlen(key) + 1 + strlen(value) + 1);
+	sprintf(keyvalue, "%s=%s", key, value);
+	httpmessage_addheader(response, str_SetCookie, keyvalue);
+	free(keyvalue);
 }
 #endif

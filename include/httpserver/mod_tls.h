@@ -1,5 +1,5 @@
 /*****************************************************************************
- * utils.h: http utils  for modules
+ * mod_tls.h: Simple HTTPS module
  * this file is part of https://github.com/ouistiti-project/libhttpserver
  *****************************************************************************
  * Copyright (C) 2016-2017
@@ -26,49 +26,29 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __MOD_TLS_H__
+#define __MOD_TLS_H__
 
-extern char *str_location;
-
-typedef enum
+#ifdef __cplusplus
+extern "C"
 {
-	MIME_TEXTPLAIN,
-	MIME_TEXTHTML,
-	MIME_TEXTCSS,
-	MIME_TEXTJSON,
-	MIME_APPLICATIONJAVASCRIPT,
-	MIME_IMAGEPNG,
-	MIME_IMAGEJPEG,
-	MIME_APPLICATIONOCTETSTREAM,
-} utils_mimetype_enum;
-const char *utils_getmime(const char *path);
-void utils_addmime(const char *ext, const char*mime);
+#endif
 
-char *utils_urldecode(const char *encoded);
-int utils_searchexp(const char *haystack, const char *needleslist);
-char *utils_buildpath(const char *docroot, const char *path_info,
-					const char *filename, const char *ext, struct stat *filestat);
+typedef struct mod_tls_s mod_tls_t;
+struct mod_tls_s
+{
+	char *crtfile;
+	char *pemfile;
+	char *cachain;
+	char *dhmfile;
+};
 
-/**
- * @brief get value of each cookie of the request
- *
- * The function may accept NULL key in this case
- * it returns the first cookie available and
- * the next call to the function will return the next one.
- * The return is not directly the value of the cookie but
- * the key followed by the value separated by "=".
- * Example:
- * keyvalue = cookie_get(request, "foo");
- * strcmp(keyvalue, "foo=bar") == 0
- * 
- * @param message the request message received
- * @param key the name of the cookie or NULL
- *
- * @return the key and value corresponding or a null pointer
- */
-const char *cookie_get(http_message_t *request, const char *key);
+extern const module_t mod_tls;
+void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig);
+void mod_tls_destroy(void *mod);
 
-void cookie_set(http_message_t *response, const char *key, char *value);
+#ifdef __cplusplus
+}
+#endif
 
 #endif

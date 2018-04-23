@@ -63,9 +63,9 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 #error MBEDTLS not found
 #endif
 
-#include "log.h"
-#include "httpserver.h"
-#include "mod_mbedtls.h"
+#include "httpserver/log.h"
+#include "httpserver/httpserver.h"
+#include "httpserver/mod_tls.h"
 
 #define HANDSHAKE 0x01
 #define RECV_COMPLETE 0x02
@@ -100,7 +100,7 @@ static void _mod_mbedtls_freectx(void *vctx);
 static int _mod_mbedtls_recv(void *vctx, char *data, int size);
 static int _mod_mbedtls_send(void *vctx, char *data, int size);
 
-void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
+void *mod_mbedtls_create(http_server_t *server, char *unused, mod_tls_t *modconfig)
 {
 	int ret;
 	int is_set_pemkey = 0;
@@ -159,10 +159,10 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 			mbedtls_ssl_conf_ca_chain(&config->conf, &config->cachain, NULL);
 	}
 
-	char *pers = httpserver_INFO(server, "name");
+	const char *pers = httpserver_INFO(server, "name");
 	if (! pers)
 	{
-		pers = (char *)str_mbedtls;
+		pers = str_mbedtls;
 	}
 	if (pers)
 	{
@@ -192,6 +192,7 @@ void *mod_mbedtls_create(http_server_t *server, mod_mbedtls_t *modconfig)
 	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config, str_mbedtls);
 	return config;
 }
+void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_mbedtls_create")));
 
 void mod_mbedtls_destroy(void *mod)
 {
@@ -206,6 +207,7 @@ void mod_mbedtls_destroy(void *mod)
 	mbedtls_ssl_config_free(&config->conf);
 	mbedtls_free(config);
 }
+void mod_tls_destroy(void *arg) __attribute__ ((weak, alias ("mod_mbedtls_destroy")));
 
 static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 {
@@ -300,7 +302,7 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
 	}
 	if (ret == MBEDTLS_ERR_SSL_WANT_READ)
-		ret = ECONTINUE;
+		ret = EINCOMPLETE;
 	else if (ret < 0)
 	{
 		ret = EREJECT;
@@ -319,3 +321,10 @@ static int _mod_mbedtls_send(void *vctx, char *data, int size)
 		ret = EREJECT;
 	return ret;
 }
+
+const module_t mod_tls =
+{
+	.name = str_mbedtls,
+	.create = (module_create_t)mod_tls_create,
+	.destroy = mod_tls_destroy,
+};

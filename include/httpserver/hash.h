@@ -26,49 +26,32 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __HASH_H__
+#define __HASH_H__
 
-extern char *str_location;
-
-typedef enum
+typedef struct base64_s base64_t;
+struct base64_s
 {
-	MIME_TEXTPLAIN,
-	MIME_TEXTHTML,
-	MIME_TEXTCSS,
-	MIME_TEXTJSON,
-	MIME_APPLICATIONJAVASCRIPT,
-	MIME_IMAGEPNG,
-	MIME_IMAGEJPEG,
-	MIME_APPLICATIONOCTETSTREAM,
-} utils_mimetype_enum;
-const char *utils_getmime(const char *path);
-void utils_addmime(const char *ext, const char*mime);
+	void (*encode)(const char *in, int inlen, char *out, int outlen);
+	void (*decode)(const char *in, int inlen, char *out, int outlen);
+};
 
-char *utils_urldecode(const char *encoded);
-int utils_searchexp(const char *haystack, const char *needleslist);
-char *utils_buildpath(const char *docroot, const char *path_info,
-					const char *filename, const char *ext, struct stat *filestat);
+extern base64_t *base64;
 
-/**
- * @brief get value of each cookie of the request
- *
- * The function may accept NULL key in this case
- * it returns the first cookie available and
- * the next call to the function will return the next one.
- * The return is not directly the value of the cookie but
- * the key followed by the value separated by "=".
- * Example:
- * keyvalue = cookie_get(request, "foo");
- * strcmp(keyvalue, "foo=bar") == 0
- * 
- * @param message the request message received
- * @param key the name of the cookie or NULL
- *
- * @return the key and value corresponding or a null pointer
- */
-const char *cookie_get(http_message_t *request, const char *key);
+typedef struct hash_s hash_t;
+struct hash_s
+{
+	int size;
+	const char *name;
+	void *(*init)();
+	void (*update)(void *ctx, const char *in, size_t len);
+	int (*finish)(void *ctx, char *out);
+};
 
-void cookie_set(http_message_t *response, const char *key, char *value);
+extern hash_t *hash_md5;
+extern hash_t *hash_sha1;
+extern hash_t *hash_sha224;
+extern hash_t *hash_sha256;
+extern hash_t *hash_sha512;
 
 #endif
