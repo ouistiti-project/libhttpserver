@@ -431,3 +431,6 @@ const module_t mod_websocket =
 	.create = (module_create_t)mod_websocket_create,
 	.destroy = mod_websocket_destroy
 };
+#ifdef MODULES
+extern module_t mod_info __attribute__ ((weak, alias ("mod_websocket")));
+#endif

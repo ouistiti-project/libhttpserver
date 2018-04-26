@@ -145,3 +145,6 @@ const module_t mod_skeleton =
 	.create = (module_create_t)mod_skeleton_create,
 	.destroy = mod_skeleton_destroy
 };
+#ifdef MODULES
+extern module_t mod_info __attribute__ ((weak, alias ("mod_skeleton")));
+#endif

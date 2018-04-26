@@ -249,3 +249,6 @@ const module_t mod_cookie =
 	.create = (module_create_t)mod_cookie_create,
 	.destroy = mod_cookie_destroy
 };
+#ifdef MODULES
+extern module_t mod_info __attribute__ ((weak, alias ("mod_cookie")));
+#endif
