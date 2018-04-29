@@ -1826,12 +1826,6 @@ static int _httpclient_wait(http_client_t *client, int options)
 		ret = ESUCCESS;
 	else
 		ret = client->ops.status(client);
-	if (ret == ESUCCESS)
-		ret = client->sock;
-	else if (ret == EREJECT)
-	{
-		err("httpclient_wait %p socket closed ", client);
-	}
 #endif
 	return ret;
 }
