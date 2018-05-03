@@ -1448,7 +1448,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 			case ESUCCESS:
 			{
 				client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
-				request->response->state = (PARSE_END | GENERATE_INIT) | (request->response->state & ~PARSE_MASK);
+				request->response->state = PARSE_END | GENERATE_INIT | (request->response->state & ~PARSE_MASK);
 				if (request->mode & HTTPMESSAGE_LOCKED)
 				{
 					client->state |= CLIENT_LOCKED;
@@ -1468,7 +1468,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 			{
 				if (request->response->result == RESULT_200)
 					request->response->result = RESULT_404;
-				request->response->state = (PARSE_END | GENERATE_ERROR) | (request->response->state & ~PARSE_MASK);
+				request->response->state = PARSE_END | GENERATE_ERROR | (request->response->state & ~PARSE_MASK);
 				// The response is an error and it is ready to be sent
 				ret = ESUCCESS;
 			}
@@ -1524,7 +1524,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			if (response->result == RESULT_200)
 				response->result = RESULT_400;
-			response->state = (PARSE_END | GENERATE_ERROR) | (request->response->state & ~PARSE_MASK);
+			response->state = PARSE_END | GENERATE_ERROR | (request->response->state & ~PARSE_MASK);
+			response->state &= ~PARSE_CONTINUE;
 		}
 		break;
 		case ECONTINUE:
@@ -1662,12 +1663,9 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			int size;
 			buffer_t *buffer = response->content;
-			if ((buffer == NULL) || (buffer->length == 0))
-			{
-				if ((response->state & PARSE_MASK) == PARSE_END)
-					response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
-			}
-			else
+			if ((response->state & PARSE_MASK) == PARSE_END)
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+			if ((buffer != NULL) && (buffer->length > 0))
 			{
 				buffer->offset = buffer->data;
 				while (buffer->length > 0)
