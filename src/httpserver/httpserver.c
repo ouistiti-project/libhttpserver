@@ -1043,7 +1043,8 @@ static void _httpclient_destroy(http_client_t *client)
 	while (request)
 	{
 		http_message_t *next = request->next;
-		_httpmessage_destroy(request);
+		if (request != client->request)
+			_httpmessage_destroy(request);
 		request = next;
 	}
 	client->request_queue = NULL;
