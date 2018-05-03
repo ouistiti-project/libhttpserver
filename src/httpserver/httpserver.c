@@ -754,6 +754,14 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
  */
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
+	if (data == NULL)
+	{
+		message->content = NULL;
+		if ((message->state & PARSE_MASK) == PARSE_END)
+			return ESUCCESS;
+		else
+			return EINCOMPLETE;
+	}
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
