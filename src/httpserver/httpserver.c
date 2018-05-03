@@ -1477,7 +1477,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		}
 		_httpclient_pushrequest(client, request);
 	}
-	else
+	else if ((request->state & GENERATE_MASK) == 0)
 		ret = EINCOMPLETE;
 	return ret;
 }
@@ -1833,6 +1833,12 @@ static int _httpclient_wait(http_client_t *client, int options)
 		ret = ESUCCESS;
 	else
 		ret = client->ops.status(client);
+	/**
+	 * The main server loop detected an event on the socket.
+	 * If there is not data then the socket had to be closed.
+	 */
+	if (ret != ESUCCESS)
+		ret = EREJECT;
 #endif
 	return ret;
 }
@@ -2007,20 +2013,34 @@ static int _httpclient_run(http_client_t *client)
 
 			if (ret == ESUCCESS)
 			{
-				if (client->state & CLIENT_LOCKED)
-				{
-					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				}
+				ret = ECONTINUE;
+				client->request_queue = request->next;
 				if ((request->state & PARSE_MASK) < PARSE_END)
 				{
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					ret = EINCOMPLETE;
+				}
+				else if (client->state & CLIENT_LOCKED)
+				{
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				else if (!(client->state & CLIENT_KEEPALIVE))
+				{
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					ret = EINCOMPLETE;
 				}
 				else
 				{
 					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				client->request_queue = request->next;
-				_httpmessage_destroy(request);
+				/**
+				 * client->request is not null if the reception is not complete.
+				 * In this case the client keeps the request until the connection
+				 * is closed
+				 */
+				if (request != client->request)
+					_httpmessage_destroy(request);
+				return ret;
 			}
 			else if (ret == EREJECT)
 			{
