@@ -575,7 +575,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					message->result = RESULT_400;
 					warn("request bad header %s", message->headers_storage);
 				}
-				else if (message->content_length == (typeof(message->content_length))-1)
+				else if (message->content_length == 0)
 				{
 					next = PARSE_END;
 					dbg("no content inside request");
@@ -651,7 +651,6 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			}
 			break;
 		}
-
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
 			if (next < PARSE_PRECONTENT)
@@ -1505,6 +1504,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
 			response->state = PARSE_END | (response->state & ~PARSE_MASK);
+			response->state &= ~PARSE_CONTINUE;
 			if (response->mode & HTTPMESSAGE_LOCKED)
 			{
 				client->state |= CLIENT_LOCKED;
