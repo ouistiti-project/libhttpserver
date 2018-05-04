@@ -28,32 +28,45 @@
 #include <stdlib.h>
 
 #include "httpserver/hash.h"
+#include "httpserver/log.h"
 
 # include "b64/cencode.h"
 # include "b64/cdecode.h"
 
-void BASE64_encode(const char *in, int inlen, char *out, int outlen);
-void BASE64_decode(const char *in, int inlen, char *out, int outlen);
-base64_t *base64 = &(base64_t)
+static void BASE64_encode(const char *in, int inlen, char *out, int outlen);
+static void BASE64_decode(const char *in, int inlen, char *out, int outlen);
+const base64_t *base64 = &(const base64_t)
 {
 	.encode = BASE64_encode,
 	.decode = BASE64_decode,
 };
 
-void BASE64_encode(const char *in, int inlen, char *out, int outlen)
+static void BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
 	base64_encodestate state;
 	base64_init_encodestate(&state);
 	int cnt = base64_encode_block(in, inlen, out, &state);
 	cnt = base64_encode_blockend(out + cnt, &state);
-	out[cnt - 1] = '\0';
+	int i;
+	for (i = cnt-1; i < outlen; i++)
+	{
+		if ((out[i] == '\n') ||
+			(out[i] == '\r'))
+			out[i] = '\0';
+	}
 }
 
-void BASE64_decode(const char *in, int inlen, char *out, int outlen)
+static void BASE64_decode(const char *in, int inlen, char *out, int outlen)
 {
 	base64_decodestate decoder;
 	base64_init_decodestate(&decoder);
 	int cnt = base64_decode_block(in, inlen, out, &decoder);
-	out[cnt - 1] = '\0';
+	int i;
+	for (i = cnt-1; i < outlen; i++)
+	{
+		if ((out[i] == '\n') ||
+			(out[i] == '\r'))
+			out[i] = '\0';
+	}
 }
 
