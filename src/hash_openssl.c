@@ -27,106 +27,94 @@
  *****************************************************************************/
 #include <stdlib.h>
 
-# include <wolfssl/wolfcrypt/md5.h>
-# include <wolfssl/wolfcrypt/sha.h>
-# include <wolfssl/wolfcrypt/sha256.h>
+#include <openssl/conf.h>
+#include <openssl/evp.h>
 
 #include "httpserver/hash.h"
 #include "httpserver/log.h"
 
 static void *MD5_init();
-static void MD5_update(void *ctx, const char *in, size_t len);
-static int MD5_finish(void *ctx, char *out);
+static void *SHA1_init();
+static void *SHA256_init();
+static void *SHA512_init();
+static void HASH_update(void *ctx, const char *in, size_t len);
+static int HASH_finish(void *ctx, char *out);
+
 const hash_t *hash_md5 = &(const hash_t)
 {
 	.size = 16,
 	.name = "MD5",
 	.init = MD5_init,
-	.update = MD5_update,
-	.finish = MD5_finish,
+	.update = HASH_update,
+	.finish = HASH_finish,
 };
-
-static void *SHA1_init();
-static void SHA1_update(void *ctx, const char *in, size_t len);
-static int SHA1_finish(void *ctx, char *out);
 const hash_t *hash_sha1 = &(const hash_t)
 {
 	.size = 20,
 	.name = "SHA1",
 	.init = SHA1_init,
-	.update = SHA1_update,
-	.finish = SHA1_finish,
+	.update = HASH_update,
+	.finish = HASH_finish,
 };
-
 const hash_t *hash_sha224 = NULL;
-
-static void *SHA256_init();
-static void SHA256_update(void *ctx, const char *in, size_t len);
-static int SHA256_finish(void *ctx, char *out);
 const hash_t *hash_sha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "SHA-256",
 	.init = SHA256_init,
-	.update = SHA256_update,
-	.finish = SHA256_finish,
+	.update = HASH_update,
+	.finish = HASH_finish,
 };
-
-const hash_t *hash_sha512 = NULL;
+const hash_t *hash_sha512 = &(const hash_t)
+{
+	.size = 64,
+	.name = "SHA-512",
+	.init = SHA512_init,
+	.update = HASH_update,
+	.finish = HASH_finish,
+};
 
 static void *MD5_init()
 {
-	Md5 *pctx;
-	pctx = calloc(1, sizeof(*pctx));
-	wc_InitMd5(pctx);
+	EVP_MD_CTX *pctx;
+	pctx = EVP_MD_CTX_create();
+	if (EVP_DigestInit_ex(pctx, EVP_md5(), NULL) != 1)
+		return pctx;
 	return pctx;
 }
-static void MD5_update(void *ctx, const char *in, size_t len)
-{
-	Md5 *pctx = (Md5 *)ctx;
-	wc_Md5Update(pctx, in, len);
-}
-static int MD5_finish(void *ctx, char *out)
-{
-	Md5 *pctx = (Md5 *)ctx;
-	wc_Md5Final(pctx, out);
-	free(pctx);
-}
-
 static void *SHA1_init()
 {
-	Sha *pctx;
-	pctx = calloc(1, sizeof(*pctx));
-	wc_InitSha(pctx);
+	EVP_MD_CTX *pctx;
+	pctx = EVP_MD_CTX_create();
+	if (EVP_DigestInit_ex(pctx, EVP_sha1(), NULL) != 1)
+		return pctx;
 	return pctx;
 }
-static void SHA1_update(void *ctx, const char *in, size_t len)
-{
-	Sha *pctx = (Sha *)ctx;
-	wc_ShaUpdate(pctx, in, len);
-}
-static int SHA1_finish(void *ctx, char *out)
-{
-	Sha *pctx = (Sha *)ctx;
-	wc_ShaFinal(pctx, out);
-	free(pctx);
-}
-
 static void *SHA256_init()
 {
-	Sha256 *pctx;
-	pctx = calloc(1, sizeof(*pctx));
-	wc_InitSha256(pctx);
+	EVP_MD_CTX *pctx;
+	pctx = EVP_MD_CTX_create();
+	if (EVP_DigestInit_ex(pctx, EVP_sha256(), NULL) != 1)
+		return pctx;
 	return pctx;
 }
-static void SHA256_update(void *ctx, const char *in, size_t len)
+static void *SHA512_init()
 {
-	Sha256 *pctx = (Sha256 *)ctx;
-	wc_Sha256Update(pctx, in, len);
+	EVP_MD_CTX *pctx;
+	pctx = EVP_MD_CTX_create();
+	if (EVP_DigestInit_ex(pctx, EVP_sha512(), NULL) != 1)
+		return NULL;
+	return pctx;
 }
-static int SHA256_finish(void *ctx, char *out)
+static void HASH_update(void *ctx, const char *in, size_t len)
 {
-	Sha256 *pctx = (Sha256 *)ctx;
-	wc_Sha256Final(pctx, out);
-	free(pctx);
+	EVP_MD_CTX *pctx = (EVP_MD_CTX *)ctx;
+	EVP_DigestUpdate(pctx, in, len);
+}
+static int HASH_finish(void *ctx, char *out)
+{
+	EVP_MD_CTX *pctx = (EVP_MD_CTX *)ctx;
+	unsigned int len = 0;
+	EVP_DigestFinal_ex(pctx, out, &len);
+	EVP_MD_CTX_destroy(pctx);
 }

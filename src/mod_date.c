@@ -45,6 +45,8 @@ static int _mod_date_recv(void *vctx, char *data, int size);
 static int _mod_date_send(void *vctx, char *data, int size);
 static int _date_connector(void *arg, http_message_t *request, http_message_t *response);
 
+static const char str_date[] = "date";
+
 struct _mod_date_s
 {
 	_mod_date_config_t *config;
@@ -68,7 +70,7 @@ void *mod_date_create(http_server_t *server)
 
 	config->header_value = calloc(1, 30);
 	
-	httpserver_addconnector(server, NULL, _date_connector, config);
+	httpserver_addconnector(server, NULL, _date_connector, config, str_date);
 
 	return config;
 }
@@ -97,3 +99,13 @@ static int _date_connector(void *arg, http_message_t *request, http_message_t *r
 	/* reject the request to allow other connectors to set the response */
 	return EREJECT;
 }
+
+const module_t mod_date =
+{
+	.name = str_date,
+	.create = (module_create_t)mod_date_create,
+	.destroy = mod_datte_destroy,
+};
+#ifdef MODULES
+extern module_t mod_info __attribute__ ((weak, alias ("mod_date")));
+#endif

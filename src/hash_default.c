@@ -28,11 +28,16 @@
 #include <stdlib.h>
 
 #include "httpserver/hash.h"
+#include "httpserver/log.h"
 
-void *MD5_init();
-void MD5_update(void *ctx, const char *in, size_t len);
-int MD5_finish(void *ctx, char *out);
-hash_t *hash_md5 = &(hash_t)
+static void *MD5_init();
+static void MD5_update(void *ctx, const char *in, size_t len);
+static int MD5_finish(void *ctx, char *out);
+static void *SHA1_init();
+static void SHA1_update(void *ctx, const char *in, size_t len);
+static int SHA1_finish(void *ctx, char *out);
+
+const hash_t *hash_md5 = &(const hash_t)
 {
 	.size = 16,
 	.name = "MD5",
@@ -41,29 +46,36 @@ hash_t *hash_md5 = &(hash_t)
 	.finish = MD5_finish,
 };
 
-hash_t *hash_sha1 = NULL;
-hash_t *hash_sha224 = NULL;
-hash_t *hash_sha256 = NULL;
-hash_t *hash_sha512 = NULL;
+const hash_t *hash_sha1 = &(const hash_t)
+{
+	.size = 20,
+	.name = "SHA1",
+	.init = SHA1_init,
+	.update = SHA1_update,
+	.finish = SHA1_finish,
+};
+const hash_t *hash_sha224 = NULL;
+const hash_t *hash_sha256 = NULL;
+const hash_t *hash_sha512 = NULL;
 
 #if defined (MD5_RONRIVEST)
 
 # include "md5-c/global.h"
 # include "md5-c/md5.h"
 
-void *MD5_init()
+static void *MD5_init()
 {
 	MD5_CTX *pctx;
 	pctx = calloc(1, sizeof(*pctx));
 	MD5Init(pctx);
 	return pctx;
 }
-void MD5_update(void *ctx, const char *in, size_t len)
+static void MD5_update(void *ctx, const char *in, size_t len)
 {
 	MD5_CTX *pctx = (MD5_CTX *)ctx;
 	MD5Update(pctx, in, len);
 }
-int MD5_finish(void *ctx, char *out)
+static int MD5_finish(void *ctx, char *out)
 {
 	MD5_CTX *pctx = (MD5_CTX *)ctx;
 	MD5Final(out, pctx);
@@ -74,22 +86,56 @@ int MD5_finish(void *ctx, char *out)
 
 # include "md5/md5.h"
 
-void *MD5_init()
+static void *MD5_init()
 {
 	md5_state_t *pctx;
 	pctx = calloc(1, sizeof(*pctx));
 	md5_init(pctx);
 	return pctx;
 }
-void MD5_update(void *ctx, const char *in, size_t len)
+static void MD5_update(void *ctx, const char *in, size_t len)
 {
 	md5_state_t *pctx = (md5_state_t *)ctx;
 	md5_append(pctx, in, len);
 }
-int MD5_finish(void *ctx, char *out)
+static int MD5_finish(void *ctx, char *out)
 {
 	md5_state_t *pctx = (md5_state_t *)ctx;
 	md5_finish(pctx, out);
 	free(pctx);
 }
 #endif
+
+#ifdef LIBSHA1
+#include "libsha1.h"
+static void *SHA1_init()
+{
+	sha1_ctx *pctx;
+	pctx = calloc(1, sizeof(*pctx));
+	sha1_begin(pctx);
+	return pctx;
+}
+static void SHA1_update(void *ctx, const char *in, size_t len)
+{
+	sha1_ctx *pctx = (sha1_ctx *)ctx;
+	sha1_hash(in, len, pctx);
+}
+static int SHA1_finish(void *ctx, char *out)
+{
+	sha1_ctx *pctx = (sha1_ctx *)ctx;
+	sha1_end(out, pctx);
+	free(pctx);
+}
+#else
+static void *SHA1_init()
+{
+	return NULL + 1;
+}
+static void SHA1_update(void *ctx, const char *in, size_t len)
+{
+}
+static int SHA1_finish(void *ctx, char *out)
+{
+}
+#endif
+

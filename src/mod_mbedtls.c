@@ -328,3 +328,6 @@ const module_t mod_tls =
 	.create = (module_create_t)mod_tls_create,
 	.destroy = mod_tls_destroy,
 };
+#ifdef MODULES
+extern module_t mod_info __attribute__ ((weak, alias ("mod_tls")));
+#endif

@@ -236,7 +236,7 @@ void *mod_websocket_create(http_server_t *server, char *vhost, mod_websocket_t *
 	mod->run = run;
 	mod->runarg = config;
 	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod, str_websocket);
-	warn("websocket support %s", mod->config->docroot);
+	warn("websocket: support %s", mod->config->docroot);
 	return mod;
 }
 
@@ -253,7 +253,7 @@ static int _websocket_socket(char *filepath)
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, filepath, sizeof(addr.sun_path) - 1);
 
-	dbg("websocket %s", addr.sun_path);
+	dbg("websocket: open %s", addr.sun_path);
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock > 0)
 	{
@@ -431,3 +431,6 @@ const module_t mod_websocket =
 	.create = (module_create_t)mod_websocket_create,
 	.destroy = mod_websocket_destroy
 };
+#ifdef MODULES
+extern module_t mod_info __attribute__ ((weak, alias ("mod_websocket")));
+#endif

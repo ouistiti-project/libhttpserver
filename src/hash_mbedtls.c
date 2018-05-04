@@ -33,19 +33,28 @@
 # include <mbedtls/base64.h>
 
 #include "httpserver/hash.h"
+#include "httpserver/log.h"
 
-void BASE64_encode(const char *in, int inlen, char *out, int outlen);
-void BASE64_decode(const char *in, int inlen, char *out, int outlen);
-base64_t *base64 = &(base64_t)
+static void BASE64_encode(const char *in, int inlen, char *out, int outlen);
+static void BASE64_decode(const char *in, int inlen, char *out, int outlen);
+static void *MD5_init();
+static void MD5_update(void *ctx, const char *in, size_t len);
+static int MD5_finish(void *ctx, char *out);
+static void *SHA1_init();
+static void SHA1_update(void *ctx, const char *in, size_t len);
+static int SHA1_finish(void *ctx, char *out);
+static void *SHA256_init();
+static void SHA256_update(void *ctx, const char *in, size_t len);
+static int SHA256_finish(void *ctx, char *out);
+
+#ifndef LIBB64
+const base64_t *base64 = &(const base64_t)
 {
 	.encode = BASE64_encode,
 	.decode = BASE64_decode,
 };
-
-void *MD5_init();
-void MD5_update(void *ctx, const char *in, size_t len);
-int MD5_finish(void *ctx, char *out);
-hash_t *hash_md5 = &(hash_t)
+#endif
+const hash_t *hash_md5 = &(const hash_t)
 {
 	.size = 16,
 	.name = "MD5",
@@ -53,11 +62,7 @@ hash_t *hash_md5 = &(hash_t)
 	.update = MD5_update,
 	.finish = MD5_finish,
 };
-
-void *SHA1_init();
-void SHA1_update(void *ctx, const char *in, size_t len);
-int SHA1_finish(void *ctx, char *out);
-hash_t *hash_sha1 = &(hash_t)
+const hash_t *hash_sha1 = &(const hash_t)
 {
 	.size = 20,
 	.name = "SHA1",
@@ -65,13 +70,8 @@ hash_t *hash_sha1 = &(hash_t)
 	.update = SHA1_update,
 	.finish = SHA1_finish,
 };
-
-hash_t *hash_sha224 = NULL;
-
-void *SHA256_init();
-void SHA256_update(void *ctx, const char *in, size_t len);
-int SHA256_finish(void *ctx, char *out);
-hash_t *hash_sha256 = &(hash_t)
+const hash_t *hash_sha224 = NULL;
+const hash_t *hash_sha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "SHA-256",
@@ -79,10 +79,9 @@ hash_t *hash_sha256 = &(hash_t)
 	.update = SHA1_update,
 	.finish = SHA1_finish,
 };
+const hash_t *hash_sha512 = NULL;
 
-hash_t *hash_sha512 = NULL;
-
-void *MD5_init()
+static void *MD5_init()
 {
 	mbedtls_md5_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
@@ -90,12 +89,12 @@ void *MD5_init()
 	mbedtls_md5_starts(pctx);
 	return pctx;
 }
-void MD5_update(void *ctx, const char *in, size_t len)
+static void MD5_update(void *ctx, const char *in, size_t len)
 {
 	mbedtls_md5_context *pctx = (mbedtls_md5_context *)ctx;
 	mbedtls_md5_update(pctx, in, len);
 }
-int MD5_finish(void *ctx, char *out)
+static int MD5_finish(void *ctx, char *out)
 {
 	mbedtls_md5_context *pctx = (mbedtls_md5_context *)ctx;
 	mbedtls_md5_finish(pctx, out);
@@ -103,7 +102,7 @@ int MD5_finish(void *ctx, char *out)
 	free(pctx);
 }
 
-void *SHA1_init()
+static void *SHA1_init()
 {
 	mbedtls_sha1_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
@@ -111,12 +110,12 @@ void *SHA1_init()
 	mbedtls_sha1_starts(pctx);
 	return pctx;
 }
-void SHA1_update(void *ctx, const char *in, size_t len)
+static void SHA1_update(void *ctx, const char *in, size_t len)
 {
 	mbedtls_sha1_context *pctx = (mbedtls_sha1_context *)ctx;
 	mbedtls_sha1_update(pctx, in, len);
 }
-int SHA1_finish(void *ctx, char *out)
+static int SHA1_finish(void *ctx, char *out)
 {
 	mbedtls_sha1_context *pctx = (mbedtls_sha1_context *)ctx;
 	mbedtls_sha1_finish(pctx, out);
@@ -124,7 +123,7 @@ int SHA1_finish(void *ctx, char *out)
 	free(pctx);
 }
 
-void *SHA256_init()
+static void *SHA256_init()
 {
 	mbedtls_sha256_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
@@ -132,12 +131,12 @@ void *SHA256_init()
 	mbedtls_sha256_starts(pctx, 0);
 	return pctx;
 }
-void SHA256_update(void *ctx, const char *in, size_t len)
+static void SHA256_update(void *ctx, const char *in, size_t len)
 {
 	mbedtls_sha256_context *pctx = (mbedtls_sha256_context *)ctx;
 	mbedtls_sha256_update(pctx, in, len);
 }
-int SHA256_finish(void *ctx, char *out)
+static int SHA256_finish(void *ctx, char *out)
 {
 	mbedtls_sha256_context *pctx = (mbedtls_sha256_context *)ctx;
 	mbedtls_sha256_finish(pctx, out);
@@ -145,13 +144,13 @@ int SHA256_finish(void *ctx, char *out)
 	free(pctx);
 }
 
-void BASE64_encode(const char *in, int inlen, char *out, int outlen)
+static void BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
 }
 
-void BASE64_decode(const char *in, int inlen, char *out, int outlen)
+static void BASE64_decode(const char *in, int inlen, char *out, int outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_decode(out, outlen, &cnt, in, inlen);

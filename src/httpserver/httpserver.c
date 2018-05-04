@@ -575,7 +575,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					message->result = RESULT_400;
 					warn("request bad header %s", message->headers_storage);
 				}
-				else if (message->content_length == (typeof(message->content_length))-1)
+				else if (message->content_length == 0)
 				{
 					next = PARSE_END;
 					dbg("no content inside request");
@@ -651,7 +651,6 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			}
 			break;
 		}
-
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
 			if (next < PARSE_PRECONTENT)
@@ -755,6 +754,14 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
  */
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
+	if (data == NULL)
+	{
+		message->content = NULL;
+		if ((message->state & PARSE_MASK) == PARSE_END)
+			return ESUCCESS;
+		else
+			return EINCOMPLETE;
+	}
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
@@ -1036,7 +1043,8 @@ static void _httpclient_destroy(http_client_t *client)
 	while (request)
 	{
 		http_message_t *next = request->next;
-		_httpmessage_destroy(request);
+		if (request != client->request)
+			_httpmessage_destroy(request);
 		request = next;
 	}
 	client->request_queue = NULL;
@@ -1440,7 +1448,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 			case ESUCCESS:
 			{
 				client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
-				request->response->state = (PARSE_END | GENERATE_INIT) | (request->response->state & ~PARSE_MASK);
+				request->response->state = PARSE_END | GENERATE_INIT | (request->response->state & ~PARSE_MASK);
 				if (request->mode & HTTPMESSAGE_LOCKED)
 				{
 					client->state |= CLIENT_LOCKED;
@@ -1460,7 +1468,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 			{
 				if (request->response->result == RESULT_200)
 					request->response->result = RESULT_404;
-				request->response->state = (PARSE_END | GENERATE_ERROR) | (request->response->state & ~PARSE_MASK);
+				request->response->state = PARSE_END | GENERATE_ERROR | (request->response->state & ~PARSE_MASK);
 				// The response is an error and it is ready to be sent
 				ret = ESUCCESS;
 			}
@@ -1469,7 +1477,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		}
 		_httpclient_pushrequest(client, request);
 	}
-	else
+	else if ((request->state & GENERATE_MASK) == 0)
 		ret = EINCOMPLETE;
 	return ret;
 }
@@ -1505,6 +1513,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
 			response->state = PARSE_END | (response->state & ~PARSE_MASK);
+			response->state &= ~PARSE_CONTINUE;
 			if (response->mode & HTTPMESSAGE_LOCKED)
 			{
 				client->state |= CLIENT_LOCKED;
@@ -1515,7 +1524,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			if (response->result == RESULT_200)
 				response->result = RESULT_400;
-			response->state = (PARSE_END | GENERATE_ERROR) | (request->response->state & ~PARSE_MASK);
+			response->state = PARSE_END | GENERATE_ERROR | (request->response->state & ~PARSE_MASK);
+			response->state &= ~PARSE_CONTINUE;
 		}
 		break;
 		case ECONTINUE:
@@ -1653,12 +1663,9 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			int size;
 			buffer_t *buffer = response->content;
-			if ((buffer == NULL) || (buffer->length == 0))
-			{
-				if ((response->state & PARSE_MASK) == PARSE_END)
-					response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
-			}
-			else
+			if ((response->state & PARSE_MASK) == PARSE_END)
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+			if ((buffer != NULL) && (buffer->length > 0))
 			{
 				buffer->offset = buffer->data;
 				while (buffer->length > 0)
@@ -1826,12 +1833,12 @@ static int _httpclient_wait(http_client_t *client, int options)
 		ret = ESUCCESS;
 	else
 		ret = client->ops.status(client);
-	if (ret == ESUCCESS)
-		ret = client->sock;
-	else if (ret == EREJECT)
-	{
-		err("httpclient_wait %p socket closed ", client);
-	}
+	/**
+	 * The main server loop detected an event on the socket.
+	 * If there is not data then the socket had to be closed.
+	 */
+	if (ret != ESUCCESS)
+		ret = EREJECT;
 #endif
 	return ret;
 }
@@ -2006,20 +2013,34 @@ static int _httpclient_run(http_client_t *client)
 
 			if (ret == ESUCCESS)
 			{
-				if (client->state & CLIENT_LOCKED)
-				{
-					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				}
+				ret = ECONTINUE;
+				client->request_queue = request->next;
 				if ((request->state & PARSE_MASK) < PARSE_END)
 				{
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					ret = EINCOMPLETE;
+				}
+				else if (client->state & CLIENT_LOCKED)
+				{
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				}
+				else if (!(client->state & CLIENT_KEEPALIVE))
+				{
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					ret = EINCOMPLETE;
 				}
 				else
 				{
 					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				client->request_queue = request->next;
-				_httpmessage_destroy(request);
+				/**
+				 * client->request is not null if the reception is not complete.
+				 * In this case the client keeps the request until the connection
+				 * is closed
+				 */
+				if (request != client->request)
+					_httpmessage_destroy(request);
+				return ret;
 			}
 			else if (ret == EREJECT)
 			{

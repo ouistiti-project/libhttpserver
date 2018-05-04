@@ -448,3 +448,11 @@ static void _mod_form_urlencoded_addpost(http_message_t *message, char *key, cha
 	private->post = headerinfo;
 }
 
+const module_t mod_formparser =
+{
+	.name = str_formparser,
+	.create = (module_create_t)mod_formparser_create,
+	.destroy = mod_formparser_destroy
+};
+#ifdef MODULES
+extern module_t mod_info __attribute__ ((weak, alias ("mod_formparser")));

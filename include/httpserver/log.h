@@ -28,6 +28,7 @@
 
 #ifndef __HTTPSERVER_LOG_H__
 #define __HTTPSERVER_LOG_H__
+#include <stdio.h>
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
