@@ -2,7 +2,8 @@ lib-$(DYNAMIC)+=hash_mod
 slib-$(STATIC)+=hash_mod
 hash_mod_SOURCES-$(MBEDTLS)+=hash_mbedtls.c
 hash_mod_SOURCES-$(WOLFSSL)+=hash_wolfssl.c
-ifeq ($(findstring y, $(MBEDTLS) $(WOLFSSL)),)
+hash_mod_SOURCES-$(OPENSSL)+=hash_openssl.c
+ifeq ($(findstring y, $(MBEDTLS) $(WOLFSSL) $(OPENSSL)),)
 DEFAULT:=y
 endif
 ifeq ($(findstring y, $(MBEDTLS)),)
@@ -17,6 +18,8 @@ hash_mod_CFLAGS-$(MBEDTLS)+=-DMBEDTLS
 hash_mod_LIBS-$(MBEDTLS)+=mbedtls
 hash_mod_CFLAGS-$(WOLFSSL)+=-DWOLFSSL
 hash_mod_LIBS-$(WOLFSSL)+=wolfssl
+hash_mod_CFLAGS-$(OPENSSL)+=-DOPENSSL
+hash_mod_LIBS-$(OPENSSL)+=crypto
 
 hash_mod_LIBS-$(LIBB64)+=b64
 
