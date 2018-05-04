@@ -10,6 +10,7 @@ mod_websocket_CFLAGS-$(MODULES)+=-DMODULES
 mod_websocket_CFLAGS-$(MBEDTLS)+=-DMBEDTLS
 mod_websocket_CFLAGS-$(VTHREAD)+=-DVTHREAD
 mod_websocket_LIBS+=websocket
+mod_websocket_LIBS+=hash_mod
 ifneq ($(MBEDTLS),y)
 mod_websocket_LIBS+=b64
 mod_websocket_CFLAGS+=-I$(LIBB64_DIR)/include
