@@ -134,19 +134,25 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 				{
 					struct stat filestat;
 					char *filepath = utils_buildpath(ctx->mod->config->docroot, uri, "", "", &filestat);
+					char *pathname = NULL;
 
 					protocol = httpmessage_REQUEST(request, str_protocol);
-					if (protocol == NULL || protocol[0] == '\0')
+					if (protocol && protocol[0] != '\0')
 					{
-						protocol = basename(uri);
+						pathname = protocol;
+					}
+					else
+					{
+						pathname = basename(uri);
+						protocol = NULL;
 					}
 					if (filepath == NULL)
 					{
-						filepath = utils_buildpath(ctx->mod->config->docroot, protocol, "", "", &filestat);
+						filepath = utils_buildpath(ctx->mod->config->docroot, pathname, "", "", &filestat);
 					}
 					else if (S_ISDIR(filestat.st_mode))
 					{
-						filepath = utils_buildpath(ctx->mod->config->docroot, uri, protocol, "", &filestat);
+						filepath = utils_buildpath(ctx->mod->config->docroot, uri, pathname, "", &filestat);
 					}
 					if (filepath && S_ISSOCK(filestat.st_mode))
 						ctx->filepath = filepath;
