@@ -36,22 +36,22 @@ struct base64_s
 	void (*decode)(const char *in, int inlen, char *out, int outlen);
 };
 
-extern base64_t *base64;
+extern const base64_t *base64;
 
 typedef struct hash_s hash_t;
 struct hash_s
 {
-	int size;
+	const int size;
 	const char *name;
 	void *(*init)();
 	void (*update)(void *ctx, const char *in, size_t len);
 	int (*finish)(void *ctx, char *out);
 };
 
-extern hash_t *hash_md5;
-extern hash_t *hash_sha1;
-extern hash_t *hash_sha224;
-extern hash_t *hash_sha256;
-extern hash_t *hash_sha512;
+extern const hash_t *hash_md5;
+extern const hash_t *hash_sha1;
+extern const hash_t *hash_sha224;
+extern const hash_t *hash_sha256;
+extern const hash_t *hash_sha512;
 
 #endif

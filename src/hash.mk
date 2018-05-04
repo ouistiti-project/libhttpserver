@@ -10,15 +10,15 @@ LIBB64:=y
 endif
 hash_mod_SOURCES-$(DEFAULT)+=hash_default.c
 hash_mod_SOURCES-$(LIBB64)+= hash_libb64.c
-hash_mod_CFLAGS+=-I../include 
+hash_mod_CFLAGS-$(LIBB64)+=-DLIBB64
+hash_mod_CFLAGS+=-I../include
 
 hash_mod_CFLAGS-$(MBEDTLS)+=-DMBEDTLS
 hash_mod_LIBS-$(MBEDTLS)+=mbedtls
 hash_mod_CFLAGS-$(WOLFSSL)+=-DWOLFSSL
 hash_mod_LIBS-$(WOLFSSL)+=wolfssl
 
-hash_mod_LIBS-$(WOLFSSL)+=b64
-hash_mod_LIBS-$(NOMBEDTLS)+=b64
+hash_mod_LIBS-$(LIBB64)+=b64
 
 hash_mod_CFLAGS-$(DEBUG)+=-g -DDEBUG
 

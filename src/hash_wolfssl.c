@@ -32,11 +32,12 @@
 # include <wolfssl/wolfcrypt/sha256.h>
 
 #include "httpserver/hash.h"
+#include "httpserver/log.h"
 
-void *MD5_init();
-void MD5_update(void *ctx, const char *in, size_t len);
-int MD5_finish(void *ctx, char *out);
-hash_t *hash_md5 = &(hash_t)
+static void *MD5_init();
+static void MD5_update(void *ctx, const char *in, size_t len);
+static int MD5_finish(void *ctx, char *out);
+const hash_t *hash_md5 = &(const hash_t)
 {
 	.size = 16,
 	.name = "MD5",
@@ -45,10 +46,10 @@ hash_t *hash_md5 = &(hash_t)
 	.finish = MD5_finish,
 };
 
-void *SHA1_init();
-void SHA1_update(void *ctx, const char *in, size_t len);
-int SHA1_finish(void *ctx, char *out);
-hash_t *hash_sha1 = &(hash_t)
+static void *SHA1_init();
+static void SHA1_update(void *ctx, const char *in, size_t len);
+static int SHA1_finish(void *ctx, char *out);
+const hash_t *hash_sha1 = &(const hash_t)
 {
 	.size = 20,
 	.name = "SHA1",
@@ -57,73 +58,73 @@ hash_t *hash_sha1 = &(hash_t)
 	.finish = SHA1_finish,
 };
 
-hash_t *hash_sha224 = NULL;
+const hash_t *hash_sha224 = NULL;
 
-void *SHA256_init();
-void SHA256_update(void *ctx, const char *in, size_t len);
-int SHA256_finish(void *ctx, char *out);
-hash_t *hash_sha256 = &(hash_t)
+static void *SHA256_init();
+static void SHA256_update(void *ctx, const char *in, size_t len);
+static int SHA256_finish(void *ctx, char *out);
+const hash_t *hash_sha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "SHA-256",
-	.init = SHA1_init,
-	.update = SHA1_update,
-	.finish = SHA1_finish,
+	.init = SHA256_init,
+	.update = SHA256_update,
+	.finish = SHA256_finish,
 };
 
-hash_t *hash_sha512 = NULL;
+const hash_t *hash_sha512 = NULL;
 
-void *MD5_init()
+static void *MD5_init()
 {
 	Md5 *pctx;
 	pctx = calloc(1, sizeof(*pctx));
 	wc_InitMd5(pctx);
 	return pctx;
 }
-void MD5_update(void *ctx, const char *in, size_t len)
+static void MD5_update(void *ctx, const char *in, size_t len)
 {
 	Md5 *pctx = (Md5 *)ctx;
 	wc_Md5Update(pctx, in, len);
 }
-int MD5_finish(void *ctx, char *out)
+static int MD5_finish(void *ctx, char *out)
 {
 	Md5 *pctx = (Md5 *)ctx;
 	wc_Md5Final(pctx, out);
 	free(pctx);
 }
 
-void *SHA1_init()
+static void *SHA1_init()
 {
 	Sha *pctx;
 	pctx = calloc(1, sizeof(*pctx));
 	wc_InitSha(pctx);
 	return pctx;
 }
-void SHA1_update(void *ctx, const char *in, size_t len)
+static void SHA1_update(void *ctx, const char *in, size_t len)
 {
 	Sha *pctx = (Sha *)ctx;
 	wc_ShaUpdate(pctx, in, len);
 }
-int SHA1_finish(void *ctx, char *out)
+static int SHA1_finish(void *ctx, char *out)
 {
 	Sha *pctx = (Sha *)ctx;
 	wc_ShaFinal(pctx, out);
 	free(pctx);
 }
 
-void *SHA256_init()
+static void *SHA256_init()
 {
 	Sha256 *pctx;
 	pctx = calloc(1, sizeof(*pctx));
 	wc_InitSha256(pctx);
 	return pctx;
 }
-void SHA256_update(void *ctx, const char *in, size_t len)
+static void SHA256_update(void *ctx, const char *in, size_t len)
 {
 	Sha256 *pctx = (Sha256 *)ctx;
 	wc_Sha256Update(pctx, in, len);
 }
-int SHA256_finish(void *ctx, char *out)
+static int SHA256_finish(void *ctx, char *out)
 {
 	Sha256 *pctx = (Sha256 *)ctx;
 	wc_Sha256Final(pctx, out);
