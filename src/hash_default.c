@@ -33,6 +33,10 @@
 static void *MD5_init();
 static void MD5_update(void *ctx, const char *in, size_t len);
 static int MD5_finish(void *ctx, char *out);
+static void *SHA1_init();
+static void SHA1_update(void *ctx, const char *in, size_t len);
+static int SHA1_finish(void *ctx, char *out);
+
 const hash_t *hash_md5 = &(const hash_t)
 {
 	.size = 16,
@@ -42,7 +46,14 @@ const hash_t *hash_md5 = &(const hash_t)
 	.finish = MD5_finish,
 };
 
-const hash_t *hash_sha1 = NULL;
+const hash_t *hash_sha1 = &(const hash_t)
+{
+	.size = 20,
+	.name = "SHA1",
+	.init = SHA1_init,
+	.update = SHA1_update,
+	.finish = SHA1_finish,
+};
 const hash_t *hash_sha224 = NULL;
 const hash_t *hash_sha256 = NULL;
 const hash_t *hash_sha512 = NULL;
@@ -94,3 +105,37 @@ static int MD5_finish(void *ctx, char *out)
 	free(pctx);
 }
 #endif
+
+#ifdef LIBSHA1
+#include "libsha1.h"
+static void *SHA1_init()
+{
+	sha1_ctx *pctx;
+	pctx = calloc(1, sizeof(*pctx));
+	sha1_begin(pctx);
+	return pctx;
+}
+static void SHA1_update(void *ctx, const char *in, size_t len)
+{
+	sha1_ctx *pctx = (sha1_ctx *)ctx;
+	sha1_hash(in, len, pctx);
+}
+static int SHA1_finish(void *ctx, char *out)
+{
+	sha1_ctx *pctx = (sha1_ctx *)ctx;
+	sha1_end(out, pctx);
+	free(pctx);
+}
+#else
+static void *SHA1_init()
+{
+	return NULL + 1;
+}
+static void SHA1_update(void *ctx, const char *in, size_t len)
+{
+}
+static int SHA1_finish(void *ctx, char *out)
+{
+}
+#endif
+

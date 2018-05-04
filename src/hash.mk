@@ -37,7 +37,11 @@ endif
 endif
 
 LIBMD5_DIR?=../md5-c
+LIBSHA1_DIR?=../libsha1
 ifeq ($(DEFAULT), y)
+LIBSHA1=y
+MD5=y
+
 ifneq ($(wildcard $(LIBMD5_DIR)/md5c.c),)
 subdir-y+=$(LIBMD5_DIR)
 libmd5_dir:=$(realpath $(LIBMD5_DIR))
@@ -47,4 +51,15 @@ hash_mod_SOURCES+=$(libmd5_dir)/md5c.c
 else
 hash_mod_SOURCES+=md5/md5.c
 endif
+
+ifneq ($(wildcard $(LIBSHA1_DIR)/sha1.c),)
+subdir-y+=$(LIBSHA1_DIR)
+libsha1_dir:=$(realpath $(LIBSHA1_DIR))
+hash_mod_CFLAGS+=-I$(libsha1_dir)/
+hash_mod_CFLAGS+=-DLIBSHA1
+hash_mod_SOURCES+=$(libsha1_dir)/sha1.c
+else
+hash_mod_LIBS-$(LIBSHA1)+=sha1
+endif
+
 endif
