@@ -355,37 +355,48 @@ static void *_websocket_main(void *arg)
 		{
 			int length;
 			ret = ioctl(client, FIONREAD, &length);
-			while (length > 0)
+			if (ret == 0 && length > 0)
 			{
 				char *buffer;
 				buffer = calloc(1, length);
-				ret = recv(client, buffer, length, MSG_NOSIGNAL);
-				if (ret > 0)
+				while (length > 0)
 				{
-					length -= ret;
-					ssize_t size = 0;
-					char *out = calloc(1, ret + MAX_FRAGMENTHEADER_SIZE);
-					while (size < ret)
+					ret = recv(client, buffer, length, MSG_NOSIGNAL);
+					if (ret > 0)
 					{
-						ssize_t length;
-						int outlength = 0;
-						length = websocket_framed(WS_TEXT, (char *)buffer, ret, out, &outlength, arg);
-						outlength = info->sendresp(info->ctx, (char *)out, outlength);
-						if (outlength == EINCOMPLETE)
-							continue;
-						if (outlength == EREJECT)
+						length -= ret;
+						ssize_t size = 0;
+						char *out = calloc(1, ret + MAX_FRAGMENTHEADER_SIZE);
+						while (size < ret)
+						{
+							ssize_t length;
+							int outlength = 0;
+							length = websocket_framed(WS_TEXT, (char *)buffer, ret, out, &outlength, arg);
+							outlength = info->sendresp(info->ctx, (char *)out, outlength);
+							if (outlength == EINCOMPLETE)
+								continue;
+							if (outlength == EREJECT)
+								break;
+							size += length;
+						}
+						free(out);
+						if (size < ret)
+						{
+							ret = -1;
 							break;
-						size += length;
+						}
 					}
-					free(out);
-				}
-				if (ret <= 0)
-				{
-					end = 1;
-					length = 0;
-					warn("websocket server died");
+					else
+						break;
 				}
 				free(buffer);
+			}
+			else
+				ret = -1;
+			if (ret < 0)
+			{
+				end = 1;
+				warn("websocket server died");
 			}
 		}
 		else if (errno != EAGAIN)
@@ -394,6 +405,7 @@ static void *_websocket_main(void *arg)
 			end = 1;
 		}
 	}
+	shutdown(socket, SHUT_RDWR);
 	close(socket);
 	close(client);
 	return 0;
