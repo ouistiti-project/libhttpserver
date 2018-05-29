@@ -313,13 +313,18 @@ char *utils_buildpath(const char *docroot, const char *path_info,
 {
 	char *filepath;
 	int length;
+	int path_info_length;
 
+	path_info_length = strlen(path_info);
 	length = strlen(docroot) + 1;
-	length += strlen(path_info) + 1;
+	length += path_info_length + 1;
 	length += strlen(filename);
 	length += strlen(ext);
 	filepath = calloc(1, length + 1);
-	snprintf(filepath, length + 1, "%s/%s%s%s", docroot, path_info, filename, ext);
+	if (filename[0] != '\0' && path_info[path_info_length -1] != '/')
+		snprintf(filepath, length + 1, "%s/%s/%s%s", docroot, path_info, filename, ext);
+	else
+		snprintf(filepath, length + 1, "%s/%s%s%s", docroot, path_info, filename, ext);
 
 	filepath[length] = '\0';
 	if (filestat)
