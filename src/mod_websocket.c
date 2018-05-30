@@ -134,7 +134,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 				{
 					struct stat filestat;
 					char *filepath = utils_buildpath(ctx->mod->config->docroot, uri, "", "", &filestat);
-					char *pathname = NULL;
+					const char *pathname = NULL;
 
 					protocol = httpmessage_REQUEST(request, str_protocol);
 					if (protocol && protocol[0] != '\0')
