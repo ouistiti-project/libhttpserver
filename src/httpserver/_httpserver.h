@@ -128,6 +128,7 @@ typedef struct http_server_mod_s http_server_mod_t;
 struct http_server_s
 {
 	int sock;
+	int type;
 	int run;
 	vthread_t thread;
 	http_client_t *clients;

@@ -30,6 +30,7 @@
 #include <errno.h>
 
 #ifndef WIN32
+# include <sys/types.h>
 # include <sys/socket.h>
 # include <sys/ioctl.h>
 # include <sys/un.h>
@@ -39,7 +40,7 @@
 # include <arpa/inet.h>
 # include <netdb.h>
 # include <fcntl.h>
-#include <signal.h>
+# include <signal.h>
 
 #else
 
@@ -65,9 +66,26 @@ extern "C" {
 
 #endif
 
+#include "../../compliant.h"
 #include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
+
+#ifndef HAVE_GETNAMEINFO
+struct addrinfo 
+{
+	int ai_family;
+	int ai_socktype;
+	int ai_flags;
+	int ai_protocol;
+	const struct sockaddr *ai_canonname;
+	const struct sockaddr *ai_addr;
+	socklen_t ai_addrlen;
+	struct addrinfo *ai_next;
+};
+#define AI_PASSIVE 0x01
+#define AI_ADDRCONFIG 0x02
+#endif
 
 #ifdef HTTPCLIENT_FEATURES
 static int tcpclient_connect(void *ctl, char *addr, int port)
@@ -210,9 +228,11 @@ httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.destroy = tcpclient_destroy,
 };
 
+#ifdef TCP_SIGHANDLER
 static void handler(int sig, siginfo_t *si, void *arg)
 {
 }
+#endif
 
 static int _tcpserver_start(http_server_t *server)
 {
@@ -221,19 +241,19 @@ static int _tcpserver_start(http_server_t *server)
 #ifdef WIN32
 	WSADATA wsaData = {0};
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
-#else
+#elif defined(TCP_SIGHANDLER)
 /**
  * If the socket is open into more than one process, the sending on it
  * may return a SIGPIPE.
  * It is possible to disable the signal or to close the socket into
  * all process except the sender.
+ */
 	struct sigaction action;
 	action.sa_flags = SA_SIGINFO;
 	sigemptyset(&action.sa_mask);
 	//action.sa_sigaction = handler;
 	action.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &action, NULL);
- */
 #endif
 
 	struct addrinfo hints;
@@ -252,7 +272,9 @@ static int _tcpserver_start(http_server_t *server)
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
 
+#ifdef HAVE_GETNAMEINFO
 	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
+#endif
 	if (status != 0) {
 		result = &hints;
 	}
@@ -312,13 +334,16 @@ static int _tcpserver_start(http_server_t *server)
 			}
 			status = bind(server->sock, rp->ai_addr, rp->ai_addrlen);
 		}
+		server->type = rp->ai_family;
 		if (status == 0)
 			/* Success */
 			break;
 		server->ops->close(server);
 	}
+#ifdef HAVE_GETNAMEINFO
 	if (result != &hints)
 		freeaddrinfo(result);
+#endif
 
 #ifdef SERVER_DEFER_ACCEPT
 	if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
@@ -365,18 +390,27 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 		return NULL;
 	}
 	char hoststr[NI_MAXHOST];
-	char portstr[NI_MAXSERV];
 
-	int rc = getnameinfo((struct sockaddr *)&client->addr, 
-		client->addr_size, hoststr, sizeof(hoststr), portstr, sizeof(portstr), 
+	int rc;
+#ifdef HAVE_GETNAMEINFO
+	rc = getnameinfo((struct sockaddr *)&client->addr, 
+		client->addr_size, hoststr, sizeof(hoststr), NULL, 0, 
 		NI_NUMERICHOST | NI_NUMERICSERV);
+#else
+	struct hostent *entity;
 
+	entity = gethostbyaddr((void *)&client->addr, client->addr_size, server->type);
+	strncpy(hoststr, entity->h_name, NI_MAXHOST);
+	rc = 0;
+#endif
 	if (rc == 0) 
 		warn("new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
 #ifndef BLOCK_SOCKET
 	int flags;
 	flags = fcntl(httpclient_socket(client), F_GETFL, 0);
-	fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK | O_CLOEXEC);
+	fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
+	flags = fcntl(httpclient_socket(client), F_GETFD, 0);
+	fcntl(httpclient_socket(client), F_SETFD, flags | FD_CLOEXEC);
 #endif
 	return client;
 }

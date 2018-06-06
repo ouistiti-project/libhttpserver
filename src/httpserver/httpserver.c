@@ -31,6 +31,7 @@
 #else
 # define strcasestr strstr
 #endif
+#define _XOPEN_SOURCE 700
 
 #include <stdio.h>
 #include <string.h>
@@ -271,7 +272,7 @@ HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, htt
 		message->result = RESULT_200;
 		message->client = client;
 		message->chunksize = chunksize;
-//		message->content_length = (typeof(message->content_length)-1);
+//		message->content_length = (unsigned long long)-1);
 		if (parent)
 		{
 			parent->response = message;
@@ -695,7 +696,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t 
 		_buffer_append(header, "\r\n", 2);
 		headers = headers->next;
 	}
-	if (message->content_length != (typeof(message->content_length))-1)
+	if (message->content_length != (unsigned long long)-1)
 	{
 		if (message->mode & HTTPMESSAGE_KEEPALIVE > 0)
 		{
@@ -770,7 +771,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	if ((message->state & PARSE_MASK) == PARSE_INIT)
 		message->state = PARSE_STATUS;
 	if (message->content_length == 0)
-		message->content_length = (typeof(message->content_length))-1;
+		message->content_length = (unsigned long long)-1;
 
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length - (tempo.offset - tempo.data);
@@ -788,7 +789,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 		 * In this case the function must continue after the end.
 		 * The caller must stop by itself
 		 */
-		if (message->content_length == (typeof(message->content_length))-1)
+		if (message->content_length == (unsigned long long)-1)
 			ret = ECONTINUE;
 		else
 			message->content = NULL;
@@ -949,7 +950,7 @@ int httpmessage_appendcontent(http_message_t *message, char *content, int length
 		if (length + message->content->length <= message->content->size)
 		{
 			_buffer_append(message->content, content, length);
-			if (message->content_length == (typeof(message->content_length))-1)
+			if (message->content_length == (unsigned long long)-1)
 				message->content_length = length;
 			else
 				message->content_length += length;
