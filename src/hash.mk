@@ -1,4 +1,4 @@
-lib-$(DYNAMIC)+=hash_mod
+lib-$(SHARED)+=hash_mod
 slib-$(STATIC)+=hash_mod
 hash_mod_SOURCES-$(MBEDTLS)+=hash_mbedtls.c
 hash_mod_SOURCES-$(WOLFSSL)+=hash_wolfssl.c

@@ -1,4 +1,4 @@
-lib-$(DYNAMIC)+=utils_mod
+lib-$(SHARED)+=utils_mod
 slib-$(STATIC)+=utils_mod
 utils_mod_SOURCES=utils.c
 utils_mod_CFLAGS+=-I../include 
