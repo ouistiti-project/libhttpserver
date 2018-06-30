@@ -1,5 +1,8 @@
 include scripts.mk
 
+package=libhttpserver
+version=2.1
+
 LIBHASH=y
 
 ifneq ($(MBEDTLS),)
