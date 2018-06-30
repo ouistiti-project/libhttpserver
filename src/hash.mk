@@ -21,18 +21,18 @@ hash_mod_LIBS-$(WOLFSSL)+=wolfssl
 hash_mod_CFLAGS-$(OPENSSL)+=-DOPENSSL
 hash_mod_LIBS-$(OPENSSL)+=crypto
 
-hash_mod_LIBS-$(LIBB64)+=b64
-
 hash_mod_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
 LIBB64_DIR?=../libb64
 ifeq ($(LIBB64),y)
-ifneq ($(wildcard $(LIBB64_DIR)/Makefile),)
-subdir-y+=$(LIBB64_DIR)
-
+ifneq ($(wildcard $(LIBB64_DIR)/src/cdecode.c),)
 libb64_dir:=$(realpath $(LIBB64_DIR))
 hash_mod_CFLAGS+=-I$(libb64_dir)/include/
 hash_mod_LDFLAGS+=-L$(libb64_dir)/src -L$(libb64_dir)/src
+hash_mod_SOURCES+=$(LIBB64_DIR)/src/cdecode.c
+hash_mod_SOURCES+=$(LIBB64_DIR)/src/cencode.c
+else
+hash_mod_LIBS-$(LIBB64)+=b64
 endif
 endif
 
@@ -43,21 +43,19 @@ LIBSHA1=y
 MD5=y
 
 ifneq ($(wildcard $(LIBMD5_DIR)/md5c.c),)
-subdir-y+=$(LIBMD5_DIR)
 libmd5_dir:=$(realpath $(LIBMD5_DIR))
 hash_mod_CFLAGS+=-I$(libmd5_dir)/../
 hash_mod_CFLAGS+=-DMD5_RONRIVEST
-hash_mod_SOURCES+=$(libmd5_dir)/md5c.c
+hash_mod_SOURCES+=$(LIBMD5_DIR)/md5c.c
 else
 hash_mod_SOURCES+=md5/md5.c
 endif
 
 ifneq ($(wildcard $(LIBSHA1_DIR)/sha1.c),)
-subdir-y+=$(LIBSHA1_DIR)
 libsha1_dir:=$(realpath $(LIBSHA1_DIR))
 hash_mod_CFLAGS+=-I$(libsha1_dir)/
 hash_mod_CFLAGS+=-DLIBSHA1
-hash_mod_SOURCES+=$(libsha1_dir)/sha1.c
+hash_mod_SOURCES+=$(LIBSHA1_DIR)/sha1.c
 else
 hash_mod_LIBS-$(LIBSHA1)+=sha1
 endif
