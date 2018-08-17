@@ -54,6 +54,10 @@
 #include "httpserver/utils.h"
 #include "httpserver/websocket.h"
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
 typedef struct _mod_websocket_s _mod_websocket_t;
 typedef struct _mod_websocket_ctx_s _mod_websocket_ctx_t;
 

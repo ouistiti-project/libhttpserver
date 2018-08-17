@@ -87,6 +87,10 @@ struct addrinfo
 #define AI_ADDRCONFIG 0x02
 #endif
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
 #ifdef HTTPCLIENT_FEATURES
 static int tcpclient_connect(void *ctl, char *addr, int port)
 {
@@ -345,7 +349,7 @@ static int _tcpserver_start(http_server_t *server)
 		freeaddrinfo(result);
 #endif
 
-#ifdef SERVER_DEFER_ACCEPT
+#if defined(SERVER_DEFER_ACCEPT) && defined(TCP_DEFER_ACCEPT)
 	if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
 			warn("setsockopt(TCP_DEFER_ACCEPT) failed");
 #endif

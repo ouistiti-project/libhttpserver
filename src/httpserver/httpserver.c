@@ -41,8 +41,9 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include <sys/time.h>
-#include <poll.h>
 #include <signal.h>
+#include <poll.h>
+#include <netdb.h>
 
 #include "valloc.h"
 #include "vthread.h"
@@ -574,7 +575,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				{
 					next = PARSE_END;
 					message->result = RESULT_400;
-					warn("request bad header %s", message->headers_storage);
+					warn("request bad header %s", message->headers_storage->data);
 				}
 				else if (message->content_length == 0)
 				{
@@ -698,14 +699,14 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t 
 	}
 	if (message->content_length != (unsigned long long)-1)
 	{
-		if (message->mode & HTTPMESSAGE_KEEPALIVE > 0)
+		if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 		{
 			char keepalive[32];
 			snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
 			_buffer_append(header, keepalive, strlen(keepalive));
 		}
 		char content_length[32];
-		snprintf(content_length, 31, "%s: %d\r\n", str_contentlength, message->content_length);
+		snprintf(content_length, 31, "%s: %llu\r\n", str_contentlength, message->content_length);
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	header->offset = header->data;
@@ -1722,18 +1723,21 @@ static int _httpclient_wait(http_client_t *client, int options)
 #if defined(VTHREAD) && !defined(BLOCK_SOCKET)
 	struct timespec *ptimeout = NULL;
 	struct timespec timeout;
+	int ttimeout = -1;
 	if (options & WAIT_SEND)
 	{
 		timeout.tv_sec = 0;
 		timeout.tv_nsec = 10000000;
 		ptimeout = &timeout;
 		ptimeout = NULL;
+		ttimeout = 10;
 	}
 	else
 	{
 		timeout.tv_sec = WAIT_TIMER;
 		timeout.tv_nsec = 0;
 		ptimeout = &timeout;
+		ttimeout = WAIT_TIMER * 1000;
 	}
 
 	fd_set fds;
@@ -1756,7 +1760,8 @@ static int _httpclient_wait(http_client_t *client, int options)
 	sigset_t sigmask;
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGCHLD);
-	ret = ppoll(poll_set, numfds, ptimeout, NULL);
+	//ret = ppoll(poll_set, numfds, ptimeout, NULL);
+	ret = poll(poll_set, numfds, ttimeout);
 	if (poll_set[0].revents & POLLIN)
 	{
 		FD_SET(client->sock, &fds);
@@ -2424,9 +2429,10 @@ static int _httpserver_run(http_server_t *server)
 
 		int nbselect = server->numfds;
 #ifdef USE_POLL
-		//nbselect = poll(server->poll_set, server->numfds, -1);
 		if (maxfd > 0)
-			nbselect = ppoll(server->poll_set, server->numfds, ptimeout, NULL);
+			//nbselect = ppoll(server->poll_set, server->numfds, ptimeout, NULL);
+			nbselect = poll(server->poll_set, server->numfds, WAIT_TIMER * 1000);
+
 		if (nbselect > 0)
 		{
 			int j;
@@ -2738,6 +2744,12 @@ void httpserver_destroy(http_server_t *server)
 }
 /***********************************************************************/
 
+#ifndef NI_MAXHOST
+#define NI_MAXHOST 1025
+#endif
+#ifndef NI_MAXSERV
+#define NI_MAXSERV 32
+#endif
 static const char default_value[8] = {0};
 static char host[NI_MAXHOST], service[NI_MAXSERV];
 const char *httpserver_INFO(http_server_t *server, const char *key)
