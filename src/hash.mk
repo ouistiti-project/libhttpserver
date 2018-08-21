@@ -23,7 +23,7 @@ hash_mod_LIBS-$(OPENSSL)+=crypto
 
 hash_mod_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
-LIBB64_DIR?=../libb64
+LIBB64_DIR?=$(srcdir)/libb64
 ifeq ($(LIBB64),y)
 ifneq ($(wildcard $(LIBB64_DIR)/src/cdecode.c),)
 libb64_dir:=$(realpath $(LIBB64_DIR))
@@ -34,6 +34,7 @@ hash_mod_SOURCES+=$(LIBB64_DIR)/src/cencode.c
 else
 hash_mod_LIBS-$(LIBB64)+=b64
 endif
+hash_mod_CFLAGS+=-I$(LIBB64_DIR)/include
 endif
 
 LIBMD5_DIR?=../md5-c

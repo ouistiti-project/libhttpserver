@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <byteswap.h>
 
 #include "log.h"
 #include "websocket.h"
@@ -75,6 +74,25 @@ static websocket_t default_config =
 };
 static websocket_t *_config = &default_config;
 
+uint64_t htonll(uint64_t value) {
+#ifdef __LITTLE_ENDIAN__
+	uint32_t high_part = htonl((uint32_t)(value >> 32));
+	uint32_t low_part = htonl((uint32_t)(value & 0xFFFFFFFFLL));
+	return (((uint64_t)low_part) << 32) | high_part;
+#elif defined(__BIG_ENDIAN__)
+	return value;
+#else
+	int num = 42;
+	if (*(char *)&num == 42) {
+		uint32_t high_part = htonl((uint32_t)(value >> 32));
+		uint32_t low_part = htonl((uint32_t)(value & 0xFFFFFFFFLL));
+		return (((uint64_t)low_part) << 32) | high_part;
+	} else {
+		return value;
+	}
+#endif
+}
+
 void websocket_init(websocket_t *config)
 {
 	_config = config;
@@ -97,13 +115,13 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 		payloadlen = frame.payloadlen;
 		if (frame.payloadlen == 126)
 		{
-			uint16_t more = __bswap_16(*(uint16_t *)payload);
+			uint16_t more = ntohs(*(uint16_t *)payload);
 			payloadlen = more;
 			payload += sizeof(more);
 		}
 		else if (frame.payloadlen == 127)
 		{
-			uint64_t more = __bswap_32(*(uint64_t *)payload);
+			uint64_t more = htonll(*(uint64_t *)payload);
 			payloadlen += more;
 			payload += sizeof(more);
 		}
