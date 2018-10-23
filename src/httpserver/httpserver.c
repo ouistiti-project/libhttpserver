@@ -1669,6 +1669,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 			if ((buffer != NULL) && (buffer->length > 0))
 			{
+				ret = ECONTINUE;
 				buffer->offset = buffer->data;
 				while (buffer->length > 0)
 				{
@@ -1688,7 +1689,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 					buffer->offset += size;
 				}
 				_buffer_reset(buffer);
-				ret = ECONTINUE;
 			}
 		}
 		break;
