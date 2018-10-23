@@ -27,6 +27,7 @@
  *****************************************************************************/
 #include <stdlib.h>
 
+# include <mbedtls/version.h>
 # include <mbedtls/md5.h>
 # include <mbedtls/sha1.h>
 # include <mbedtls/sha256.h>
@@ -85,63 +86,126 @@ static void *MD5_init()
 {
 	mbedtls_md5_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	if (mbedtls_md5_starts_ret(pctx))
+	{
+		free(pctx);
+		return NULL;
+	}
+#else
 	mbedtls_md5_init(pctx);
 	mbedtls_md5_starts(pctx);
+#endif
 	return pctx;
 }
 static void MD5_update(void *ctx, const char *in, size_t len)
 {
 	mbedtls_md5_context *pctx = (mbedtls_md5_context *)ctx;
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	mbedtls_md5_update_ret(pctx, in, len);
+#else
 	mbedtls_md5_update(pctx, in, len);
+#endif
 }
 static int MD5_finish(void *ctx, char *out)
 {
 	mbedtls_md5_context *pctx = (mbedtls_md5_context *)ctx;
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	if (mbedtls_md5_finish_ret(pctx, out))
+	{
+		free(pctx);
+		return -1;
+	}
+#else
 	mbedtls_md5_finish(pctx, out);
 	mbedtls_md5_free(pctx);
+#endif
 	free(pctx);
+	return 0;
 }
 
 static void *SHA1_init()
 {
 	mbedtls_sha1_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	if (mbedtls_sha1_starts_ret(pctx))
+	{
+		free(pctx);
+		return NULL;
+	}
+#else
 	mbedtls_sha1_init(pctx);
 	mbedtls_sha1_starts(pctx);
+#endif
 	return pctx;
 }
 static void SHA1_update(void *ctx, const char *in, size_t len)
 {
 	mbedtls_sha1_context *pctx = (mbedtls_sha1_context *)ctx;
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	mbedtls_sha1_update_ret(pctx, in, len);
+#else
 	mbedtls_sha1_update(pctx, in, len);
+#endif
 }
 static int SHA1_finish(void *ctx, char *out)
 {
 	mbedtls_sha1_context *pctx = (mbedtls_sha1_context *)ctx;
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	if (mbedtls_sha1_finish_ret(pctx, out))
+	{
+		free(pctx);
+		return -1;
+	}
+#else
 	mbedtls_sha1_finish(pctx, out);
 	mbedtls_sha1_free(pctx);
+#endif
 	free(pctx);
+	return 0;
 }
 
 static void *SHA256_init()
 {
 	mbedtls_sha256_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	if (mbedtls_sha256_starts_ret(pctx, 0))
+	{
+		free(pctx);
+		return NULL;
+	}
+#else
 	mbedtls_sha256_init(pctx);
 	mbedtls_sha256_starts(pctx, 0);
+#endif
 	return pctx;
 }
 static void SHA256_update(void *ctx, const char *in, size_t len)
 {
 	mbedtls_sha256_context *pctx = (mbedtls_sha256_context *)ctx;
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	mbedtls_sha256_update_ret(pctx, in, len);
+#else
 	mbedtls_sha256_update(pctx, in, len);
+#endif
 }
 static int SHA256_finish(void *ctx, char *out)
 {
 	mbedtls_sha256_context *pctx = (mbedtls_sha256_context *)ctx;
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+	if (mbedtls_sha256_finish_ret(pctx, out))
+	{
+		free(pctx);
+		return -1;
+	}
+#else
 	mbedtls_sha256_finish(pctx, out);
 	mbedtls_sha256_free(pctx);
+#endif
 	free(pctx);
+	return 0;
 }
 
 static void BASE64_encode(const char *in, int inlen, char *out, int outlen)
