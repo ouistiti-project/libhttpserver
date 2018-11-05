@@ -26,6 +26,8 @@ subdir-$(TEST)+=src/test.mk
 subdir-$(LIBUTILS)+=src/utils.mk
 subdir-$(LIBHASH)+=src/hash.mk
 
+subdir-$(WEBSOCKET)+=src/client_websocket.mk
+
 ifeq ($(CC),mingw32-gcc)
 WIN32:=1
 endif
