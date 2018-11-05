@@ -470,6 +470,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					/** pass the next space character */
 					data->offset++;
 					char status[4] = {data->offset[0], data->offset[1], data->offset[2], 0};
+					message->result = atoi(status);
 					httpmessage_addheader(message, "Status", status);
 					data->offset = strchr(data->offset, '\n') + 1;
 				}
