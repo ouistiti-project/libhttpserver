@@ -2907,6 +2907,10 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 			}
 			header = header->next;
 		}
+		if (header == NULL)
+		{
+			dbg("header %s not found", key);
+		}
 	}
 	return value;
 }
