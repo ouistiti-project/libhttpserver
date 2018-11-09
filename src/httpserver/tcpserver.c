@@ -95,17 +95,22 @@ struct addrinfo
 static int tcpclient_connect(void *ctl, char *addr, int port)
 {
 	http_client_t *client = (http_client_t *)ctl;
-
+	int family = AF_INET;
 #ifdef IPV6
+	family = AF_INET6;
 	struct sockaddr_in6 *saddr;
 	saddr = (struct sockaddr_in6 *)&client->addr;
-	saddr.sin6_family = AF_INET6;
-	saddr.sin6_port = htons(port);
-	inet_pton(addr, &saddr->sin6_addr);
+	saddr->sin6_family = AF_INET6;
+	saddr->sin6_port = htons(port);
+	if (inet_pton(AF_INET6, addr, &saddr->sin6_addr) == 0)
+	{
+		family = AF_INET;
+		inet_pton(AF_INET, addr, &saddr->sin6_addr);
+	}
 #else
 	struct sockaddr_in *saddr;
 	saddr = (struct sockaddr_in *)&client->addr;
-	saddr->sin_family = AF_INET;
+	saddr->sin_family = family;
 	saddr->sin_port = htons(port);
 	inet_aton(addr, &saddr->sin_addr);
 #endif
@@ -113,7 +118,7 @@ static int tcpclient_connect(void *ctl, char *addr, int port)
 
 	if (client->sock != 0)
 		return EREJECT;
-	client->sock = socket(saddr->sin_family, SOCK_STREAM, 0);
+	client->sock = socket(family, SOCK_STREAM, 0);
 	if (client->sock == -1)
 	{
 		client->sock = 0;
@@ -349,17 +354,17 @@ static int _tcpserver_start(http_server_t *server)
 		freeaddrinfo(result);
 #endif
 
+	if (status == 0)
+	{
 #if defined(SERVER_DEFER_ACCEPT) && defined(TCP_DEFER_ACCEPT)
-	if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
-			warn("setsockopt(TCP_DEFER_ACCEPT) failed");
+		if (setsockopt(server->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, (void *)&(int){ 0 }, sizeof(int)) < 0)
+				warn("setsockopt(TCP_DEFER_ACCEPT) failed");
 #endif
 #ifdef SERVER_NODELAY
-	if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
-			warn("setsockopt(TCP_NODELAY) failed");
+		if (setsockopt(server->sock, IPPROTO_TCP, TCP_NODELAY, (void *)&(int){ 1 }, sizeof(int)) < 0)
+				warn("setsockopt(TCP_NODELAY) failed");
 #endif
 
-	if (!status)
-	{
 		status = listen(server->sock, SOMAXCONN);//server->config->maxclients);
 	}
 	if (status)
