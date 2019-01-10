@@ -76,9 +76,9 @@ const hash_t *hash_sha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "SHA-256",
-	.init = SHA1_init,
-	.update = SHA1_update,
-	.finish = SHA1_finish,
+	.init = SHA256_init,
+	.update = SHA256_update,
+	.finish = SHA256_finish,
 };
 const hash_t *hash_sha512 = NULL;
 
