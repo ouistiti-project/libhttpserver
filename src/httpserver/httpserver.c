@@ -949,15 +949,12 @@ int httpmessage_appendcontent(http_message_t *message, char *content, int length
 	{
 		if (length == -1)
 			length = strlen(content);
-		if (length + message->content->length <= message->content->size)
-		{
-			_buffer_append(message->content, content, length);
-			if (message->content_length == (unsigned long long)-1)
-				message->content_length = length;
-			else
-				message->content_length += length;
-			return message->content->size - message->content->length;
-		}
+		_buffer_append(message->content, content, length);
+		if (message->content_length == (unsigned long long)-1)
+			message->content_length = length;
+		else
+			message->content_length += length;
+		return message->content->size - message->content->length;
 	}
 	return message->client->server->config->chunksize;
 }
