@@ -33,6 +33,14 @@
 # include "b64/cencode.h"
 # include "b64/cdecode.h"
 
+#define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#ifdef DEBUG
+#define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+#else
+#define dbg(...)
+#endif
+
 static void BASE64_encode(const char *in, int inlen, char *out, int outlen);
 static void BASE64_decode(const char *in, int inlen, char *out, int outlen);
 const base64_t *base64 = &(const base64_t)
