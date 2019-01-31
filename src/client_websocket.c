@@ -123,7 +123,6 @@ http_t *http_open(char *url, ...)
 {
 	int port = 80;
 
-dbg("url: %s", url);
 	char *host = strstr(url, "http://");
 	if (host == NULL)
 		return NULL;
@@ -141,10 +140,6 @@ dbg("url: %s", url);
 	if (pathname == NULL)
 		return NULL;
 	host = strndup(host, pathname - portname);
-dbg("host: %s", host);
-dbg("port: %d", port);
-dbg("pathname: %s", pathname);
-
 
 	struct sockaddr_in saddr;
 	struct addrinfo hints;
@@ -371,7 +366,7 @@ static void *_websocket_run(void *arg)
 _websocket_t *websocket_create(int sock, http_t *http)
 {
 	_websocket_t *thiz = NULL;
-	char *handshake = http_header(http, "Sec-WebSocket-Accept");
+	const char *handshake = http_header(http, "Sec-WebSocket-Accept");
 
 	if (handshake != NULL)
 	{
@@ -387,7 +382,7 @@ _websocket_t *websocket_create(int sock, http_t *http)
 
 void help(char **argv)
 {
-	fprintf(stderr, "%s -R <socket directory> -u <URL>", argv[0]);
+	fprintf(stderr, "%s -R <socket directory> -U <URL> -n <socketname> -u <username> -p <pidfile> -D\n", argv[0]);
 	exit(0);
 }
 
@@ -439,11 +434,14 @@ int main(int argc, char **argv)
 
 	do
 	{
-		opt = getopt(argc, argv, "R:hDU:u:p:");
+		opt = getopt(argc, argv, "R:n:hDU:u:p:");
 		switch (opt)
 		{
 			case 'R':
 				root = optarg;
+			break;
+			case 'n':
+				name = optarg;
 			break;
 			case 'p':
 				pidfile = optarg;
