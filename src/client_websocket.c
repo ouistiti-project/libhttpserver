@@ -163,8 +163,7 @@ static _client_tls_ctx_t *_tls_init(const char *host, int port)
 
 	if (tls_certificat != NULL)
 	{
-		ret = mbedtls_x509_crt_parse( &ctx->srvcert, (const unsigned char *) tls_certificat,
-					strlen(tls_certificat) );
+		ret = mbedtls_x509_crt_parse_file( &ctx->srvcert, (const unsigned char *) tls_certificat);
 		if (ret)
 		{
 			err("mbedtls_x509_crt_parse %d\n", ret);
