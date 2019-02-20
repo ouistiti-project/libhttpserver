@@ -52,6 +52,21 @@
 
 #include <pwd.h> // getpwnam
 
+#ifdef MBEDTLS
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/certs.h>
+#include <mbedtls/x509.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/version.h>
+#include <mbedtls/error.h>
+#if MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR>=4
+#include <mbedtls/net_sockets.h>
+#elif MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR==2
+#include <mbedtls/net.h>
+#endif
+#endif
+
 #include "httpserver/httpserver.h"
 #include "httpserver/websocket.h"
 
@@ -64,6 +79,7 @@
 #endif
 
 #define DAEMONIZE 0x01
+#define TLS 0x02
 
 #ifndef STATICKEY
 #define STATICKEY "4851d4fa7a309fd21eda05699e9d8595"
@@ -76,71 +92,286 @@ typedef struct http_s http_t;
 struct http_s
 {
 	http_message_t *message;
-	int sock;
+	void *private;
 	int (*send)(http_t *thiz, const void *buf, size_t len);
 	int (*recv)(http_t *thiz, void *buf, size_t len);
 	void (*close)(http_t *thiz);
+	int (*sock)(http_t *thiz);
+};
+
+static int _tcp_connect(const char *host, int port);
+
+static const unsigned char *tls_certificat = NULL;
+
+typedef struct _client_tls_ctx_s _client_tls_ctx_t;
+#ifdef MBEDTLS
+struct _client_tls_ctx_s
+{
+	int sock;
+	mbedtls_ssl_context ssl;
+
+	mbedtls_ssl_config conf;
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_x509_crt srvcert;
+    mbedtls_x509_crt cachain;
+    mbedtls_pk_context pkey;
+    mbedtls_dhm_context dhm;
+};
+
+static int _tcp_send(void *arg, const unsigned char *buf, size_t len)
+{
+	_client_tls_ctx_t *ctx = (_client_tls_ctx_t *)arg;
+	int ret = send(ctx->sock, buf, len, MSG_NOSIGNAL);
+	if (ret == -1)
+		ret = MBEDTLS_ERR_NET_SEND_FAILED;
+	return ret;
+}
+
+static int _tcp_recv(void *arg, unsigned char *buf, size_t len)
+{
+	_client_tls_ctx_t *ctx = (_client_tls_ctx_t *)arg;
+	int ret = recv(ctx->sock, buf, len, MSG_NOSIGNAL);
+	if (ret == -1)
+		ret = MBEDTLS_ERR_NET_RECV_FAILED;
+	return ret;
+}
+
+
+static _client_tls_ctx_t *_tls_init(const char *host, int port)
+{
+	int ret;
+	int is_set_pemkey = 0;
+	_client_tls_ctx_t *ctx;
+
+	ctx = calloc(1, sizeof(*ctx));
+	mbedtls_ssl_init(&ctx->ssl);
+	mbedtls_x509_crt_init(&ctx->srvcert);
+
+	mbedtls_ctr_drbg_init(&ctx->ctr_drbg);
+	mbedtls_entropy_init(&ctx->entropy);
+
+	ret = mbedtls_ctr_drbg_seed(&ctx->ctr_drbg, mbedtls_entropy_func, &ctx->entropy,
+			(const unsigned char *) "ouistiti", strlen("ouistiti"));
+	if (ret)
+	{
+		err("mbedtls_ctr_drbg_seed %d\n", ret);
+		mbedtls_ssl_free(&ctx->ssl);
+		free(ctx);
+		return NULL;
+	}
+
+	ret = mbedtls_x509_crt_parse( &ctx->srvcert, (const unsigned char *) tls_certificat,
+				mbedtls_test_cas_pem_len );
+	if (ret)
+	{
+		err("mbedtls_x509_crt_parse %d\n", ret);
+		mbedtls_ssl_free(&ctx->ssl);
+		free(ctx);
+		return NULL;
+	}
+
+	ret = mbedtls_ssl_config_defaults( &ctx->conf,
+                    MBEDTLS_SSL_IS_CLIENT,
+                    MBEDTLS_SSL_TRANSPORT_STREAM,
+					MBEDTLS_SSL_PRESET_DEFAULT );
+	if (ret)
+	{
+		err("mbedtls_ssl_config_defaults %d\n", ret);
+		mbedtls_ssl_free(&ctx->ssl);
+		free(ctx);
+		return NULL;
+	}
+	mbedtls_ssl_conf_authmode( &ctx->conf, MBEDTLS_SSL_VERIFY_OPTIONAL );
+	mbedtls_ssl_conf_ca_chain( &ctx->conf, &ctx->srvcert, NULL );
+	mbedtls_ssl_conf_rng( &ctx->conf, mbedtls_ctr_drbg_random, &ctx->ctr_drbg );
+
+	ret = mbedtls_ssl_setup( &ctx->ssl, &ctx->conf );
+	if (ret)
+	{
+		err("mbedtls_ssl_setup %d\n", ret);
+		mbedtls_ssl_free(&ctx->ssl);
+		free(ctx);
+		return NULL;
+	}
+
+	return ctx;
+}
+
+void _tls_destroy(_client_tls_ctx_t *ctx)
+{
+	mbedtls_dhm_free(&ctx->dhm);
+	mbedtls_x509_crt_free(&ctx->srvcert);
+	mbedtls_pk_free(&ctx->pkey);
+	mbedtls_ctr_drbg_free(&ctx->ctr_drbg);
+	mbedtls_entropy_free(&ctx->entropy);
+	mbedtls_ssl_config_free(&ctx->conf);
+	free(ctx);
+}
+
+static int _tls_send(http_t *thiz, const void *data, size_t size)
+{
+	int ret;
+	int length = 0;
+	_client_tls_ctx_t *ctx = thiz->private;
+	do
+	{
+		ret = mbedtls_ssl_write(&ctx->ssl, (unsigned char *)data, size);
+		if (ret > 0)
+			length += ret;
+	}
+	while (ret == MBEDTLS_ERR_SSL_WANT_WRITE && length < size);
+	return length;
+}
+
+static int _tls_recv(http_t *thiz, void *data, size_t size)
+{
+	int ret;
+	int length = 0;
+	_client_tls_ctx_t *ctx = thiz->private;
+	do
+	{
+		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
+		if (ret > 0)
+			length += ret;
+	}
+	while (ret == MBEDTLS_ERR_SSL_WANT_READ && length < size);
+	return length;
+}
+
+static void _tls_close(http_t *thiz)
+{
+	_client_tls_ctx_t *ctx = thiz->private;
+	int ret;
+	while ((ret = mbedtls_ssl_close_notify(&ctx->ssl)) == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+	dbg("TLS Close");
+	mbedtls_ssl_free(&ctx->ssl);
+	shutdown(ctx->sock, SHUT_RDWR);
+	close(ctx->sock);
+}
+
+http_t *tls_create(const char *host, int port)
+{
+	int ret;
+	if (port == -1)
+		port = 443;
+	_client_tls_ctx_t *ctx = _tls_init(host, port);
+
+	ret = mbedtls_ssl_set_hostname(&ctx->ssl, host);
+	if (ret)
+	{
+		err("mbedtls_ssl_set_hostname %d\n", ret);
+		mbedtls_ssl_free(&ctx->ssl);
+		free(ctx);
+		return NULL;
+	}
+
+	int sock = _tcp_connect(host, port);
+	if (sock == -1)
+	{
+		err("socket error on %s : %s", host, strerror(errno));
+		mbedtls_ssl_free(&ctx->ssl);
+		free(ctx);
+		return NULL;
+	}
+
+	ctx->sock = sock;
+
+	mbedtls_ssl_set_bio( &ctx->ssl, &ctx, _tcp_send, _tcp_recv, NULL );
+
+	while( ( ret = mbedtls_ssl_handshake( &ctx->ssl ) ) != 0 )
+	{
+		if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE )
+		{
+			char error[256];
+			mbedtls_strerror(ret, error, 256);
+			err("handshake error on %s : %s", host, error);
+			mbedtls_ssl_free(&ctx->ssl);
+			free(ctx);
+			return NULL;
+		}
+	}
+	ret = mbedtls_ssl_get_verify_result( &ctx->ssl );
+	if (ret != 0)
+	{
+		char vrfy_buf[512];
+		mbedtls_x509_crt_verify_info( vrfy_buf, sizeof( vrfy_buf ), "  ! ", ret );
+		err("Certificat error %s", vrfy_buf);
+	}
+
+	http_t *http = calloc(1, sizeof(*http));
+	http->message = httpmessage_create(CHUNKSIZE);
+
+	http->private = ctx;
+	http->send = _tls_send;
+	http->recv = _tls_recv;
+	http->close = _tls_close;
+	return http;
+}
+
+#endif
+/*******************************************************/
+
+typedef struct _direct_s _direct_t;
+struct _direct_s
+{
+	int sock;
 };
 
 static int _http_send(http_t *thiz, const void *buf, size_t len)
 {
-	return send(thiz->sock, buf, len, MSG_NOSIGNAL);
+	_direct_t *private = thiz->private;
+	return send(private->sock, buf, len, MSG_NOSIGNAL);
 }
 
 static int _http_recv(http_t *thiz, void *buf, size_t len)
 {
-	return recv(thiz->sock, buf, len, MSG_NOSIGNAL);
+	_direct_t *private = thiz->private;
+	return recv(private->sock, buf, len, MSG_NOSIGNAL);
 }
 
 static void _http_close(http_t *thiz)
 {
-	shutdown(thiz->sock, SHUT_RDWR);
-	close(thiz->sock);
+	_direct_t *private = thiz->private;
+	shutdown(private->sock, SHUT_RDWR);
+	close(private->sock);
 }
 
-http_t *http_create(int sock)
+static int _http_sock(http_t *thiz)
+{
+	_direct_t *private = thiz->private;
+	return private->sock;
+}
+	
+http_t *http_create(const char *host, int port)
 {
 	http_t *http = calloc(1, sizeof(*http));
 	http->message = httpmessage_create(CHUNKSIZE);
-	http->sock = sock;
+
+	_direct_t *private = calloc(1, sizeof(*private));
+
+	http->private = private;
 	http->send = _http_send;
 	http->recv = _http_recv;
 	http->close = _http_close;
+	http->sock = _http_sock;
+
+	int sock = _tcp_connect(host, port);
+	if (sock == -1)
+	{
+		err("socket error on %s : %s", host, strerror(errno));
+		free(private);
+		free(http);
+		return NULL;
+	}
+
+	private->sock = sock;
 	return http;
 }
 
-int http_result(http_t *thiz)
+/*******************************************************/
+static int _tcp_connect(const char *host, int port)
 {
-	return httpmessage_result(thiz->message, 0);
-}
-
-const char *http_header(http_t *thiz, char *key)
-{
-	return httpmessage_REQUEST(thiz->message, key);
-}
-
-http_t *http_open(char *url, ...)
-{
-	int port = 80;
-
-	char *host = strstr(url, "http://");
-	if (host == NULL)
-		return NULL;
-	host += sizeof("http://") - 1;
-
-	char *portname = strstr(host, ":");
-	if (portname != NULL)
-	{
-		port = atoi(portname + 1);
-	}
-	else
-		portname = host;
-
-	char *pathname = strstr(portname, "/");
-	if (pathname == NULL)
-		return NULL;
-	host = strndup(host, pathname - portname);
-
 	struct sockaddr_in saddr;
 	struct addrinfo hints;
 
@@ -156,6 +387,8 @@ http_t *http_open(char *url, ...)
 	struct addrinfo *result, *rp;
 	getaddrinfo(host, NULL, &hints, &result);
 
+	if (port == -1)
+		port = 80;
 	int sock = -1;
 	for (rp = result; rp != NULL; rp = rp->ai_next)
 	{
@@ -170,13 +403,76 @@ http_t *http_open(char *url, ...)
 		sock = -1;
 	}
 
-	if (sock == -1)
-	{
-		err("socket error on %s : %s", url, strerror(errno));
-		return NULL;
-	}
+	return sock;
+}
 
-	http_t *thiz = http_create(sock);
+int http_result(http_t *thiz)
+{
+	return httpmessage_result(thiz->message, 0);
+}
+
+const char *http_header(http_t *thiz, char *key)
+{
+	return httpmessage_REQUEST(thiz->message, key);
+}
+
+http_t *http_open(char *url, int tls, ...)
+{
+	int port = -1;
+
+	char *host = NULL;
+	host = strstr(url, "http://");
+	if (host != NULL)
+		host += sizeof("http://") - 1;
+	else
+	{
+		host = strstr(url, "ws://");
+		if (host != NULL)
+			host += sizeof("ws://") - 1;
+		else
+		{
+			tls = 1;
+			host = strstr(url, "https://");
+			if (host != NULL)
+				host += sizeof("https://") - 1;
+			else
+			{
+				host = strstr(url, "wss://");
+				if (host != NULL)
+					host += sizeof("wss://") - 1;
+			}
+		}
+	}
+	
+	if (host == NULL)
+		return NULL;
+
+	char *portname = strstr(host, ":");
+	if (portname != NULL)
+	{
+		port = atoi(portname + 1);
+	}
+	else
+		portname = host;
+
+	char *pathname = strstr(portname, "/");
+	if (pathname == NULL)
+		return NULL;
+	host = strndup(host, pathname - portname);
+
+	http_t *thiz = NULL;
+	if (!tls)
+	{
+		thiz = http_create(host, port);
+	}
+#ifdef MBEDTLS
+	else
+	{
+		thiz = tls_create(host, port);
+	}
+#endif
+	if (thiz == NULL)
+		return NULL;
 
 	int ret;
 	ret = thiz->send(thiz, "GET ", 4);
@@ -188,7 +484,7 @@ http_t *http_open(char *url, ...)
 	ret = thiz->send(thiz, HTTP_ENDLINE, sizeof(HTTP_ENDLINE) -1);
 
 	va_list ap;
-	va_start(ap, url);
+	va_start(ap, tls);
 	char *header = va_arg(ap, char *);
 	while (header != NULL)
 	{
@@ -269,15 +565,15 @@ static void *_websocket_run(void *arg)
 		fd_set rfds;
 		FD_ZERO(&rfds);
 		FD_SET(thiz->sock, &rfds);
-		FD_SET(thiz->http->sock, &rfds);
-		int maxfd = (thiz->sock > thiz->http->sock)? thiz->sock:thiz->http->sock;
+		FD_SET(thiz->http->sock(thiz->http), &rfds);
+		int maxfd = (thiz->sock > thiz->http->sock(thiz->http))? thiz->sock:thiz->http->sock(thiz->http);
 
 		int ret = select(maxfd + 1, &rfds, NULL, NULL, NULL);
-		if (ret > 0 && FD_ISSET(thiz->http->sock, &rfds))
+		if (ret > 0 && FD_ISSET(thiz->http->sock(thiz->http), &rfds))
 		{
 			int length = 0;
 
-			ret = ioctl(thiz->http->sock, FIONREAD, &length);
+			ret = ioctl(thiz->http->sock(thiz->http), FIONREAD, &length);
 			if (ret == 0 && length > 0)
 			{
 				char *buffer = calloc(1, length);
@@ -434,7 +730,7 @@ int main(int argc, char **argv)
 
 	do
 	{
-		opt = getopt(argc, argv, "R:n:hDU:u:p:");
+		opt = getopt(argc, argv, "R:n:hDsU:u:p:");
 		switch (opt)
 		{
 			case 'R':
@@ -458,6 +754,9 @@ int main(int argc, char **argv)
 			break;
 			case 'D':
 				mode |= DAEMONIZE;
+			break;
+			case 's':
+				mode |= TLS;
 			break;
 		}
 	} while(opt != -1);
@@ -532,7 +831,7 @@ int main(int argc, char **argv)
 						if (newsock > 0)
 						{
 							int result = 0;
-							http_t *http = http_open(url, 
+							http_t *http = http_open(url, mode & TLS,
 										"Connection: Upgrade",
 										"Upgrade: websocket",
 										"Sec-WebSocket-Key:"STATICKEY,
