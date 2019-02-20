@@ -392,6 +392,8 @@ static int _tcp_connect(const char *host, int port)
 	struct addrinfo *result, *rp;
 	getaddrinfo(host, NULL, &hints, &result);
 
+	if (port == -1)
+		port = 80;
 	int sock = -1;
 
 	for (rp = result; rp != NULL; rp = rp->ai_next)
