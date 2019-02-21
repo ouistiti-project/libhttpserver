@@ -694,7 +694,20 @@ _websocket_t *websocket_create(int sock, http_t *http)
 
 void help(char **argv)
 {
-	fprintf(stderr, "%s -R <socket directory> -U <URL> -n <socketname> -u <username> -p <pidfile> -D\n", argv[0]);
+	fprintf(stderr, "%s -R <socket directory> "
+		"-U <URL> -n <socketname> "
+		"-u <username> -p <pidfile> -D"
+		"-B <auth> -s -C <certificat>"
+		"\n", argv[0]);
+	fprintf(stderr, " -U <URL>\turl to open on new unix socket connection\n");
+	fprintf(stderr, " -R <directory>\tdirectory to create the unix socket\n");
+	fprintf(stderr, " -n <name>\tname of the unix socket\n");
+	fprintf(stderr, " -u <user>\tname of the owner of the process\n");
+	fprintf(stderr, " -p <file>\tfile to contain the process id\n");
+	fprintf(stderr, " -D       \tdaemonize the process\n");
+	fprintf(stderr, " -B <auth>\tBasic authentication with <login>:<passwd>\n");
+	fprintf(stderr, " -s       \tforce SSL/TLS connection\n");
+	fprintf(stderr, " -C <cert>\tset the certificat to use with SSL/TLS\n");
 	exit(0);
 }
 
