@@ -67,6 +67,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	/**
 	 * ignore SIGCHLD allows the child to die without to create a zombie.
 	 * But the parent doesn't receive information.
+	 * See below about "waitpid"
 	 */
 	action.sa_handler = SIG_IGN;
 	sigaction(SIGCHLD, &action, NULL);
@@ -129,8 +130,11 @@ int vthread_exist(vthread_t thread)
 		{
 			if (errno == ECHILD)
 			{
+				/**
+				 * SIGCHLD is ignored
+				 */
+				err("vthread %d previously died", thread->pid);
 				thread->pid = 0;
-				err("vthread exist NO with ECHILD %d", pid == 0);
 			}
 			else
 				err("vthread_exist error %s", strerror(errno));
@@ -141,8 +145,8 @@ int vthread_exist(vthread_t thread)
 			 * thread died previously
 			 * Don't try to wait again into vthread_join
 			 */
+			err("vthread exist NO with SIGCHLD %d", pid == 0);
 			thread->pid = 0;
-				err("vthread exist NO with SIGCHLD %d", pid == 0);
 		}
 	}
 	return (pid == 0);
