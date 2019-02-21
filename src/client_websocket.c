@@ -69,6 +69,7 @@
 
 #include "httpserver/httpserver.h"
 #include "httpserver/websocket.h"
+#include "httpserver/hash.h"
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -87,6 +88,8 @@
 
 #define CHUNKSIZE 64
 #define HTTP_ENDLINE "\r\n"
+#define AUTH_HEADER "Authorization: "
+#define AUTH_BASIC "Basic "
 
 typedef struct http_s http_t;
 struct http_s
@@ -241,6 +244,12 @@ static int _tls_recv(http_t *thiz, void *data, size_t size)
 	return length;
 }
 
+static int _tls_sock(http_t *thiz)
+{
+	_client_tls_ctx_t *ctx = thiz->private;
+	return ctx->sock;
+}
+
 static void _tls_close(http_t *thiz)
 {
 	_client_tls_ctx_t *ctx = thiz->private;
@@ -308,6 +317,7 @@ http_t *tls_create(const char *host, int *port)
 	http->send = _tls_send;
 	http->recv = _tls_recv;
 	http->close = _tls_close;
+	http->sock = _tls_sock;
 	return http;
 }
 
@@ -684,7 +694,20 @@ _websocket_t *websocket_create(int sock, http_t *http)
 
 void help(char **argv)
 {
-	fprintf(stderr, "%s -R <socket directory> -U <URL> -n <socketname> -u <username> -p <pidfile> -D\n", argv[0]);
+	fprintf(stderr, "%s -R <socket directory> "
+		"-U <URL> -n <socketname> "
+		"-u <username> -p <pidfile> -D"
+		"-B <auth> -s -C <certificat>"
+		"\n", argv[0]);
+	fprintf(stderr, " -U <URL>\turl to open on new unix socket connection\n");
+	fprintf(stderr, " -R <directory>\tdirectory to create the unix socket\n");
+	fprintf(stderr, " -n <name>\tname of the unix socket\n");
+	fprintf(stderr, " -u <user>\tname of the owner of the process\n");
+	fprintf(stderr, " -p <file>\tfile to contain the process id\n");
+	fprintf(stderr, " -D       \tdaemonize the process\n");
+	fprintf(stderr, " -B <auth>\tBasic authentication with <login>:<passwd>\n");
+	fprintf(stderr, " -s       \tforce SSL/TLS connection\n");
+	fprintf(stderr, " -C <cert>\tset the certificat to use with SSL/TLS\n");
 	exit(0);
 }
 
@@ -733,10 +756,12 @@ int main(int argc, char **argv)
 	const char *username = str_username;
 	int mode = 0;
 	int opt;
+	char *authentication = NULL;
+	const char *basic = NULL;
 
 	do
 	{
-		opt = getopt(argc, argv, "R:n:hDsC:U:u:p:");
+		opt = getopt(argc, argv, "R:n:hDsC:U:u:p:B:");
 		switch (opt)
 		{
 			case 'R':
@@ -767,6 +792,9 @@ int main(int argc, char **argv)
 			case 's':
 				mode |= TLS;
 			break;
+			case 'B':
+				basic = optarg;
+			break;
 		}
 	} while(opt != -1);
 
@@ -794,6 +822,16 @@ int main(int argc, char **argv)
 	if (pidfile)
 		_setpidfile(pidfile);
 
+	if (basic != NULL)
+	{
+		int length = strlen(basic) * 1.5 + 5;
+		authentication = calloc(1, length + sizeof(AUTH_HEADER) + sizeof(AUTH_BASIC));
+		strcpy(authentication, AUTH_HEADER AUTH_BASIC);
+		dbg("authentication %s", basic);
+		base64->encode(basic, strlen(basic), authentication + strlen(authentication), length - 1);
+		dbg("authentication %s", authentication);
+		
+	}
 	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock > 0)
 	{
@@ -844,6 +882,7 @@ int main(int argc, char **argv)
 										"Connection: Upgrade",
 										"Upgrade: websocket",
 										"Sec-WebSocket-Key:"STATICKEY,
+										authentication,
 										NULL);
 							if (http != NULL)
 							{
@@ -872,5 +911,7 @@ int main(int argc, char **argv)
 			err("%s: error %s\n", argv[0], strerror(errno));
 		}
 	}
+	if (authentication != NULL)
+		free(authentication);
 	return 0;
 }
