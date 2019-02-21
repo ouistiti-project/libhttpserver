@@ -241,6 +241,12 @@ static int _tls_recv(http_t *thiz, void *data, size_t size)
 	return length;
 }
 
+static int _tls_sock(http_t *thiz)
+{
+	_client_tls_ctx_t *ctx = thiz->private;
+	return ctx->sock;
+}
+
 static void _tls_close(http_t *thiz)
 {
 	_client_tls_ctx_t *ctx = thiz->private;
@@ -308,6 +314,7 @@ http_t *tls_create(const char *host, int *port)
 	http->send = _tls_send;
 	http->recv = _tls_recv;
 	http->close = _tls_close;
+	http->sock = _tls_sock;
 	return http;
 }
 
