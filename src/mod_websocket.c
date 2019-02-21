@@ -305,6 +305,13 @@ static int websocket_pong(void *arg, char *data)
 	return info->sendresp(info->ctx, message, sizeof(message));
 }
 
+static int websocket_ping(void *arg, char *data)
+{
+	_websocket_main_t *info = (_websocket_main_t *)arg;
+	char message[] = { 0x8A, 0x00};
+	return info->sendresp(info->ctx, message, sizeof(message));
+}
+
 static void *_websocket_main(void *arg)
 {
 	_websocket_main_t *info = (_websocket_main_t *)arg;
