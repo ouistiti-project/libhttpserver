@@ -69,6 +69,7 @@
 
 #include "httpserver/httpserver.h"
 #include "httpserver/websocket.h"
+#include "httpserver/hash.h"
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -87,6 +88,8 @@
 
 #define CHUNKSIZE 64
 #define HTTP_ENDLINE "\r\n"
+#define AUTH_HEADER "Authorization: "
+#define AUTH_BASIC "Basic "
 
 typedef struct http_s http_t;
 struct http_s
@@ -740,10 +743,12 @@ int main(int argc, char **argv)
 	const char *username = str_username;
 	int mode = 0;
 	int opt;
+	char *authentication = NULL;
+	const char *basic = NULL;
 
 	do
 	{
-		opt = getopt(argc, argv, "R:n:hDsC:U:u:p:");
+		opt = getopt(argc, argv, "R:n:hDsC:U:u:p:B:");
 		switch (opt)
 		{
 			case 'R':
@@ -774,6 +779,9 @@ int main(int argc, char **argv)
 			case 's':
 				mode |= TLS;
 			break;
+			case 'B':
+				basic = optarg;
+			break;
 		}
 	} while(opt != -1);
 
@@ -801,6 +809,16 @@ int main(int argc, char **argv)
 	if (pidfile)
 		_setpidfile(pidfile);
 
+	if (basic != NULL)
+	{
+		int length = strlen(basic) * 1.5 + 5;
+		authentication = calloc(1, length + sizeof(AUTH_HEADER) + sizeof(AUTH_BASIC));
+		strcpy(authentication, AUTH_HEADER AUTH_BASIC);
+		dbg("authentication %s", basic);
+		base64->encode(basic, strlen(basic), authentication + strlen(authentication), length - 1);
+		dbg("authentication %s", authentication);
+		
+	}
 	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock > 0)
 	{
@@ -851,6 +869,7 @@ int main(int argc, char **argv)
 										"Connection: Upgrade",
 										"Upgrade: websocket",
 										"Sec-WebSocket-Key:"STATICKEY,
+										authentication,
 										NULL);
 							if (http != NULL)
 							{
@@ -879,5 +898,7 @@ int main(int argc, char **argv)
 			err("%s: error %s\n", argv[0], strerror(errno));
 		}
 	}
+	if (authentication != NULL)
+		free(authentication);
 	return 0;
 }
