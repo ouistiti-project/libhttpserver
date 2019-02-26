@@ -903,19 +903,36 @@ int main(int argc, char **argv)
 							}
 							dbg("connection result %d", result);
 							if (result == 101)
-								websocket_create(newsock, http);
+							{
+								if (websocket_create(newsock, http) == NULL)
+									close(newsock);
+							}
 							else if (result == 200)
 							{
+								send(newsock, "Result 200", 11, MSG_NOSIGNAL);
+								close(newsock);
 							}
 							else if (result == 401 | result == 403)
 							{
+								err("please set the authentication");
+								http_close(http);
+								close(newsock);
 							}
 							else
+							{
+								err("result %d", result);
 								http_close(http);
-						}						
+								close(newsock);
+							}
+						}
+						else
+						{
+							close(sock);
+							sock = -1;
+						}
 					}				
 				}
-			} while(newsock > 0);
+			} while(sock > 0);
 		}
 		
 		unlink(addr.sun_path);
