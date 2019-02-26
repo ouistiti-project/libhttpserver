@@ -557,6 +557,12 @@ static int _websocket_pong(void *arg, char *data)
 	return thiz->http->send(thiz->http, message, sizeof(message));
 }
 
+static int _websocket_info(void *arg, char *data)
+{
+	dbg("pong");
+	return 0;
+}
+
 static int _websocket_ping(void *arg, char *data)
 {
 	_websocket_t *thiz = (_websocket_t *)arg;
@@ -568,6 +574,7 @@ static websocket_t _wsdefaul_config =
 {
 	.onclose = _websocket_close,
 	.onping = _websocket_pong,
+	.onpong = _websocket_info,
 	.type = WS_TEXT,
 };
 
@@ -584,7 +591,8 @@ static void *_websocket_run(void *arg)
 		FD_SET(thiz->http->sock(thiz->http), &rfds);
 		int maxfd = (thiz->sock > thiz->http->sock(thiz->http))? thiz->sock:thiz->http->sock(thiz->http);
 
-		int ret = select(maxfd + 1, &rfds, NULL, NULL, NULL);
+		struct timeval timeout = {3,0};
+		int ret = select(maxfd + 1, &rfds, NULL, NULL, &timeout);
 		if (ret > 0 && FD_ISSET(thiz->http->sock(thiz->http), &rfds))
 		{
 			int length = 0;
@@ -662,16 +670,26 @@ static void *_websocket_run(void *arg)
 			if (ret < 0)
 			{
 				run = 0;
-				warn("websocket: client died");
 			}
+		}
+		else if (ret == 0) // timeout
+		{
+			dbg("ping");
+			_websocket_ping(thiz, NULL);
 		}
 		else if (errno != EAGAIN)
 		{
 			warn("websocket: error %s", strerror(errno));
 			run = 0;
 		}
+		else
+		{
+			warn("EAGAIN");
+		}
 	} while (run);
-
+	warn("websocket: client died");
+	close(thiz->sock);
+	http_close(thiz->http);
 	return NULL;
 }
 
