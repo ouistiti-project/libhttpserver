@@ -843,11 +843,16 @@ int main(int argc, char **argv)
 		int length = strlen(basic) * 1.5 + 5;
 		authentication = calloc(1, length + sizeof(AUTH_HEADER) + sizeof(AUTH_BASIC));
 		strcpy(authentication, AUTH_HEADER AUTH_BASIC);
-		dbg("authentication %s", basic);
 		base64->encode(basic, strlen(basic), authentication + strlen(authentication), length - 1);
-		dbg("authentication %s", authentication);
-		
 	}
+	if (getuid() == 0)
+	{
+		struct passwd *user = NULL;
+		user = getpwnam(username);
+		setgid(user->pw_gid);
+		seteuid(user->pw_uid);
+	}
+
 	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock > 0)
 	{
@@ -866,14 +871,6 @@ int main(int argc, char **argv)
 			chmod(addr.sun_path, 0777);
 			ret = listen(sock, 3);
 		}
-		if (getuid() == 0)
-		{
-			struct passwd *user = NULL;
-			user = getpwnam(username);
-			setgid(user->pw_gid);
-			seteuid(user->pw_uid);
-		}
-
 		if (ret == 0)
 		{
 			int newsock = 0;
