@@ -42,6 +42,7 @@ struct websocket_s
 	int mtu;
 	onclose_t onclose;
 	onping_t onping;
+	onping_t onpong;
 };
 typedef struct websocket_s websocket_t;
 

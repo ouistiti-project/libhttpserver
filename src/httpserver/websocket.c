@@ -71,6 +71,7 @@ static websocket_t default_config =
 	.mtu = 0,
 	.onclose = NULL,
 	.onping = NULL,
+	.onpong = NULL,
 };
 static websocket_t *_config = &default_config;
 
@@ -179,6 +180,12 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 			{
 				if (_config->onping)
 					_config->onping(arg, out);
+			}
+			break;
+			case fo_pong:
+			{
+				if (_config->onpong)
+					_config->onpong(arg, out);
 			}
 			break;
 			default:
