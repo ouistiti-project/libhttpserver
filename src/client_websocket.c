@@ -557,6 +557,12 @@ static int _websocket_pong(void *arg, char *data)
 	return thiz->http->send(thiz->http, message, sizeof(message));
 }
 
+static int _websocket_info(void *arg, char *data)
+{
+	dbg("pong");
+	return 0;
+}
+
 static int _websocket_ping(void *arg, char *data)
 {
 	_websocket_t *thiz = (_websocket_t *)arg;
@@ -568,6 +574,7 @@ static websocket_t _wsdefaul_config =
 {
 	.onclose = _websocket_close,
 	.onping = _websocket_pong,
+	.onpong = _websocket_info,
 	.type = WS_TEXT,
 };
 
@@ -584,7 +591,8 @@ static void *_websocket_run(void *arg)
 		FD_SET(thiz->http->sock(thiz->http), &rfds);
 		int maxfd = (thiz->sock > thiz->http->sock(thiz->http))? thiz->sock:thiz->http->sock(thiz->http);
 
-		int ret = select(maxfd + 1, &rfds, NULL, NULL, NULL);
+		struct timeval timeout = {3,0};
+		int ret = select(maxfd + 1, &rfds, NULL, NULL, &timeout);
 		if (ret > 0 && FD_ISSET(thiz->http->sock(thiz->http), &rfds))
 		{
 			int length = 0;
@@ -611,8 +619,6 @@ static void *_websocket_run(void *arg)
 			}
 			else
 			{
-				char buffer[64];
-				ret = read(thiz->sock, buffer, 63);
 				warn("websocket: %d %d error %s", ret, length, strerror(errno));
 				run = 0;
 			}
@@ -662,16 +668,26 @@ static void *_websocket_run(void *arg)
 			if (ret < 0)
 			{
 				run = 0;
-				warn("websocket: client died");
 			}
+		}
+		else if (ret == 0) // timeout
+		{
+			dbg("ping");
+			_websocket_ping(thiz, NULL);
 		}
 		else if (errno != EAGAIN)
 		{
 			warn("websocket: error %s", strerror(errno));
 			run = 0;
 		}
+		else
+		{
+			warn("EAGAIN");
+		}
 	} while (run);
-
+	warn("websocket: client died");
+	close(thiz->sock);
+	http_close(thiz->http);
 	return NULL;
 }
 
@@ -827,11 +843,16 @@ int main(int argc, char **argv)
 		int length = strlen(basic) * 1.5 + 5;
 		authentication = calloc(1, length + sizeof(AUTH_HEADER) + sizeof(AUTH_BASIC));
 		strcpy(authentication, AUTH_HEADER AUTH_BASIC);
-		dbg("authentication %s", basic);
 		base64->encode(basic, strlen(basic), authentication + strlen(authentication), length - 1);
-		dbg("authentication %s", authentication);
-		
 	}
+	if (getuid() == 0)
+	{
+		struct passwd *user = NULL;
+		user = getpwnam(username);
+		setgid(user->pw_gid);
+		seteuid(user->pw_uid);
+	}
+
 	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock > 0)
 	{
@@ -850,14 +871,6 @@ int main(int argc, char **argv)
 			chmod(addr.sun_path, 0777);
 			ret = listen(sock, 3);
 		}
-		if (getuid() == 0)
-		{
-			struct passwd *user = NULL;
-			user = getpwnam(username);
-			setgid(user->pw_gid);
-			seteuid(user->pw_uid);
-		}
-
 		if (ret == 0)
 		{
 			int newsock = 0;
@@ -890,19 +903,36 @@ int main(int argc, char **argv)
 							}
 							dbg("connection result %d", result);
 							if (result == 101)
-								websocket_create(newsock, http);
+							{
+								if (websocket_create(newsock, http) == NULL)
+									close(newsock);
+							}
 							else if (result == 200)
 							{
+								send(newsock, "Result 200", 11, MSG_NOSIGNAL);
+								close(newsock);
 							}
 							else if (result == 401 | result == 403)
 							{
+								err("please set the authentication");
+								http_close(http);
+								close(newsock);
 							}
 							else
+							{
+								err("result %d", result);
 								http_close(http);
-						}						
+								close(newsock);
+							}
+						}
+						else
+						{
+							close(sock);
+							sock = -1;
+						}
 					}				
 				}
-			} while(newsock > 0);
+			} while(sock > 0);
 		}
 		
 		unlink(addr.sun_path);
