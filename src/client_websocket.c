@@ -619,8 +619,6 @@ static void *_websocket_run(void *arg)
 			}
 			else
 			{
-				char buffer[64];
-				ret = read(thiz->sock, buffer, 63);
 				warn("websocket: %d %d error %s", ret, length, strerror(errno));
 				run = 0;
 			}
