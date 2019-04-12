@@ -71,6 +71,7 @@ void *mod_wolftls_create(http_server_t *server, char *unused, mod_tls_t *modconf
 	if (!modconfig)
 		return NULL;
 
+	warn("TLS uses WolfSSL: This version may require Commercial licence");
 	mod = calloc(1, sizeof(*mod));
 
 	wolfSSL_Init();
@@ -124,6 +125,7 @@ void mod_wolftls_destroy(void *arg)
 	_mod_wolftls_t *mod = (_mod_wolftls_t *)arg;
 
 	wolfSSL_CTX_free(mod->ctx);
+	wolfSSL_Cleanup();
 	free(mod);
 }
 void mod_tls_destroy(void *arg) __attribute__ ((weak, alias ("mod_wolftls_destroy")));
@@ -131,24 +133,45 @@ void mod_tls_destroy(void *arg) __attribute__ ((weak, alias ("mod_wolftls_destro
 static void *_mod_wolftls_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize)
 {
 	_mod_wolftls_t *mod = (_mod_wolftls_t *)arg;
+	WOLFSSL	*ssl = NULL;
 
-	_mod_wolftls_ctx_t *ctx = calloc(1, sizeof(*ctx));
-
-	ctx->ssl = wolfSSL_new(mod->ctx);
-	if (ctx->ssl == NULL)
+	ssl = wolfSSL_new(mod->ctx);
+	if (ssl == NULL)
 	{
 		err("wolftls connection error");
-		free(ctx);
 		return NULL;
 	}
-	dbg("TLS Open");
+	dbg("TLS Open 1");
 
+	wolfSSL_set_fd(ssl, httpclient_wait(ctl, WAIT_ACCEPT));
+
+	int ret;
+	dbg("TLS accept");
+
+	do
+	{
+		ret = wolfSSL_accept(ssl);
+
+		if (ret != SSL_SUCCESS)
+		{
+			if (wolfSSL_want_read(ssl))
+				continue;
+			err("wolftls handshake error");
+			char buffer[80];
+			int err = wolfSSL_get_error(ssl, ret);
+			wolfSSL_ERR_error_string(err, buffer);
+			warn("wolfssl err %s", buffer);
+			return NULL;
+		}
+	} while (ret != SSL_SUCCESS);
+	dbg("TLS run");
+
+	_mod_wolftls_ctx_t *ctx = calloc(1, sizeof(*ctx));
+	ctx->ssl = ssl;
 	ctx->ctl = ctl;
 	ctx->ctx = httpclient_context(ctl);
 	ctx->recvreq = httpclient_addreceiver(ctl, _mod_wolftls_recv, ctx);
 	ctx->sendresp = httpclient_addsender(ctl, _mod_wolftls_send, ctx);
-
-	wolfSSL_set_fd(ctx->ssl, httpclient_wait(ctl, WAIT_ACCEPT));
 
 	return ctx;
 }
@@ -168,7 +191,8 @@ static int _mod_wolftls_recv(void *vctx, char *data, int size)
 {
 	int ret;
 	_mod_wolftls_ctx_t *ctx = (_mod_wolftls_ctx_t *)vctx;
-#ifdef SOCKET_BLOCKING
+warn("wolfssl read");
+#ifndef SOCKET_BLOCKING
 	do 
 	{
 	ret = wolfSSL_pending(ctx->ssl);
