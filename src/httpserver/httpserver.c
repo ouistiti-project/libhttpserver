@@ -368,7 +368,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 
 				if (method == NULL)
 				{
-					warn("parse reject method %s", data->offset);
+					err("parse reject method %s", data->offset);
 					data->offset++;
 					message->version = message->client->server->config->version;
 					message->result = RESULT_405;
@@ -431,7 +431,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						message->result = RESULT_400;
 #endif
 						next = PARSE_END;
-						warn("parse reject uri too long 2: %s %s", message->uri->data, data->data);
+						err("parse reject uri too long 2: %s %s", message->uri->data, data->data);
 					}
 				}
 				if (next != PARSE_URI)
@@ -440,14 +440,14 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					{
 						if (message->query == NULL)
 							message->query = message->uri->data + message->uri->length;
-						dbg("new request %s %s from %p", message->method->key, message->uri->data, message->client);
+						warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 					}
 					else
 					{
 						message->version = message->client->server->config->version;
 						message->result = RESULT_400;
 						next = PARSE_END;
-						warn("parse reject uri too short");
+						err("parse reject uri too short");
 					}
 				}
 			}
@@ -508,7 +508,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						{
 							next = PARSE_END;
 							message->result = RESULT_400;
-							warn("bad request %s", data->data);
+							err("bad request %s", data->data);
 						}
 						message->version = i;
 						break;
@@ -518,7 +518,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				{
 					next = PARSE_END;
 					message->result = RESULT_400;
-					warn("request bad protocol version %s", version);
+					err("request bad protocol version %s", version);
 				}
 			}
 			break;
@@ -576,7 +576,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				{
 					next = PARSE_END;
 					message->result = RESULT_400;
-					warn("request bad header %s", message->headers_storage->data);
+					err("request bad header %s", message->headers_storage->data);
 				}
 				else if (message->content_length == 0)
 				{
@@ -840,7 +840,7 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 		{
 			if (value == NULL)
 			{
-				warn("header key %s", key);
+				dbg("header key %s", key);
 				return EREJECT;
 			}
 			if (key[0] != 0)

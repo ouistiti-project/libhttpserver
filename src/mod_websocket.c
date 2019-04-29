@@ -219,7 +219,7 @@ static void _mod_websocket_freectx(void *arg)
 #ifdef VTHREAD
 		dbg("websocket: waitpid");
 		waitpid(ctx->pid, NULL, 0);
-		warn("websocket: freectx");
+		dbg("websocket: freectx");
 #else
 		/**
 		 * ignore SIGCHLD allows the child to die without to create a z$
@@ -263,7 +263,7 @@ static int _websocket_socket(char *filepath)
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, filepath, sizeof(addr.sun_path) - 1);
 
-	dbg("websocket: open %s", addr.sun_path);
+	warn("websocket: open %s", addr.sun_path);
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock > 0)
 	{
@@ -276,7 +276,7 @@ static int _websocket_socket(char *filepath)
 	}
 	if (sock == -1)
 	{
-		warn("websocket error: %s", strerror(errno));
+		err("websocket open error: %s", strerror(errno));
 	}
 	return sock;
 }
@@ -315,7 +315,9 @@ static int websocket_ping(void *arg, char *data)
 static void *_websocket_main(void *arg)
 {
 	_websocket_main_t *info = (_websocket_main_t *)arg;
+	/** socket to the webclient **/
 	int socket = info->socket;
+	/** socket to the unix server **/
 	int client = info->client;
 	int end = 0;
 	while (!end)
@@ -347,9 +349,9 @@ static void *_websocket_main(void *arg)
 					ret = send(client, out, ret, MSG_NOSIGNAL);
 					free(out);
 				}
-				else if (ret < 0)
+				if (ret < 0)
 				{
-					warn("websocket: %d %d error %s", ret, length, strerror(errno));
+					err("websocket: data transfer error %d %s", ret, strerror(errno));
 					end = 1;
 				}
 				free(buffer);
@@ -358,7 +360,7 @@ static void *_websocket_main(void *arg)
 			{
 				char buffer[64];
 				ret = read(socket, buffer, 63);
-				warn("websocket: %d %d error %s", ret, length, strerror(errno));
+				err("websocket: %d %d error %s", ret, length, strerror(errno));
 				end = 1;
 			}
 		}
@@ -412,7 +414,7 @@ static void *_websocket_main(void *arg)
 		}
 		else if (errno != EAGAIN)
 		{
-			warn("websocket: error %s", strerror(errno));
+			err("websocket: error %s", strerror(errno));
 			end = 1;
 		}
 	}
@@ -446,7 +448,7 @@ int default_websocket_run(void *arg, int socket, char *filepath, http_message_t 
 		if ((pid = fork()) == 0)
 		{
 			_websocket_main(&info);
-			err("websocket: process died");
+			warn("websocket: process died");
 			exit(0);
 		}
 		close(wssock);
