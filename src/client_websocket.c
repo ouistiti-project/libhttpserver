@@ -460,7 +460,10 @@ http_t *http_open(char *url, int tls, ...)
 	}
 	
 	if (host == NULL)
+	{
+		err("host is not set %s", url);
 		return NULL;
+	}
 
 	char *portname = strstr(host, ":");
 	if (portname != NULL)
@@ -472,7 +475,10 @@ http_t *http_open(char *url, int tls, ...)
 
 	char *pathname = strstr(portname, "/");
 	if (pathname == NULL)
+	{
+		err("pathname is not set %s", url);
 		return NULL;
+	}
 	host = strndup(host, pathname - portname);
 
 	http_t *thiz = NULL;
@@ -487,7 +493,9 @@ http_t *http_open(char *url, int tls, ...)
 	}
 #endif
 	if (thiz == NULL)
+	{
 		return NULL;
+	}
 	warn("Connection on %s:%d", host, port);
 
 	int ret;
@@ -774,10 +782,11 @@ int main(int argc, char **argv)
 	int opt;
 	char *authentication = NULL;
 	const char *basic = NULL;
+	const char *logfile = NULL;
 
 	do
 	{
-		opt = getopt(argc, argv, "R:n:hDsC:U:u:p:B:");
+		opt = getopt(argc, argv, "R:n:hDsC:U:u:p:B:l:");
 		switch (opt)
 		{
 			case 'R':
@@ -811,6 +820,9 @@ int main(int argc, char **argv)
 			case 'B':
 				basic = optarg;
 			break;
+			case 'l':
+				logfile = optarg;
+			break;
 		}
 	} while(opt != -1);
 
@@ -837,6 +849,20 @@ int main(int argc, char **argv)
 
 	if (pidfile)
 		_setpidfile(pidfile);
+
+	if (logfile != NULL)
+	{
+		int logfd;
+		logfd = open(logfile, O_WRONLY | O_CREAT | O_TRUNC, 00644);
+		if (logfd > 0)
+		{
+			dup2(logfd, 1);
+			dup2(logfd, 2);
+			close(logfd);
+		}
+		else
+			err("log file error %s", strerror(errno));
+	}
 
 	if (basic != NULL)
 	{
@@ -897,32 +923,37 @@ int main(int argc, char **argv)
 										"Sec-WebSocket-Key:"STATICKEY,
 										authentication,
 										NULL);
-							if (http != NULL)
+							if (http == NULL)
 							{
-								result = http_result(http);
-							}
-							dbg("connection result %d", result);
-							if (result == 101)
-							{
-								if (websocket_create(newsock, http) == NULL)
-									close(newsock);
-							}
-							else if (result == 200)
-							{
-								send(newsock, "Result 200", 11, MSG_NOSIGNAL);
-								close(newsock);
-							}
-							else if (result == 401 | result == 403)
-							{
-								err("please set the authentication");
-								http_close(http);
+								err("connection error %s", strerror(errno));
 								close(newsock);
 							}
 							else
 							{
-								err("result %d", result);
-								http_close(http);
-								close(newsock);
+								result = http_result(http);
+								dbg("connection result %d", result);
+								if (result == 101)
+								{
+									if (websocket_create(newsock, http) == NULL)
+										close(newsock);
+								}
+								else if (result == 200)
+								{
+									send(newsock, "Result 200", 11, MSG_NOSIGNAL);
+									close(newsock);
+								}
+								else if (result == 401 | result == 403)
+								{
+									err("please set the authentication");
+									http_close(http);
+									close(newsock);
+								}
+								else
+								{
+									err("result %d", result);
+									http_close(http);
+									close(newsock);
+								}
 							}
 						}
 						else
