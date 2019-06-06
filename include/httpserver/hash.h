@@ -32,8 +32,8 @@
 typedef struct base64_s base64_t;
 struct base64_s
 {
-	void (*encode)(const char *in, int inlen, char *out, int outlen);
-	void (*decode)(const char *in, int inlen, char *out, int outlen);
+	int (*encode)(const char *in, int inlen, char *out, int outlen);
+	int (*decode)(const char *in, int inlen, char *out, int outlen);
 };
 
 extern const base64_t *base64;

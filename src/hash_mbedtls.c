@@ -44,8 +44,8 @@
 #define dbg(...)
 #endif
 
-static void BASE64_encode(const char *in, int inlen, char *out, int outlen);
-static void BASE64_decode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
 static void *MD5_init();
 static void MD5_update(void *ctx, const char *in, size_t len);
 static int MD5_finish(void *ctx, char *out);
@@ -216,14 +216,18 @@ static int SHA256_finish(void *ctx, char *out)
 	return 0;
 }
 
-static void BASE64_encode(const char *in, int inlen, char *out, int outlen)
+#ifndef LIBB64
+static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
+	return cnt;
 }
 
-static void BASE64_decode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_decode(const char *in, int inlen, char *out, int outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_decode(out, outlen, &cnt, in, inlen);
+	return cnt;
 }
+#endif
