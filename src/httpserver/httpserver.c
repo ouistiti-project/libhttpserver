@@ -941,6 +941,10 @@ HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key,
 		{
 			message->content_length = atoi(value);
 		}
+		if (!strncasecmp(key, str_contenttype, 12))
+		{
+			message->content_type = value;
+		}
 		if (!strncasecmp(key, "Status", 6))
 		{
 			int result;
@@ -2911,6 +2915,13 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 		if (message->content != NULL)
 		{
 			value = message->content->data;
+		}
+	}
+	else if (!strcasecmp(key, str_contenttype))
+	{
+		if (message->content != NULL)
+		{
+			value = message->content_type;
 		}
 	}
 	else if (!strncasecmp(key, "remote_addr", 11))
