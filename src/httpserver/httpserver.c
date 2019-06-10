@@ -749,10 +749,12 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t 
 		{
 			char keepalive[32];
 			snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
+			dbg("header %s => %s", str_connection, "Keep-Alive");
 			_buffer_append(header, keepalive, strlen(keepalive));
 		}
 		char content_length[32];
 		snprintf(content_length, 31, "%s: %llu\r\n", str_contentlength, message->content_length);
+		dbg("header %s => %llu", str_contentlength, message->content_length);
 		_buffer_append(header, content_length, strlen(content_length));
 	}
 	header->offset = header->data;
@@ -999,10 +1001,6 @@ int httpmessage_appendcontent(http_message_t *message, char *content, int length
 		if (length == -1)
 			length = strlen(content);
 		_buffer_append(message->content, content, length);
-		if (message->content_length == (unsigned long long)-1)
-			message->content_length = length;
-		else
-			message->content_length += length;
 		return message->content->size - message->content->length;
 	}
 	return message->client->server->config->chunksize;
