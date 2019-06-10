@@ -78,6 +78,7 @@ struct http_message_s
 		PARSE_POSTHEADER,
 		PARSE_PRECONTENT,
 		PARSE_CONTENT,
+		PARSE_POSTCONTENT,
 		PARSE_END,
 		PARSE_MASK = 0x000F,
 		GENERATE_ERROR = 0x0010,
@@ -95,10 +96,12 @@ struct http_message_s
 	buffer_t *content;
 	buffer_t *header;
 	unsigned long long content_length;
+	char *content_type;
 	buffer_t *uri;
-	char *query;
 	http_message_version_e version;
 	buffer_t *headers_storage;
+	char *query;
+	buffer_t *query_storage;
 	dbentry_t *headers;
 	dbentry_t *cookies;
 	void *private;

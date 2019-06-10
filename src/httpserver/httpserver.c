@@ -124,6 +124,7 @@ const char *str_head = "HEAD";
 #define DEFAULTSCHEME
 const char *str_defaultscheme = "http";
 #endif
+const char *str_form_urlencoded = "application/x-www-form-urlencoded";
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
@@ -309,6 +310,8 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 		_buffer_destroy(message->header);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
+	if (message->query_storage)
+		_buffer_destroy(message->query_storage);
 	dbentry_t *header = message->headers;
 	while (header)
 	{
@@ -578,11 +581,6 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					message->result = RESULT_400;
 					err("request bad header %s", message->headers_storage->data);
 				}
-				else if (message->content_length == 0)
-				{
-					next = PARSE_END;
-					dbg("no content inside request");
-				}
 //				else if (!(message->state & PARSE_CONTINUE))
 //					message->state |= PARSE_CONTINUE;
 				else
@@ -594,6 +592,24 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_PRECONTENT:
 			{
+				int length = 0;
+				if (message->query)
+					length = strlen(message->query);
+
+				if (message->method->id == MESSAGE_TYPE_POST &&
+					message->content_type != NULL &&
+					!strcmp(message->content_type, str_form_urlencoded))
+				{
+					next = PARSE_POSTCONTENT;
+					message->state &= ~PARSE_CONTINUE;
+					length += message->content_length;
+				}
+				else if (message->content_length == 0)
+				{
+					next = PARSE_END;
+					dbg("no content inside request");
+				}
+				else
 				/**
 				 * data may contain some first bytes from the content
 				 * We need to get out from this function use them by
@@ -605,6 +621,17 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				{
 					next = PARSE_CONTENT;
 					message->state &= ~PARSE_CONTINUE;
+				}
+
+				if (message->query_storage == NULL)
+				{
+					int nbchunks = (length / message->chunksize ) + 1;
+					message->query_storage = _buffer_create(nbchunks, message->chunksize);
+					if (message->query != NULL)
+					{
+						_buffer_append(message->query_storage, message->query, length);
+						_buffer_append(message->query_storage, "&", 1);
+					}
 				}
 			}
 			break;
@@ -642,6 +669,24 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						data->offset += length;
 						message->content_length -= length;
 					}
+				}
+			}
+			break;
+			case PARSE_POSTCONTENT:
+			{
+				char *query = data->offset;
+				int length = data->length -(data->offset - data->data);
+				_buffer_append(message->query_storage, query, length);
+				if (message->content_length <= length)
+				{
+					data->offset += message->content_length;
+					message->content_length = 0;
+					next = PARSE_END;
+				}
+				else
+				{
+					data->offset += length;
+					message->content_length -= length;
 				}
 			}
 			break;
@@ -2845,8 +2890,8 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, "query"))
 	{
-		if (message->query != NULL)
-			value = message->query;
+		if (message->query_storage != NULL)
+			value = message->query_storage->data;
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
