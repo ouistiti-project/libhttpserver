@@ -118,7 +118,7 @@ void _cookie_free(_cookiesession_t *cookie)
 		return;
 	if (cookie->data)
 		free(cookie->data);
-		
+
 	_cookie_t *it = cookie->first;
 	while (it)
 	{

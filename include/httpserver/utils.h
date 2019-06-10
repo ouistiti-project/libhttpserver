@@ -61,7 +61,7 @@ char *utils_buildpath(const char *docroot, const char *path_info,
  * Example:
  * keyvalue = cookie_get(request, "foo");
  * strcmp(keyvalue, "foo=bar") == 0
- * 
+ *
  * @param message the request message received
  * @param key the name of the cookie or NULL
  *

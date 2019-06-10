@@ -321,7 +321,7 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 
 /**
  * @brief this function parse several data chunk to extract elements of the request.
- * 
+ *
  * "parserequest" is able to reconstitue the request, and read
  *  - method (GET, HEAD, DELETE, PUT, OPTIONS...)
  *  - version (HTTP0.9 HTTP1.0 HTTP1.1)
@@ -330,10 +330,10 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
  * The element may be retreive with the httpmessage_REQUEST.
  * The function will returns when the header is completed without treat the rest of the chunck.
  * The next call should contain this rest for the content parsing.
- * 
+ *
  * @param message the structure to fill.
  * @param data the buffer containing the chunk of the request.
- * 
+ *
  * @return EINCOMPLETE : the request received is to small and the header is not fully received.
  * ECONTINUE : the header of the request is complete and may be use to begin the treatment.
  * ESUCCESS : the content is fully received and the next chunk is not a part of this request.
@@ -400,7 +400,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						case '?':
 						{
 							length++;
-							message->query = message->uri->data + length + 1;
+							message->query = message->uri->data + length;
 						}
 						break;
 						case '\r':
@@ -627,7 +627,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					//int length = data->length;
 					message->content = data;
 					/**
-					 * At the end of the parsing the content_length of request 
+					 * At the end of the parsing the content_length of request
 					 * is zero. But it is false, the true value is
 					 * Sum(content->length);
 					 */
@@ -1275,11 +1275,11 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 
 /**
  * @brief This function push a request when it is "ready".
- * 
+ *
  * The request may be check by a connector when the header is fully received.
  * At this moment the request may be push into the list of request to response.
  * The request should contain the response into request->response.
- * 
+ *
  * @param client the client connection to response.
  * @param request the request to response.
  */
@@ -1300,17 +1300,17 @@ static void _httpclient_pushrequest(http_client_t *client, http_message_t *reque
 
 /**
  * @brief This function receives data from the client connection and parse the request.
- * 
+ *
  * The data is received chunck by chunck. If the connection is closing during the reception
  * the function will return EREJECT. If more data are mandatory the function return ECONTINUE.
  * The request will be created for the reception if it is not allready done. But
  * if the parsing if complete and the request is not complete (parsing error normaly or
  * the size of the content is unknown and the content is treated by the connector)
  * the request is reset.
- * 
+ *
  * @param client the client connection to receive the data.
  * @param prequest the pointer to the request to create and to fill.
- * 
+ *
  * @return EINCOMPLETE : data is received and parsed, the function needs to be call again to read more data without waiting.
  * ECONTINUE: not enough data for parsing, need to wait more data.
  * ESUCCESS : the request is fully received and parsed. The request may be running.
@@ -1392,7 +1392,7 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 
 /**
  * @brief This function run the connector with the request.
- * 
+ *
  * The request is "ready" (the header of the request is complete),
  * it is possible to check the list of connectors to find the good one.
  * If a connector returns EINCOMPLETE, the connector needs the content
@@ -1400,10 +1400,10 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
  * into the list of request to response.
  * The request may be not completed and to be pushed. In this case, this
  * function has not to do something.
- * 
+ *
  * @param client the client connection which receives the request.
  * @param request the request to check.
- * 
+ *
  * @return ESUCCESS : the request is pushed and the response is ready.
  * ECONTINUE : the request is pushed and the response needs to be build.
  * EINCOMPLETE :  the request is not ready to be pushed.
@@ -1484,14 +1484,14 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 
 /**
  * @brief This function build and send the response of the request
- * 
+ *
  * This function contains 2 parts: the first one runs the connector while
  * this one returns ECONTINUE (or EINCOMPLETE but it should not be the case).
  * The second part send the data on the client connection.
- * 
+ *
  * @param client the client connection to response.
  * @param request the request of the response to send.
- * 
+ *
  * @return ESUCCESS : the response is fully send.
  * ECONTINUE : the response is sending, and the function should be call again ASAP.
  * EINCOMPLETE : the connection is not ready to send data, and the function should be call again when it is ready.
@@ -1706,10 +1706,10 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 
 /**
  * @brief This function waits data on the client socket.
- * 
+ *
  * @param client the client connection to trigg
  * @param options the bitsmask with WAIT_ACCEPT and WAIT_SEND
- * 
+ *
  * @return ESUCCESS : data are available.
  * EINCOMPLETE : data is not available, wait again.
  * EREJECT : connection must be close.
@@ -1858,15 +1858,15 @@ int httpclient_wait(http_client_t *client, int options)
 
 /**
  * @brief This function is the manager of the client's loop.
- * 
+ *
  * This function does:
  *  - wait data if it is useful.
  *  - read and parse data to build a request.
  *  - check if the receiving request could be treat by a connector.
  *  - treat the list of requests already ready to response.
- * 
+ *
  * @param client the client connection.
- * 
+ *
  * @return ESUCCESS : The client is closed and the loop may stop.
  * ECONTINUE : The main loop must continue to run.
  */
@@ -1936,7 +1936,7 @@ static int _httpclient_run(http_client_t *client)
 			/**
 			 * the modules need to be free before any
 			 * socket closing.
-			 * This part may not be into destroy function, because this 
+			 * This part may not be into destroy function, because this
 			 * one is called by the vthread parent after that the client
 			 * died.
 			 */
@@ -1981,7 +1981,7 @@ static int _httpclient_run(http_client_t *client)
 		else if (ret == EREJECT)
 			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 	}
-	
+
 	if (client->request != NULL)
 	{
 		int ret = _httpclient_request(client, client->request);
@@ -2502,7 +2502,7 @@ static int _httpserver_run(http_server_t *server)
 				errno = 0;
 			}
 			/**
-			 * Some time receives error 
+			 * Some time receives error
 			 *    ENOTCONN 107 Transport Endpoint not connected
 			 *    EBADF 9 Bad File descriptor
 			 * without explanation.
@@ -2650,7 +2650,7 @@ void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t
 void httpserver_addconnector(http_server_t *server, char *vhost, http_connector_t func, void *funcarg)
 {
 	http_connector_list_t *callback;
-	
+
 	callback = vcalloc(1, sizeof(*callback));
 	if (callback == NULL)
 		return;
@@ -2930,7 +2930,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 	if (message->client->session)
 	{
 		sessioninfo = message->client->session->dbfirst;
-		
+
 		while (sessioninfo && strcmp(sessioninfo->key, key))
 		{
 			sessioninfo = sessioninfo->next;
@@ -2949,7 +2949,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 			if (sessioninfo == NULL)
 				return  NULL;
-			sessioninfo->key = 
+			sessioninfo->key =
 				_buffer_append(message->client->session->storage, key, strlen(key) + 1);
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
