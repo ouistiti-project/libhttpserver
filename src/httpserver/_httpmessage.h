@@ -37,10 +37,10 @@
 # include <winsock2.h>
 #endif
 
-#include "dbentry.h"
-
 //#define HTTPMESSAGE_DECL extern
 #define HTTPMESSAGE_DECL static
+
+#include "dbentry.h"
 
 #define CHUNKSIZE 64
 #define HTTPMESSAGE_KEEPALIVE 0x01
@@ -75,10 +75,10 @@ struct http_message_s
 		PARSE_VERSION,
 		PARSE_STATUS,
 		PARSE_HEADER,
+		PARSE_POSTCONTENT, /**POSTCONTENT is hear to allow to parse all the content of POST request  see _httpclient_request*/
 		PARSE_POSTHEADER,
 		PARSE_PRECONTENT,
 		PARSE_CONTENT,
-		PARSE_POSTCONTENT,
 		PARSE_END,
 		PARSE_MASK = 0x000F,
 		GENERATE_ERROR = 0x0010,

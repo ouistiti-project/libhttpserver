@@ -687,6 +687,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				{
 					data->offset += length;
 					message->content_length -= length;
+					message->state |= PARSE_CONTINUE;
 				}
 			}
 			break;
