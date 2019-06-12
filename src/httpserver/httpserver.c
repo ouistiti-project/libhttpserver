@@ -47,12 +47,12 @@
 
 #include "valloc.h"
 #include "vthread.h"
-#include "dbentry.h"
 #include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
+#include "dbentry.h"
 
 extern httpserver_ops_t *httpserver_ops;
 
@@ -224,12 +224,90 @@ static void _buffer_reset(buffer_t *buffer)
 	buffer->length = 0;
 }
 
+const char *str_true = "true";
+static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep)
+{
+	int i;
+	char *key = storage->data;
+	const char *value = NULL;
+	int count = 0;
+
+	for (i = 0; i < storage->length; i++)
+	{
+		if (storage->data[i] == '\n')
+			storage->data[i] = '\0';
+		if (storage->data[i] == separator && value == NULL)
+		{
+			storage->data[i] = '\0';
+			value = storage->data + i + 1;
+			while (*value == ' ')
+				value++;
+		}
+		else if ((storage->data[i] == '\0') ||
+				(storage->data[i] == fieldsep))
+		{
+			storage->data[i] = '\0';
+			if (key[0] != 0)
+			{
+				if (value == NULL)
+				{
+					value = str_true;
+				}
+				dbentry_t *entry;
+				entry = vcalloc(1, sizeof(dbentry_t));
+				if (entry == NULL)
+					return -1;
+				entry->key = key;
+				entry->value = value;
+				entry->next = *db;
+				*db = entry;
+				count++;
+				dbg("fill %d\t%s\t%s", count, key, value);
+			}
+			key = storage->data + i + 1;
+			value = NULL;
+		}
+	}
+	if (key[0] != 0)
+	{
+		if (value == NULL)
+		{
+			value = str_true;
+		}
+		dbentry_t *entry;
+		entry = vcalloc(1, sizeof(dbentry_t));
+		if (entry == NULL)
+			return -1;
+		entry->key = key;
+		entry->value = value;
+		entry->next = *db;
+		*db = entry;
+		count++;
+		dbg("fill %d\t%s\t%s", count, key, value);
+	}
+	return count;
+}
+
 static void _buffer_destroy(buffer_t *buffer)
 {
 	vfree(buffer->data);
 	vfree(buffer);
 }
 
+HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
+{
+	const char *value = NULL;
+	while (entry != NULL)
+	{
+		if (!strcasecmp(entry->key, key))
+		{
+			value = entry->value;
+			break;
+		}
+		entry = entry->next;
+	}
+	return value;
+}
 /**********************************************************************
  * http_message
  */
@@ -868,35 +946,20 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 
 HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 {
-	int i;
-	buffer_t *storage = message->headers_storage;
-	if (storage == NULL)
-		return ESUCCESS;
-	char *key = storage->data;
-	char *value = NULL;
-
-	for (i = 0; i < storage->length; i++)
-	{
-		if (storage->data[i] == ':' && value == NULL)
-		{
-			storage->data[i] = '\0';
-			value = storage->data + i + 1;
-			while (*value == ' ')
-				value++;
-		}
-		else if (storage->data[i] == '\0')
-		{
-			if (value == NULL)
-			{
-				dbg("header key %s", key);
-				return EREJECT;
-			}
-			if (key[0] != 0)
-				_httpmessage_addheader(message, key, value);
-			key = storage->data + i + 1;
-			value = NULL;
-		}
-	}
+	_buffer_filldb(message->headers_storage, &message->headers, ':', '\r');
+	const char *value = NULL;
+	value = dbentry_search(message->headers, str_connection);
+	if (value != NULL && !strcasestr(value, "Keep-Alive"))
+		message->mode |= HTTPMESSAGE_KEEPALIVE;
+	value = dbentry_search(message->headers, str_contentlength);
+	if (value != NULL)
+		message->content_length = atoi(value);
+	value = dbentry_search(message->headers, str_contenttype);
+	if (value != NULL)
+		message->content_type = value;
+	value = dbentry_search(message->headers, "Status");
+	if (value != NULL)
+		httpmessage_result(message, atoi(value));
 	return ESUCCESS;
 }
 
@@ -920,41 +983,6 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 	_buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
 	_buffer_append(message->headers_storage, value, strlen(value) + 1);
-}
-
-HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key, char *value)
-{
-	dbentry_t *headerinfo;
-	headerinfo = vcalloc(1, sizeof(dbentry_t));
-	if (headerinfo == NULL)
-		return;
-	headerinfo->key = key;
-	headerinfo->value = value;
-	headerinfo->next = message->headers;
-	message->headers = headerinfo;
-	dbg("header %s => %s", key, value);
-	if (value)
-	{
-		if (!strncasecmp(key, str_connection, 10))
-		{
-			if (strcasestr(value, "Keep-Alive"))
-				message->mode |= HTTPMESSAGE_KEEPALIVE;
-		}
-		if (!strncasecmp(key, str_contentlength, 14))
-		{
-			message->content_length = atoi(value);
-		}
-		if (!strncasecmp(key, str_contenttype, 12))
-		{
-			message->content_type = value;
-		}
-		if (!strncasecmp(key, "Status", 6))
-		{
-			int result;
-			sscanf(value,"%d",&result);
-			httpmessage_result(message, result);
-		}
-	}
 }
 
 int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)

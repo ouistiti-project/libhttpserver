@@ -96,7 +96,7 @@ struct http_message_s
 	buffer_t *content;
 	buffer_t *header;
 	unsigned long long content_length;
-	char *content_type;
+	const char *content_type;
 	buffer_t *uri;
 	http_message_version_e version;
 	buffer_t *headers_storage;
@@ -121,7 +121,6 @@ HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, htt
 HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message);
 HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *header);
 HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t *header);
-HTTPMESSAGE_DECL void _httpmessage_addheader(http_message_t *message, char *key, char *value);
 HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t *data);
 HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message);
 HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message);
