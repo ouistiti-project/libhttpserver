@@ -104,6 +104,7 @@ struct http_message_s
 	buffer_t *query_storage;
 	dbentry_t *headers;
 	dbentry_t *cookies;
+	dbentry_t *queries;
 	void *private;
 	http_message_t *next;
 };

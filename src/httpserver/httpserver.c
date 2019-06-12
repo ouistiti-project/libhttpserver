@@ -2995,6 +2995,15 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	return value;
 }
 
+const char *httpmessage_parameter(http_message_t *message, const char *key)
+{
+	if (message->queries == NULL)
+	{
+		_buffer_filldb(message->query_storage, &message->queries, '=', '&');
+	}
+	return dbentry_search(message->queries, key);
+}
+
 http_server_session_t *_httpserver_createsession(http_server_t *server, http_client_t *client)
 {
 	http_server_session_t *session = NULL;
