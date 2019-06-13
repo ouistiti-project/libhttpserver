@@ -100,11 +100,13 @@ struct http_message_s
 	buffer_t *uri;
 	http_message_version_e version;
 	buffer_t *headers_storage;
+	dbentry_t *headers;
 	char *query;
 	buffer_t *query_storage;
-	dbentry_t *headers;
-	dbentry_t *cookies;
 	dbentry_t *queries;
+	const char *cookie;
+	buffer_t *cookie_storage;
+	dbentry_t *cookies;
 	void *private;
 	http_message_t *next;
 };

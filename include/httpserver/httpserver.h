@@ -520,11 +520,23 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
  * the value are stored by mod with the same function.
  *
  * @param message the request message received
- * @param key the name of the attribut
+ * @param key the name of the attribute
  *
  * @return the value of the paramater or NULL
  */
 const char *httpmessage_parameter(http_message_t *message, const char *key);
+
+/**
+ * @brief get value from Cookie header
+ *
+ * the value are stored by mod with the same function.
+ *
+ * @param message the request message received
+ * @param key the name of the attribute
+ *
+ * @return the value of the cookie or NULL
+ */
+const char *httpmessage_cookie(http_message_t *message, const char *key);
 
 /**********************************************************************/
 typedef struct httpclient_ops_s httpclient_ops_t;

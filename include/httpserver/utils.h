@@ -69,6 +69,6 @@ char *utils_buildpath(const char *docroot, const char *path_info,
  */
 const char *cookie_get(http_message_t *request, const char *key);
 
-void cookie_set(http_message_t *response, const char *key, char *value);
+void cookie_set(http_message_t *response, const char *key, const char *value);
 
 #endif

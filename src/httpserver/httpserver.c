@@ -125,6 +125,8 @@ const char *str_head = "HEAD";
 const char *str_defaultscheme = "http";
 #endif
 const char *str_form_urlencoded = "application/x-www-form-urlencoded";
+const char str_cookie[] = "Cookie";
+const char *str_true = "true";
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
@@ -163,6 +165,8 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 
 static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
+	if (length == -1)
+		length = strlen(data);
 	if (buffer->data + buffer->size < buffer->offset + length + 1)
 	{
 		char *data = buffer->data;
@@ -224,7 +228,6 @@ static void _buffer_reset(buffer_t *buffer)
 	buffer->length = 0;
 }
 
-const char *str_true = "true";
 static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep)
 {
 	int i;
@@ -306,7 +309,21 @@ HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
 		}
 		entry = entry->next;
 	}
+	if (entry == NULL)
+	{
+		dbg("dbentry %s not found", key);
+	}
 	return value;
+}
+
+HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry)
+{
+	while (entry)
+	{
+		dbentry_t *next = entry->next;
+		free(entry);
+		entry = next;
+	}
 }
 /**********************************************************************
  * http_message
@@ -388,15 +405,13 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 		_buffer_destroy(message->header);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
+	dbentry_destroy(message->headers);
 	if (message->query_storage)
 		_buffer_destroy(message->query_storage);
-	dbentry_t *header = message->headers;
-	while (header)
-	{
-		dbentry_t *next = header->next;
-		free(header);
-		header = next;
-	}
+	dbentry_destroy(message->queries);
+	if (message->query_storage)
+		_buffer_destroy(message->cookie_storage);
+	dbentry_destroy(message->cookies);
 	vfree(message);
 }
 
@@ -811,7 +826,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t 
 	dbentry_t *headers = message->headers;
 	while (headers != NULL)
 	{
-		if (!strcmp(headers->key, str_contentlength))
+		if (!strncasecmp(headers->key, str_contentlength, 14))
 		{
 			headers = headers->next;
 			continue;
@@ -960,6 +975,9 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	value = dbentry_search(message->headers, "Status");
 	if (value != NULL)
 		httpmessage_result(message, atoi(value));
+	value = dbentry_search(message->headers, str_cookie);
+	if (value != NULL)
+		message->cookie = value;
 	return ESUCCESS;
 }
 
@@ -2977,20 +2995,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 #endif
 	else
 	{
-		dbentry_t *header = message->headers;
-		while (header != NULL)
-		{
-			if (!strcasecmp(header->key, key))
-			{
-				value = header->value;
-				break;
-			}
-			header = header->next;
-		}
-		if (header == NULL)
-		{
-			dbg("header %s not found", key);
-		}
+		value = dbentry_search(message->headers, key);
 	}
 	return value;
 }
@@ -3002,6 +3007,19 @@ const char *httpmessage_parameter(http_message_t *message, const char *key)
 		_buffer_filldb(message->query_storage, &message->queries, '=', '&');
 	}
 	return dbentry_search(message->queries, key);
+}
+
+const char *httpmessage_cookie(http_message_t *message, const char *key)
+{
+	if (message->cookies == NULL)
+	{
+		if (message->cookie == NULL)
+			return NULL;
+		message->cookie_storage = _buffer_create(1, strlen(message->cookie) + 1);
+		_buffer_append(message->cookie_storage, message->cookie, -1);
+		_buffer_filldb(message->cookie_storage, &message->cookies, '=', ';');
+	}
+	return dbentry_search(message->cookies, key);
 }
 
 http_server_session_t *_httpserver_createsession(http_server_t *server, http_client_t *client)

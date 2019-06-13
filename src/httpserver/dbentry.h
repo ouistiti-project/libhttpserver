@@ -42,5 +42,6 @@ struct dbentry_s
 typedef struct dbentry_s dbentry_t;
 
 HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key);
+HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry);
 
 #endif
