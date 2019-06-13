@@ -2880,7 +2880,7 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
 		{
 			getnameinfo((struct sockaddr *) &sin, len,
 				0, 0,
@@ -2898,7 +2898,7 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
 		{
 			getnameinfo((struct sockaddr *) &sin, len,
 				host, NI_MAXHOST,
