@@ -1077,7 +1077,7 @@ int httpmessage_isprotected(http_message_t *message)
  */
 static void _httpclient_destroy(http_client_t *client);
 
-http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, int chunksize)
+http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol, int chunksize)
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
 	if (client == NULL)
@@ -1093,9 +1093,16 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 			callback = callback->next;
 		}
 	}
-	memcpy(&client->ops, fops, sizeof(client->ops));
-	client->ctx = client;
-	client->sockdata = _buffer_create(1, chunksize);
+	client->ops = fops;
+	client->opsctx = client->ops->create(protocol, client);
+	client->client_send = client->ops->sendresp;
+	client->client_recv = client->ops->recvreq;
+	client->send_arg = client->opsctx;
+	client->recv_arg = client->opsctx;
+	if (client->opsctx != NULL)
+	{
+		client->sockdata = _buffer_create(1, chunksize);
+	}
 	if (client->sockdata == NULL)
 	{
 		_httpclient_destroy(client);
@@ -1107,7 +1114,8 @@ http_client_t *httpclient_create(http_server_t *server, httpclient_ops_t *fops, 
 
 static void _httpclient_destroy(http_client_t *client)
 {
-	client->ops.destroy(client);
+	if (client->opsctx != NULL)
+		client->ops->destroy(client->opsctx);
 
 	client->modctx = NULL;
 	http_connector_list_t *callback = client->callbacks;
@@ -1175,36 +1183,53 @@ void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_
 
 void *httpclient_context(http_client_t *client)
 {
-	return client->ctx;
+	void *ctx = NULL;
+	if (client->send_arg != NULL)
+	{
+		ctx = client->send_arg;
+	}
+	else if (client->recv_arg != NULL)
+	{
+		ctx = client->recv_arg;
+	}
+	else if (client->opsctx != NULL)
+	{
+		ctx = client->opsctx;
+	}
+	return ctx;
 }
 
 http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg)
 {
-	http_recv_t previous = client->ops.recvreq;
+	http_recv_t previous = client->client_recv;
 	if (func)
 	{
-		client->ops.recvreq = func;
-		client->ctx = arg;
+		client->client_recv = func;
+		client->recv_arg = arg;
 	}
+	if (previous == NULL)
+		previous = client->ops->recvreq;
 	return previous;
 }
 
 http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg)
 {
-	http_send_t previous = client->ops.sendresp;
+	http_send_t previous = client->client_send;
 	if (func)
 	{
-		client->ops.sendresp = func;
-		client->ctx = arg;
+		client->client_send = func;
+		client->send_arg = arg;
 	}
+	if (previous == NULL)
+		previous = client->ops->sendresp;
 	return previous;
 }
 
 #ifdef HTTPCLIENT_FEATURES
 int httpclient_connect(http_client_t *client, char *addr, int port)
 {
-	if (client->ops.connect)
-		return client->ops.connect(client, addr, port);
+	if (client->ops->connect)
+		return client->ops->connect(client->opsctx, addr, port);
 	return EREJECT;
 }
 
@@ -1240,7 +1265,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		if (size > 0)
 		{
 			dbg("send %s", data->offset);
-			size = client->ops.sendresp(client->ctx, data->offset, data->length);
+			size = client->ops->sendresp(client->opsctx, data->offset, data->length);
 		}
 		if (size == EINCOMPLETE)
 			continue;
@@ -1263,7 +1288,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		size = httpclient_wait(client, 1);
 		if (size > 0)
 		{
-			size = client->ops.sendresp(client->ctx, data->offset, data->length);
+			size = client->ops->sendresp(client->opsctx, data->offset, data->length);
 		}
 		if (size == EINCOMPLETE)
 			continue;
@@ -1277,7 +1302,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 	while (ret == ECONTINUE)
 	{
 		_buffer_reset(data);
-		size = client->ops.recvreq(client->ctx, data->offset, data->size - 1);
+		size = client->ops->recvreq(client->opsctx, data->offset, data->size - 1);
 		if (size >= 0)
 		{
 			data->length += size;
@@ -1417,7 +1442,7 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 	 * server configuration.
 	 * see http_server_config_t and httpserver_create
 	 */
-	size = client->ops.recvreq(client->ctx, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
+	size = client->client_recv(client->recv_arg, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
 	if (size > 0)
 	{
 		client->sockdata->length += size;
@@ -1681,7 +1706,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			 * see http_server_config_t and httpserver_create
 			 */
 			buffer_t *buffer = response->header;
-			size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
 			if (size < 0)
 			{
 				err("client %p RESULT send error %s", client, strerror(errno));
@@ -1716,7 +1741,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			int size;
 			buffer_t *buffer = response->header;
-			size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
 			if (size < 0)
 			{
 				err("client %p HEADER send error %s", client, strerror(errno));
@@ -1736,7 +1761,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		case GENERATE_SEPARATOR:
 		{
 			int size;
-			size = client->ops.sendresp(client->ctx, "\r\n", 2);
+			size = client->client_send(client->send_arg, "\r\n", 2);
 			if (size < 0)
 			{
 				err("client %p SEPARATOR send error %s", client, strerror(errno));
@@ -1749,7 +1774,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			{
 				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
 			}
-			client->ops.flush(client);
+			client->ops->flush(client->opsctx);
 			ret = ECONTINUE;
 		}
 		break;
@@ -1765,7 +1790,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				buffer->offset = buffer->data;
 				while (buffer->length > 0)
 				{
-					size = client->ops.sendresp(client->ctx, buffer->offset, buffer->length);
+					size = client->client_send(client->send_arg, buffer->offset, buffer->length);
 					if (size == EINCOMPLETE)
 					{
 						ret = EINCOMPLETE;
@@ -1903,7 +1928,7 @@ static int _httpclient_wait(http_client_t *client, int options)
 	{
 		if (FD_ISSET(client->sock, &fds))
 		{
-			ret = client->ops.status(client);
+			ret = client->ops->status(client->opsctx);
 			if (options & WAIT_SEND)
 			{
 				ret = ESUCCESS;
@@ -1930,7 +1955,7 @@ static int _httpclient_wait(http_client_t *client, int options)
 	if (options & WAIT_SEND)
 		ret = ESUCCESS;
 	else
-		ret = client->ops.status(client);
+		ret = client->ops->status(client->opsctx);
 	/**
 	 * The main server loop detected an event on the socket.
 	 * If there is not data then the socket had to be closed.
@@ -2016,7 +2041,7 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_SENDING:
 		{
 			send_ret = _httpclient_wait(client, WAIT_SEND);
-			recv_ret = client->ops.status(client);
+			recv_ret = client->ops->status(client->opsctx);
 		}
 		break;
 		case CLIENT_EXIT:
@@ -2024,8 +2049,8 @@ static int _httpclient_run(http_client_t *client)
 			/**
 			 * flush the output socket
 			 */
-			if (client->ops.flush != NULL)
-				client->ops.flush(client);
+			if (client->ops->flush != NULL)
+				client->ops->flush(client->opsctx);
 
 			/**
 			 * the modules need to be free before any
@@ -2053,7 +2078,7 @@ static int _httpclient_run(http_client_t *client)
 				modctx = next;
 			}
 			if (!(client->state & CLIENT_LOCKED))
-				client->ops.disconnect(client);
+				client->ops->disconnect(client->opsctx);
 
 			client->state |= CLIENT_STOPPED;
 			return ESUCCESS;
@@ -2154,7 +2179,7 @@ static int _httpclient_run(http_client_t *client)
 
 void httpclient_shutdown(http_client_t *client)
 {
-	client->ops.disconnect(client);
+	client->ops->disconnect(client->opsctx);
 	client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 }
 
@@ -2210,7 +2235,7 @@ static int _httpserver_prepare(http_server_t *server)
 	{
 		if (httpclient_socket(client) > 0)
 		{
-			if (client->ops.status(client) == ESUCCESS)
+			if (client->ops->status(client->opsctx) == ESUCCESS)
 			{
 				/**
 				 * data already availlables.
@@ -2430,7 +2455,7 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 					 * during the sending, but in this case
 					 * it is impossible to recceive real SIGPIPE.
 					 */
-					client->ops.destroy(client);
+					close(client->sock);
 #endif
 				}
 #endif
@@ -2460,6 +2485,11 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 		/**
 		 * this loop generates more exception on the server socket.
 		 * The exception is handled and should not generate trouble.
+		 *
+		 * this loop cheks there aren't more than one connection in
+		 * the same time.
+		 * The second "createclient" call generates the message:
+		 * "tcpserver accept error Resource temporarily unavailable"
 		 */
 
 		if ((count + 1) > server->config->maxclients)
@@ -2482,6 +2512,7 @@ static int _httpserver_run(http_server_t *server)
 	server->run = 1;
 	run = 1;
 
+	warn("server %s %d running", server->config->hostname, server->config->port);
 	while(run > 0)
 	{
 		struct timespec *ptimeout = NULL;
@@ -2665,6 +2696,9 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
 	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
 
+	server->protocol_ops = tcpclient_ops;
+	server->protocol = server;
+
 	_maxclients += server->config->maxclients;
 	nice(-4);
 #ifdef USE_POLL
@@ -2726,6 +2760,17 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 	}
 	if (properties > method->properties)
 		method->properties = properties;
+}
+
+const httpclient_ops_t * httpserver_changeprotocol(http_server_t *server, const httpclient_ops_t *newops, void *config)
+{
+	const httpclient_ops_t *previous = server->protocol_ops;
+	if (newops != NULL)
+	{
+		server->protocol_ops = newops;
+		server->protocol = config;
+	}
+	return previous;
 }
 
 void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t unmodf, void *arg, const char *name)
