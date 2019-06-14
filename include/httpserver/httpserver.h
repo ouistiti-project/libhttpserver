@@ -88,11 +88,11 @@ typedef struct http_message_s http_message_t;
 typedef struct http_server_s http_server_t;
 typedef struct http_client_s http_client_t;
 
-extern const char *str_get;
-extern const char *str_post;
-extern const char *str_head;
-extern const char *str_defaultscheme;
-extern const char *str_form_urlencoded;
+extern const char str_get[];
+extern const char str_post[];
+extern const char str_head[];
+extern const char str_defaultscheme[];
+extern const char str_form_urlencoded[];
 
 typedef enum
 {

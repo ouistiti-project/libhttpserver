@@ -117,16 +117,16 @@ const char *httpversion[] =
 	NULL,
 };
 
-const char *str_get = "GET";
-const char *str_post = "POST";
-const char *str_head = "HEAD";
+const char str_get[] = "GET";
+const char str_post[] = "POST";
+const char str_head[] = "HEAD";
 #ifndef DEFAULTSCHEME
 #define DEFAULTSCHEME
-const char *str_defaultscheme = "http";
+const char str_defaultscheme[] = "http";
 #endif
-const char *str_form_urlencoded = "application/x-www-form-urlencoded";
+const char str_form_urlencoded[] = "application/x-www-form-urlencoded";
 const char str_cookie[] = "Cookie";
-const char *str_true = "true";
+const char str_true[] = "true";
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;

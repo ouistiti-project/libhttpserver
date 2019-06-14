@@ -36,17 +36,15 @@
 #include "httpserver/httpserver.h"
 #include "httpserver/utils.h"
 
-static const char *_mimetype[] =
-{
-	"text/plain",
-	"text/html",
-	"text/css",
-	"text/json",
-	"application/javascript",
-	"image/png",
-	"image/jpeg",
-	"application/octet-stream",
-};
+const char str_location[] = "Location";
+const char str_textplain[] = "text/plain";
+const char str_texthtml[] = "text/html";
+const char str_textcss[] = "text/css";
+const char str_textjson[] = "text/json";
+const char str_imagepng[] = "image/png";
+const char str_imagejpeg[] = "image/jpeg";
+const char str_applicationjavascript[] = "application/javascript";
+const char str_applicationoctetstream[] = "application/octet-stream";
 
 typedef struct mime_entry_s mime_entry_t;
 struct mime_entry_s
@@ -59,38 +57,38 @@ struct mime_entry_s
 static const mime_entry_t *mime_entry =
 &(mime_entry_t){
 	.ext = ".text",
-	.mime = "text/plain",
-	.next = 
+	.mime = str_textplain,
+	.next =
 &(mime_entry_t){
 	.ext = ".html,.xhtml,.htm",
-	.mime = "text/html",
+	.mime = str_texthtml,
 	.next =
 &(mime_entry_t){
 	.ext = ".css",
-	.mime = "text/css",
+	.mime = str_textcss,
 	.next =
 &(mime_entry_t){
 	.ext = ".json",
-	.mime = "text/json",
+	.mime = str_textjson,
 	.next =
 &(mime_entry_t){
 	.ext = ".js",
-	.mime = "application/javascript",
+	.mime = str_applicationjavascript,
 	.next =
 &(mime_entry_t){
 	.ext = ".png",
-	.mime = "image/png",
+	.mime = str_imagepng,
 	.next =
 &(mime_entry_t){
 	.ext = ".jpg",
-	.mime = "image/jpeg",
+	.mime = str_imagejpeg,
 	.next = NULL
 }}}}}}};
 
 static const mime_entry_t *mime_default =
 &(mime_entry_t){
 	.ext = "*",
-	.mime = "application/octet-stream",
+	.mime = str_applicationoctetstream,
 	.next = NULL
 };
 
@@ -129,7 +127,6 @@ const char *utils_getmime(const char *filepath)
 	return mime_default->mime;
 }
 
-char *str_location = "Location";
 
 char *utils_urldecode(const char *encoded)
 {
@@ -308,7 +305,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	return ret;
 }
 
-char *utils_buildpath(const char *docroot, const char *path_info, 
+char *utils_buildpath(const char *docroot, const char *path_info,
 			const char *filename, const char *ext, struct stat *filestat)
 {
 	char *filepath;
