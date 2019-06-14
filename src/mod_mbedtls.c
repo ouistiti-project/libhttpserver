@@ -57,8 +57,6 @@
 #elif MBEDTLS_VERSION_MAJOR==2 && MBEDTLS_VERSION_MINOR==2
 #include <mbedtls/net.h>
 
-typedef int (mbedtls_ssl_send_t)(void *, const unsigned char *, size_t);
-typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 #else
 #error MBEDTLS not found
 #endif
@@ -72,35 +70,36 @@ typedef int (mbedtls_ssl_recv_t)(void *, unsigned char *, size_t);
 
 static const char str_mbedtls[] = "tls";
 
+typedef struct _mod_mbedtls_config_s _mod_mbedtls_config_t;
+
 typedef struct _mod_mbedtls_s
 {
 	mbedtls_ssl_context ssl;
-	http_client_t *ctl;
+	http_client_t *clt;
 	int state;
-	http_recv_t recvreq;
-	http_send_t sendresp;
-	void *ctx;
+	const httpclient_ops_t *protocolops;
+	void *protocol;
+	_mod_mbedtls_config_t *config;
 } _mod_mbedtls_t;
 
-typedef struct _mod_mbedtls_config_s
+struct _mod_mbedtls_config_s
 {
+	void *vhost;
+	const httpclient_ops_t *protocolops;
+	void *protocol;
 	mbedtls_ssl_config conf;
-    mbedtls_entropy_context entropy;
-    mbedtls_ctr_drbg_context ctr_drbg;
-    mbedtls_x509_crt srvcert;
-    mbedtls_x509_crt cachain;
-    mbedtls_pk_context pkey;
-    mbedtls_dhm_context dhm;
-} _mod_mbedtls_config_t;
+	mbedtls_entropy_context entropy;
+	mbedtls_ctr_drbg_context ctr_drbg;
+	mbedtls_x509_crt srvcert;
+	mbedtls_x509_crt cachain;
+	mbedtls_pk_context pkey;
+	mbedtls_dhm_context dhm;
+};
 
 static http_server_config_t mod_mbedtls_config;
+static const httpclient_ops_t *tlsserver_ops;
 
-static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize);
-static void _mod_mbedtls_freectx(void *vctx);
-static int _mod_mbedtls_recv(void *vctx, char *data, int size);
-static int _mod_mbedtls_send(void *vctx, char *data, int size);
-
-void *mod_mbedtls_create(http_server_t *server, char *unused, mod_tls_t *modconfig)
+void *mod_mbedtls_create(http_server_t *server, char *vhost, mod_tls_t *modconfig)
 {
 	int ret;
 	int is_set_pemkey = 0;
@@ -189,7 +188,9 @@ void *mod_mbedtls_create(http_server_t *server, char *unused, mod_tls_t *modconf
 			err("mbedtls_dhm_parse_dhmfile %d\n", ret);
 	}
 
-	httpserver_addmod(server, _mod_mbedtls_getctx, _mod_mbedtls_freectx, config, str_mbedtls);
+	config->protocolops = httpserver_changeprotocol(server, tlsserver_ops, config);
+	config->protocol = server;
+	config->vhost = vhost;
 	return config;
 }
 void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_mbedtls_create")));
@@ -212,7 +213,7 @@ void mod_tls_destroy(void *arg) __attribute__ ((weak, alias ("mod_mbedtls_destro
 static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
-	int ret = ctx->recvreq(ctx->ctx, (char *)data, size);
+	int ret = ctx->protocolops->recvreq(ctx->protocol, (char *)data, size);
 	if (ret == EINCOMPLETE)
 		ret = MBEDTLS_ERR_SSL_WANT_READ;
 	else if (ret == EREJECT)
@@ -223,7 +224,7 @@ static int _mod_mbedtls_read(void *arg, unsigned char *data, int size)
 static int _mod_mbedtls_write(void *arg, unsigned char *data, int size)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)arg;
-	int ret = ctx->sendresp(ctx->ctx, (char *)data, size);
+	int ret = ctx->protocolops->sendresp(ctx->protocol, (char *)data, size);
 	if (ret == EINCOMPLETE)
 	{
 		ret = MBEDTLS_ERR_SSL_WANT_WRITE;
@@ -233,22 +234,11 @@ static int _mod_mbedtls_write(void *arg, unsigned char *data, int size)
 	return ret;
 }
 
-static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize)
+static int _tls_handshake(_mod_mbedtls_t *ctx)
 {
-	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
-	_mod_mbedtls_config_t *config = (_mod_mbedtls_config_t *)arg;
-
-	ctx->ctl = ctl;
-	ctx->ctx = httpclient_context(ctl);
-	ctx->recvreq = httpclient_addreceiver(ctl, _mod_mbedtls_recv, ctx);
-	ctx->sendresp = httpclient_addsender(ctl, _mod_mbedtls_send, ctx);
-
-	mbedtls_ssl_init(&ctx->ssl);
-	mbedtls_ssl_setup(&ctx->ssl, &config->conf);
-	mbedtls_ssl_set_bio(&ctx->ssl, ctx, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
+	int ret = ESUCCESS;
 	if (!(ctx->state & HANDSHAKE))
 	{
-		int ret;
 		ctx->state &= ~RECV_COMPLETE;
 		dbg("TLS Handshake");
 		while((ret = mbedtls_ssl_handshake(&ctx->ssl)) != 0 )
@@ -256,7 +246,7 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 			if(ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
 				break;
 		}
-		if (ret == 0)
+		if (ret == ESUCCESS)
 		{
 			ctx->state |= HANDSHAKE;
 		}
@@ -264,33 +254,147 @@ static void *_mod_mbedtls_getctx(void *arg, http_client_t *ctl, struct sockaddr 
 		{
 			char error[256];
 			mbedtls_strerror(ret, error, 256);
-			warn("TLS Handshake error %X %s", -ret, error);
+			err("TLS Handshake error %X %s", -ret, error);
 			mbedtls_ssl_free(&ctx->ssl);
-			free(ctx);
-			ctx = NULL;
+			ret = EREJECT;
 		}
 	}
+	return ret;
+}
+
+static void *_tlsclient_create(void *arg, http_client_t *clt)
+{
+	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
+	_mod_mbedtls_config_t *config = (_mod_mbedtls_config_t *)arg;
+	void *protocolconfig;
+
+	ctx->clt = clt;
+
+	/**
+	 * client connection
+	 */
+	int ret;
+	char *tls_certificat = NULL;
+
+	if (arg != NULL)
+	{
+		tls_certificat = arg;
+		if (tls_certificat[0] < 0x20 || tls_certificat[0] > 0x7F)
+			tls_certificat = NULL;
+	}
+
+	config = calloc(1, sizeof(*config));;
+	config->protocolops = tcpclient_ops;
+	config->protocol = NULL;
+
+	mbedtls_x509_crt_init(&config->srvcert);
+
+	mbedtls_ctr_drbg_init(&config->ctr_drbg);
+	mbedtls_entropy_init(&config->entropy);
+
+	ret = mbedtls_ctr_drbg_seed(&config->ctr_drbg, mbedtls_entropy_func, &config->entropy,
+			(const unsigned char *) "ouistiti", strlen("ouistiti"));
+	if (ret)
+	{
+		err("mbedtls_ctr_drbg_seed %d\n", ret);
+		free(ctx);
+		return NULL;
+	}
+
+	if (tls_certificat != NULL)
+	{
+		ret = mbedtls_x509_crt_parse_file( &config->srvcert, (const unsigned char *) tls_certificat);
+		if (ret)
+		{
+			err("mbedtls_x509_crt_parse %d\n", ret);
+			free(ctx);
+			return NULL;
+		}
+	}
+
+	ret = mbedtls_ssl_config_defaults( &config->conf,
+					MBEDTLS_SSL_IS_CLIENT,
+					MBEDTLS_SSL_TRANSPORT_STREAM,
+					MBEDTLS_SSL_PRESET_DEFAULT );
+	if (ret)
+	{
+		err("mbedtls_ssl_config_defaults %d\n", ret);
+		free(ctx);
+		return NULL;
+	}
+	mbedtls_ssl_conf_authmode( &config->conf, MBEDTLS_SSL_VERIFY_OPTIONAL );
+	mbedtls_ssl_conf_ca_chain( &config->conf, &config->srvcert, NULL );
+	mbedtls_ssl_conf_rng( &config->conf, mbedtls_ctr_drbg_random, &config->ctr_drbg );
+
+	ctx->config = config;
+	ctx->protocolops = config->protocolops;
+	ctx->protocol = ctx->protocolops->create(config->protocol, clt);
+	if (ctx->protocol == NULL)
+	{
+		free(ctx);
+		return NULL;
+	}
+	mbedtls_ssl_init(&ctx->ssl);
+	mbedtls_ssl_setup(&ctx->ssl, &ctx->config->conf);
+	mbedtls_ssl_set_bio(&ctx->ssl, ctx, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
+
 	return ctx;
 }
 
-static void _mod_mbedtls_freectx(void *vctx)
+static void *_tlsserver_create(void *arg, http_client_t *clt)
 {
-	int ret;
-	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
-	if (vctx == NULL)
+	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
+	_mod_mbedtls_config_t *config = (_mod_mbedtls_config_t *)arg;
+	void *protocolconfig;
+
+	ctx->clt = clt;
+	ctx->config = config;
+	ctx->protocolops = config->protocolops;
+	ctx->protocol = ctx->protocolops->create(config->protocol, clt);
+	if (ctx->protocol == NULL)
 	{
-		dbg("mbedtls: close from error on Handshake");
-		return;
+		free(ctx);
+		return NULL;
 	}
+	mbedtls_ssl_init(&ctx->ssl);
+	mbedtls_ssl_setup(&ctx->ssl, &ctx->config->conf);
+	mbedtls_ssl_set_bio(&ctx->ssl, ctx, (mbedtls_ssl_send_t *)_mod_mbedtls_write, (mbedtls_ssl_recv_t *)_mod_mbedtls_read, NULL);
+	if (_tls_handshake(ctx) == EREJECT)
+	{
+		free(ctx);
+		ctx = NULL;
+	}
+
+	return ctx;
+}
+
+static int _tls_connect(void *vctx, const char *addr, int port)
+{
+	int ret = ESUCCESS;
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
+
+	ctx->protocolops->connect(ctx->protocol, addr, port);
+	ret = _tls_handshake(ctx);
+	return ret;
+}
+
+void _tls_disconnect(void *vctx)
+{
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
+	int ret;
 	while ((ret = mbedtls_ssl_close_notify(&ctx->ssl)) == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
-	dbg("TLS Close");
+	ctx->protocolops->disconnect(ctx->protocol);
+}
+
+void _tls_destroy(void *vctx)
+{
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	mbedtls_ssl_free(&ctx->ssl);
-	httpclient_addreceiver(ctx->ctl, ctx->recvreq, ctx->ctx);
-	httpclient_addsender(ctx->ctl, ctx->sendresp, ctx->ctx);
+	ctx->protocolops->destroy(ctx->protocol);
 	free(ctx);
 }
 
-static int _mod_mbedtls_recv(void *vctx, char *data, int size)
+static int _tls_recv(void *vctx, char *data, int size)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
@@ -310,7 +414,7 @@ static int _mod_mbedtls_recv(void *vctx, char *data, int size)
 	return ret;
 }
 
-static int _mod_mbedtls_send(void *vctx, char *data, int size)
+static int _tls_send(void *vctx, char *data, int size)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
@@ -321,6 +425,41 @@ static int _mod_mbedtls_send(void *vctx, char *data, int size)
 		ret = EREJECT;
 	return ret;
 }
+
+static int _tls_status(void *vctx)
+{
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
+	return ctx->protocolops->status(ctx->protocol);
+}
+
+static void _tls_flush(void *vctx)
+{
+	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
+	return ctx->protocolops->flush(ctx->protocol);
+}
+
+static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
+{
+	.create = _tlsserver_create,
+	.recvreq = _tls_recv,
+	.sendresp = _tls_send,
+	.status = _tls_status,
+	.flush = _tls_flush,
+	.disconnect = _tls_disconnect,
+	.destroy = _tls_destroy,
+};
+
+const httpclient_ops_t *tlsclient_ops = &(httpclient_ops_t)
+{
+	.create = _tlsclient_create,
+	.connect = _tls_connect,
+	.recvreq = _tls_recv,
+	.sendresp = _tls_send,
+	.status = _tls_status,
+	.flush = _tls_flush,
+	.disconnect = _tls_disconnect,
+	.destroy = _tls_destroy,
+};
 
 const module_t mod_tls =
 {

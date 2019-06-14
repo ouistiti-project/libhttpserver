@@ -95,7 +95,7 @@ static void *tcpclient_create(void *config, http_client_t *clt)
 {
 	http_server_t *server = (http_server_t *)config;
 	if (server && server->sock < 0)
-	return NULL;
+		return NULL;
 
 	// Client connection request recieved
 	// Create new client socket to communicate
