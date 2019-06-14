@@ -69,6 +69,7 @@
 #define RECV_COMPLETE 0x02
 
 static const char str_mbedtls[] = "tls";
+static const char str_https[] = "https";
 
 typedef struct _mod_mbedtls_config_s _mod_mbedtls_config_t;
 
@@ -440,6 +441,7 @@ static void _tls_flush(void *vctx)
 
 static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
 {
+	.scheme = str_https,
 	.create = _tlsserver_create,
 	.recvreq = _tls_recv,
 	.sendresp = _tls_send,
@@ -451,6 +453,7 @@ static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
 
 const httpclient_ops_t *tlsclient_ops = &(httpclient_ops_t)
 {
+	.scheme = str_https,
 	.create = _tlsclient_create,
 	.connect = _tls_connect,
 	.recvreq = _tls_recv,

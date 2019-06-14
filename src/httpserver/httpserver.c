@@ -2989,7 +2989,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
-		value = str_defaultscheme;
+		value = message->client->ops->scheme;
 	}
 	else if (!strcasecmp(key, "version"))
 	{

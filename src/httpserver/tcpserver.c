@@ -252,6 +252,7 @@ static void tcpclient_destroy(void *ctl)
 
 const httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 {
+	.scheme = str_defaultscheme,
 	.create = tcpclient_create,
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,
