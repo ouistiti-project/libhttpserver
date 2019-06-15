@@ -394,6 +394,7 @@ void *httpmessage_private(http_message_t *message, void *data);
  */
 http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result);
 
+#ifdef HTTPCLIENT_FEATURES
 /**
  * @brief create a request message
  *
@@ -403,7 +404,8 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-void httpmessage_request(http_message_t *message, const char *method, char *resource);
+int httpmessage_request(http_message_t *message, const char *method, char *resource);
+#endif
 
 /**
  * @brief add a header to the response message
@@ -595,18 +597,6 @@ void httpclient_destroy(http_client_t *client);
 
 #ifdef HTTPCLIENT_FEATURES
 /**
- * @brief connect the client to an external server
- *
- * @param client the connection that will send the request
- * @param request to send
- *
- * @return ESUCCESS on success EREJECT on error
- *
- * This function is available only if HTTPCLIENT_FEATURES is defined
- */
-int httpclient_connect(http_client_t *client, char *addr, int port);
-
-/**
  * @brief send a request with client
  *
  * @param client the connection that will send the request
@@ -628,6 +618,15 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
  * @return return the context
  */
 void *httpclient_context(http_client_t *client);
+
+/**
+ * @brief return the socket descriptor
+ *
+ * @param client the connection that is receiving the request
+ *
+ * @return return the socket
+ */
+int httpclient_socket(http_client_t *client);
 
 /**
  * @brief add a callback on client message reception
