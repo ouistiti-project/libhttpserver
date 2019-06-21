@@ -26,12 +26,14 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 #include <stdlib.h>
+#include <string.h>
 
 # include <mbedtls/version.h>
 # include <mbedtls/md5.h>
 # include <mbedtls/sha1.h>
 # include <mbedtls/sha256.h>
 # include <mbedtls/base64.h>
+# include <mbedtls/md.h>
 
 #include "httpserver/hash.h"
 #include "httpserver/log.h"
@@ -221,6 +223,20 @@ static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
+	char *offset = strchr(out, '=');
+	while (offset)
+	{
+		*offset = '\0';
+		cnt--;
+		offset = strchr(offset + 1, '=');
+	}
+	offset = strchr(out, '/');
+	while (offset != NULL)
+	{
+		*offset = '_';
+		offset = strchr(offset + 1, '/');
+	}
+
 	return cnt;
 }
 

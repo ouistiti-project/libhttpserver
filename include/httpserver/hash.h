@@ -36,6 +36,12 @@ struct base64_s
 	int (*decode)(const char *in, int inlen, char *out, int outlen);
 };
 
+#ifdef SHA512
+#define HASH_MAX_SIZE 64
+#else
+#define HASH_MAX_SIZE 32
+#endif
+
 extern const base64_t *base64;
 
 typedef struct hash_s hash_t;
@@ -44,6 +50,7 @@ struct hash_s
 	const int size;
 	const char *name;
 	void *(*init)();
+	void *(*initkey)(const char *key, int keylen);
 	void (*update)(void *ctx, const char *in, size_t len);
 	int (*finish)(void *ctx, char *out);
 };
