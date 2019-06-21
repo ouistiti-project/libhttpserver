@@ -65,7 +65,7 @@ extern "C"
  * to send, the value MAXCHUNKS_CONTENT has to be increased.
  */
 #ifndef MAXCHUNKS_HEADER
-#define MAXCHUNKS_HEADER  8
+#define MAXCHUNKS_HEADER  12
 #endif
 #ifndef MAXCHUNKS_CONTENT
 #define MAXCHUNKS_CONTENT 3
