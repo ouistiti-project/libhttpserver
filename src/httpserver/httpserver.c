@@ -453,7 +453,7 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 	if (message->query_storage)
 		_buffer_destroy(message->query_storage);
 	dbentry_destroy(message->queries);
-	if (message->query_storage)
+	if (message->cookie_storage)
 		_buffer_destroy(message->cookie_storage);
 	dbentry_destroy(message->cookies);
 	vfree(message);
