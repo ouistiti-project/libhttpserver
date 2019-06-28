@@ -120,6 +120,16 @@ const char *httpversion[] =
 const char str_get[] = "GET";
 const char str_post[] = "POST";
 const char str_head[] = "HEAD";
+
+static const http_message_method_t default_methods[] = {
+	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (http_message_method_t*)&default_methods[1]},
+	{ .key = str_post, .id = MESSAGE_TYPE_POST, .next = (http_message_method_t*)&default_methods[2]},
+	{ .key = str_head, .id = MESSAGE_TYPE_HEAD, .next = NULL},
+#ifdef HTTPCLIENT_FEATURES
+	{ .key = NULL, .id = -1, .next = NULL},
+#endif
+};
+
 #ifndef DEFAULTSCHEME
 #define DEFAULTSCHEME
 const char str_defaultscheme[] = "http";
@@ -337,8 +347,6 @@ http_message_t * httpmessage_create(int chunksize)
 
 void httpmessage_destroy(http_message_t *message)
 {
-	if (message-> method)
-		free(message->method);
 	_httpmessage_destroy(message);
 }
 
@@ -377,10 +385,19 @@ int httpmessage_request(http_message_t *message, const char *method, char *url)
 		message->uri = _buffer_create(nbchunks, message->chunksize);
 		_buffer_append(message->uri, pathname, length);
 	}
-	message->method = vcalloc(1, sizeof(*message->method));
-	if (message->method == NULL)
-		return EREJECT;
-	message->method->key = method;
+	http_message_method_t *method_it = (http_message_method_t *)&default_methods[0];
+	while (method_it != NULL)
+	{
+		if (!strcmp(method_it->key, method))
+			break;
+		method_it = method_it->next;
+	}
+	if (method_it == NULL)
+	{
+		method_it = (http_message_method_t *)&default_methods[3];
+		method_it->key = method;
+	}
+	message->method = method_it;
 	message->version = HTTP11;
 	return ESUCCESS;
 }
@@ -1356,6 +1373,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		response->client = client;
 		response->state = PARSE_STATUS;
 		response->content_length = -1;
+		response->method = request->method;
 	}
 
 	if ((response->state & PARSE_MASK) == PARSE_INIT)
@@ -2765,9 +2783,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	else
 		server->config = &defaultconfig;
 	server->ops = httpserver_ops;
-	_httpserver_addmethod(server, str_get, MESSAGE_TYPE_GET);
-	_httpserver_addmethod(server, str_post, MESSAGE_TYPE_POST);
-	_httpserver_addmethod(server, str_head, MESSAGE_TYPE_HEAD);
+	server->methods = (http_message_method_t *)default_methods;
 
 	server->protocol_ops = tcpclient_ops;
 	server->protocol = server;
@@ -2794,18 +2810,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);
 
 	return server;
-}
-
-static void _httpserver_addmethod(http_server_t *server, const char *key, _http_message_method_e id)
-{
-	http_message_method_t *method;
-	method = vcalloc(1, sizeof(*method));
-	if (method == NULL)
-		return;
-	method->key = key;
-	method->id = id;
-	method->next = server->methods;
-	server->methods = method;
 }
 
 void httpserver_addmethod(http_server_t *server, const char *key, short properties)
