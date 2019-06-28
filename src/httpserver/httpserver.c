@@ -493,12 +493,6 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 							next = PARSE_VERSION;
 						}
 						break;
-						case '?':
-						{
-							length++;
-							message->query = message->uri->data + length;
-						}
-						break;
 						case '\r':
 						case '\n':
 						{
@@ -534,8 +528,15 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				{
 					if (message->uri->length > 0)
 					{
+						/**
+						 * query must be set qt the end of the uri loading
+						 * uri buffer may be change during an extension
+						 */
+						message->query = strchr(message->uri->data, '?');
 						if (message->query == NULL)
 							message->query = message->uri->data + message->uri->length;
+						else
+							message->query++;
 						warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 					}
 					else
