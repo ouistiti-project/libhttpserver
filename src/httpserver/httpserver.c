@@ -874,7 +874,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 	return ESUCCESS;
 }
 
-HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message)
+HTTPMESSAGE_DECL buffer_t *_httpmessage_buildheader(http_message_t *message)
 {
 	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 	{
@@ -891,7 +891,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message)
 		httpmessage_addheader(message, str_contentlength, content_length);
 	}
 	message->headers_storage->offset = message->headers_storage->data;
-	return ESUCCESS;
+	return message->headers_storage;
 }
 
 void *httpmessage_private(http_message_t *message, void *data)
