@@ -175,7 +175,7 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 	return ret;
 }
 
-static int tcpclient_send(void *ctl, char *data, int length)
+static int tcpclient_send(void *ctl, const char *data, int length)
 {
 	int ret;
 	http_client_t *client = (http_client_t *)ctl;
