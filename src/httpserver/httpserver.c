@@ -2980,13 +2980,17 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 {
 	const char *value = default_value;
 
-	if (!strcasecmp(key, "name"))
+	if (!strcasecmp(key, "name") || !strcasecmp(key, "host") || !strcasecmp(key, "hostname"))
 	{
 		value = server->config->hostname;
 	}
 	else if (!strcasecmp(key, "software"))
 	{
 		value = httpserver_software;
+	}
+	else if (!strcasecmp(key, "scheme"))
+	{
+		value = server->protocol_ops->scheme;
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
