@@ -47,6 +47,8 @@ extern const module_t mod_tls;
 void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig);
 void mod_tls_destroy(void *mod);
 
+extern const httpclient_ops_t *tlsclient_ops;
+
 #ifdef __cplusplus
 }
 #endif

@@ -379,7 +379,7 @@ static int _tls_connect(void *vctx, const char *addr, int port)
 	return ret;
 }
 
-void _tls_disconnect(void *vctx)
+static void _tls_disconnect(void *vctx)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	int ret;
@@ -387,7 +387,7 @@ void _tls_disconnect(void *vctx)
 	ctx->protocolops->disconnect(ctx->protocol);
 }
 
-void _tls_destroy(void *vctx)
+static void _tls_destroy(void *vctx)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	mbedtls_ssl_free(&ctx->ssl);
