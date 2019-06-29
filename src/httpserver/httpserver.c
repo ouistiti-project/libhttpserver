@@ -1444,6 +1444,11 @@ int httpclient_socket(http_client_t *client)
 	return client->sock;
 }
 
+http_server_t *httpclient_server(http_client_t *client)
+{
+	return client->server;
+}
+
 static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int ret = ESUCCESS;

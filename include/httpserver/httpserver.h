@@ -628,6 +628,15 @@ void *httpclient_context(http_client_t *client);
 int httpclient_socket(http_client_t *client);
 
 /**
+ * @brief return the server which has created this client
+ *
+ * @param client the connection that is receiving the request
+ *
+ * @return return the server
+ */
+http_server_t *httpclient_server(http_client_t *client);
+
+/**
  * @brief add a callback on client message reception
  *
  * @param client the connection that is receiving the request
