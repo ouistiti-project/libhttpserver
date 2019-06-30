@@ -253,6 +253,7 @@ static void tcpclient_destroy(void *ctl)
 const httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 {
 	.scheme = str_defaultscheme,
+	.default_port = 80,
 	.create = tcpclient_create,
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,

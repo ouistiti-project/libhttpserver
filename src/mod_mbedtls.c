@@ -442,6 +442,7 @@ static void _tls_flush(void *vctx)
 static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
 {
 	.scheme = str_https,
+	.default_port = 443,
 	.create = _tlsserver_create,
 	.recvreq = _tls_recv,
 	.sendresp = _tls_send,
@@ -454,6 +455,7 @@ static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
 const httpclient_ops_t *tlsclient_ops = &(httpclient_ops_t)
 {
 	.scheme = str_https,
+	.default_port = 443,
 	.create = _tlsclient_create,
 	.connect = _tls_connect,
 	.recvreq = _tls_recv,

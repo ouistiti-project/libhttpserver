@@ -168,6 +168,7 @@ typedef void (*http_destroy_t)(void *ctx);
 struct httpclient_ops_s
 {
 	const char *scheme;
+	int default_port;
 	http_create_t create;
 	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */

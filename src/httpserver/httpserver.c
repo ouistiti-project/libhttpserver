@@ -3001,9 +3001,20 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	{
 		value = (char *)httpversion[(server->config->version & HTTPVERSION_MASK)];
 	}
+	else if (!strcasecmp(key, "service"))
+	{
+		snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
+		value = service;
+	}
 	else if (!strcasecmp(key, "port"))
 	{
-		//snprintf(value, 5, "%d", message->client->server->config->port);
+#if 1
+		if (server->protocol_ops->default_port != server->config->port)
+		{
+			snprintf(service, NI_MAXSERV, "%d", server->config->port);
+			value = service;
+		}
+#else
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
 		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
@@ -3013,6 +3024,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 				service, NI_MAXSERV, NI_NUMERICSERV);
 			value = service;
 		}
+#endif
 	}
 	else if (!strcasecmp(key, "addr"))
 	{
