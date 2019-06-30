@@ -1077,8 +1077,8 @@ int httpmessage_addcontent(http_message_t *message, const char *type, char *cont
 		message->content_length = length;
 	}
 	if (message->content != NULL && message->content->data != NULL )
-		return message->content->size - message->content->length;
-	return message->client->server->config->chunksize;
+		return message->content->length;
+	return 0;
 }
 
 int httpmessage_appendcontent(http_message_t *message, char *content, int length)
