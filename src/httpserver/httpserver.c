@@ -912,12 +912,6 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 {
 	int size = 0;
 	int state = message->state & PARSE_MASK;
-	if (message->content)
-	{
-		if (data)
-			*data = message->content->data;
-		size = message->content->length;
-	}
 	if (content_length)
 	{
 		if (message->content_length <= 0)
@@ -925,6 +919,17 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 		else
 			*content_length = message->content_length;
 	}
+	if (message->content)
+	{
+		size = message->content->length;
+		if (data)
+		{
+			*data = message->content->data;
+			//message->content = NULL;
+		}
+	}
+	if (message->state & GENERATE_MASK != 0)
+		return size;
 	if (state < PARSE_CONTENT)
 		return EINCOMPLETE;
 	if (size == 0 && state > PARSE_CONTENT)
