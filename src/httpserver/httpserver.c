@@ -1043,7 +1043,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 	}
 	_buffer_append(message->headers_storage, key, strlen(key));
-	_buffer_append(message->headers_storage, ":", 1);
+	_buffer_append(message->headers_storage, ": ", 2);
 	_buffer_append(message->headers_storage, value, strlen(value));
 	_buffer_append(message->headers_storage, "\r\n", 2);
 }
