@@ -41,15 +41,15 @@
 #define dbg(...)
 #endif
 
-static void BASE64_encode(const char *in, int inlen, char *out, int outlen);
-static void BASE64_decode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
 const base64_t *base64 = &(const base64_t)
 {
 	.encode = BASE64_encode,
 	.decode = BASE64_decode,
 };
 
-static void BASE64_encode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
 	base64_encodestate state;
 	base64_init_encodestate(&state);
@@ -62,9 +62,10 @@ static void BASE64_encode(const char *in, int inlen, char *out, int outlen)
 			(out[i] == '\r'))
 			out[i] = '\0';
 	}
+	return cnt;
 }
 
-static void BASE64_decode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_decode(const char *in, int inlen, char *out, int outlen)
 {
 	base64_decodestate decoder;
 	base64_init_decodestate(&decoder);
@@ -76,5 +77,6 @@ static void BASE64_decode(const char *in, int inlen, char *out, int outlen)
 			(out[i] == '\r'))
 			out[i] = '\0';
 	}
+	return cnt;
 }
 

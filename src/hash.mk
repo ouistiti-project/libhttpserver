@@ -23,33 +23,33 @@ else
 endif
 
 # reinitialization of VARIABLES if OPENSSL
-hash_mod_SOURCES-$(OPENSSL):=hash_openssl.c hash_libb64.c
+hash_mod_SOURCES-$(OPENSSL):=hash_openssl.c
 hash_mod_CFLAGS-$(OPENSSL):=-DOPENSSL
 hash_mod_LIBS-$(OPENSSL):=crypto
 
 # reinitialization of VARIABLES if WOLFSSL
-hash_mod_SOURCES-$(WOLFSSL):=hash_wolfssl.c hash_libb64.c
+hash_mod_SOURCES-$(WOLFSSL):=hash_wolfssl.c
 hash_mod_CFLAGS-$(WOLFSSL):=-DWOLFSSL
 hash_mod_LIBS-$(WOLFSSL):=wolfssl
 
-# reinitialization of VARIABLES if MBDETLS
+# reinitialization of VARIABLES if MBEDTLS
 hash_mod_SOURCES-$(MBEDTLS):=hash_mbedtls.c
 hash_mod_CFLAGS-$(MBEDTLS):=-DMBEDTLS
 hash_mod_LIBS-$(MBEDTLS):=mbedtls
 
 hash_mod_CFLAGS+=-I../include
 
-ifneq ($(MBEDTLS),y)
-  LIBB64:=$(OPENSSL)
-  LIBB64:=$(WOLFSSL)
-endif
+LIBB64:=$(MBEDTLS)
+LIBB64:=$(OPENSSL)
+LIBB64:=$(WOLFSSL)
+
+hash_mod_SOURCES-$(LIBB64)+=hash_libb64.c
+hash_mod_CFLAGS-$(LIBB64)+=-DLIBB64
 
 hash_mod_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
 LIBB64_DIR?=$(srcdir)/libb64
 ifeq ($(LIBB64),y)
-  hash_mod_CFLAGS+=-DLIBB64
-
   ifneq ($(wildcard $(LIBB64_DIR)/src/cdecode.c),)
     libb64_dir:=$(realpath $(LIBB64_DIR))
     hash_mod_CFLAGS+=-I$(libb64_dir)/include/
