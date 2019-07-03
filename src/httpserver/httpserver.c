@@ -270,6 +270,8 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 				entry = vcalloc(1, sizeof(dbentry_t));
 				if (entry == NULL)
 					return -1;
+				while (*key == ' ')
+					key++;
 				entry->key = key;
 				entry->value = value;
 				entry->next = *db;
@@ -291,6 +293,8 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 		entry = vcalloc(1, sizeof(dbentry_t));
 		if (entry == NULL)
 			return -1;
+		while (*key == ' ')
+			key++;
 		entry->key = key;
 		entry->value = value;
 		entry->next = *db;
@@ -2784,6 +2788,9 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->config = &defaultconfig;
 	server->ops = httpserver_ops;
 	server->methods = (http_message_method_t *)default_methods;
+
+	server->protocol_ops = tcpclient_ops;
+	server->protocol = server;
 
 	server->protocol_ops = tcpclient_ops;
 	server->protocol = server;
