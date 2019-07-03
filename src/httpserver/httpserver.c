@@ -1300,36 +1300,47 @@ http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *
 int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int size = 0;
-	if (client->sockdata == NULL)
-		client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
-	buffer_t *data = client->sockdata;
+	buffer_t *data = NULL;
 
 	int ret = ESUCCESS;
-
-	_httpmessage_fillheaderdb(request);
-	if (client->ops->connect)
+	switch (request->state & GENERATE_MASK)
 	{
-		const char *addr = httpmessage_REQUEST(request, "Host");
-		int port = atoi(httpmessage_REQUEST(request, "Port"));
-		ret = client->ops->connect(client->opsctx, addr, port);
-	}
-	if (ret == ESUCCESS && (request->state & GENERATE_MASK) < GENERATE_END)
-	{
+	case GENERATE_INIT:
 		request->client = client;
 
+		ret = EINCOMPLETE;
+		size = httpclient_wait(request->client, 1);
+		if (size < 0)
+			ret = EREJECT;
+		request->state = GENERATE_RESULT;
+	break;
+	case GENERATE_RESULT:
+	{
+		/**
+		 * send the request URI
+		 */
 		const char *method = httpmessage_REQUEST(request, "method");
-		_buffer_append(data, method, strlen(method));
-		_buffer_append(data, " ", 1);
+		client->client_send(client->send_arg, method, strlen(method));
+		client->client_send(client->send_arg, " /", 2);
 		const char *uri = httpmessage_REQUEST(request, "uri");
-		_buffer_append(data, uri, strlen(uri));
+		size = client->client_send(client->send_arg, uri, strlen(uri));
 		const char *version = httpmessage_REQUEST(request, "version");
 		if (version)
 		{
-			_buffer_append(data, " ", 1);
-			_buffer_append(data, version, strlen(version));
+			client->client_send(client->send_arg, " ", 1);
+			client->client_send(client->send_arg, version, strlen(version));
 		}
-		_buffer_append(data, "\r\n", 2);
-		data->offset = data->data;
+		client->client_send(client->send_arg, "\r\n", 2);
+
+		ret = EINCOMPLETE;
+		request->state = GENERATE_HEADER;
+	}
+	break;
+	case GENERATE_HEADER:
+		/**
+		 * send the header
+		 */
+		data = _httpmessage_buildheader(request);
 		while (data->length > 0)
 		{
 			/**
@@ -1349,32 +1360,20 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			data->offset += size;
 			data->length -= size;
 		}
-		_buffer_reset(data);
-		*(data->offset) = 0;
-		_httpmessage_buildheader(request);
-		data->offset = data->data;
-		while (data->length > 0)
-		{
-			/**
-			 * here, it is the call to the sendresp callback from the
-			 * server configuration.
-			 * see http_server_config_t and httpserver_create
-			 */
-			size = httpclient_wait(client, 1);
-			if (size > 0)
-			{
-				size = client->client_send(client->send_arg, data->offset, data->length);
-			}
-			if (size == EINCOMPLETE)
-				continue;
-			if (size < 0)
-				break;
-			data->offset += size;
-			data->length -= size;
-		}
+
+		ret = EINCOMPLETE;
+		request->state = GENERATE_SEPARATOR;
+	break;
+	case GENERATE_SEPARATOR:
 		size = client->client_send(client->send_arg, "\r\n", 2);
+		ret = EINCOMPLETE;
+		request->state = GENERATE_CONTENT;
+
 		data = request->content;
 		data->offset = data->data;
+	break;
+	case GENERATE_CONTENT:
+		data = request->content;
 		while (data->length > 0)
 		{
 			/**
@@ -1393,49 +1392,66 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				break;
 			data->offset += size;
 			data->length -= size;
+			if (request->content_length > 0)
+				request->content_length -= size;
 		}
-		request->state = GENERATE_END;
-		memset(data->data, 0, data->size);
-
-		response->client = client;
-		response->state = PARSE_STATUS;
-		response->content_length = -1;
-		response->method = request->method;
-	}
-
-	if ((response->state & PARSE_MASK) == PARSE_INIT)
-		response->state = PARSE_STATUS;
-
-	data = client->sockdata;
-	if (data)
-	{
-		_buffer_reset(data);
-		*(data->offset) = '\0';
-
-		if (response->content_length != 0)
-			size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
-		if (size > 0)
+		ret = EINCOMPLETE;
+			request->state = GENERATE_END;
+		if (request->content_length <= 0)
 		{
-			data->length += size;
-			data->data[data->length] = 0;
+			request->state = GENERATE_END;
 
-			data->offset = data->data;
-			ret = _httpmessage_parserequest(response, data);
-			while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
+			response->client = client;
+			response->state = PARSE_STATUS;
+			response->content_length = -1;
+			response->method = request->method;
+		}
+	break;
+	case GENERATE_END:
+		if (client->sockdata == NULL)
+			client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
+		data = client->sockdata;
+		if (data)
+		{
+			_buffer_reset(data);
+			*(data->offset) = '\0';
+
+			size = httpclient_wait(request->client, 1);
+			if (size < 0)
+				ret = EREJECT;
+			if (response->content_length != 0 && size > 0)
 			{
-				_buffer_shrink(data);
+				size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
+
+			}
+			if (size > 0)
+			{
+				data->length += size;
+				data->data[data->length] = 0;
+
 				data->offset = data->data;
 				ret = _httpmessage_parserequest(response, data);
+				while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
+				{
+					_buffer_shrink(data);
+					data->offset = data->data;
+					ret = _httpmessage_parserequest(response, data);
+				}
+			}
+			if ((response->state & PARSE_MASK) == PARSE_END)
+			{
+				request->state = GENERATE_ERROR;
 			}
 		}
-		else
-		{
-			/**
-			 * sockdata will be freed by the response content
-			 */
-			client->sockdata = NULL;
-		}
+	break;
+	case GENERATE_ERROR:
+		data = client->sockdata;
+		_buffer_reset(data);
+		*(data->offset) = '\0';
+		ret = ESUCCESS;
+	break;
 	}
+
 	return ret;
 }
 #endif
