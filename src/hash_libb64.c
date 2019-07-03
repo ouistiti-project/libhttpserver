@@ -63,13 +63,16 @@ static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 		switch (*offset)
 		{
 			case '=':
-				cnt = offset - out;
 				*offset = '\0';
+			case '\n':
+				cnt = offset - out;
 				offset--;
 			break;
 			case '/':
-			case '\n':
 				*offset = '_';
+			break;
+			case '+':
+				*offset = '-';
 			break;
 		}
 		offset++;
