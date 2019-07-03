@@ -55,7 +55,7 @@ struct buffer_s
 	int length;
 	int maxchunks;
 };
-HTTPMESSAGE_DECL buffer_t * _buffer_create(int nbchunks, int chunksize);
+HTTPMESSAGE_DECL buffer_t * _buffer_create(int nbchunks);
 HTTPMESSAGE_DECL char *_buffer_append(buffer_t *buffer, const char *data, int length);
 HTTPMESSAGE_DECL void _buffer_shrink(buffer_t *buffer);
 HTTPMESSAGE_DECL void _buffer_reset(buffer_t *buffer);
@@ -92,7 +92,6 @@ struct http_message_s
 		PARSE_CONTINUE = 0x0100,
 	}
 	state;
-	int chunksize;
 	buffer_t *content;
 	buffer_t *header;
 	unsigned long long content_length;
@@ -120,10 +119,10 @@ typedef struct _http_message_result_s _http_message_result_t;
 
 HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[];
 
-HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize);
+HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent);
 HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message);
 HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *header);
-HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t *header);
+HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message);
 HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t *data);
 HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message);
 HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message);
