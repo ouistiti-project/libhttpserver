@@ -55,8 +55,13 @@ static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 	base64_encodestate state;
 	base64_init_encodestate(&state);
 
+#ifdef __LIBB64_URLENCODING
+	LIBB64_URLENCODING=1;
+#endif
+
 	int cnt = base64_encode_block(in, inlen, out, &state);
 	cnt += base64_encode_blockend(out + cnt, &state);
+#ifndef __LIBB64_URLENCODING
 	char *offset = out;
 	while (*offset != '\0')
 	{
@@ -77,6 +82,7 @@ static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 		}
 		offset++;
 	}
+#endif
 
 	return cnt;
 }
