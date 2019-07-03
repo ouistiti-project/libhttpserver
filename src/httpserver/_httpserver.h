@@ -142,7 +142,5 @@ typedef enum
 	MESSAGE_TYPE_HEAD,
 } _http_message_method_e;
 
-static void _httpserver_addmethod(http_server_t *server, const char *key, _http_message_method_e id);
-
 #endif
 

@@ -26,12 +26,14 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 #include <stdlib.h>
+#include <string.h>
 
 # include <mbedtls/version.h>
 # include <mbedtls/md5.h>
 # include <mbedtls/sha1.h>
 # include <mbedtls/sha256.h>
 # include <mbedtls/base64.h>
+# include <mbedtls/md.h>
 
 #include "httpserver/hash.h"
 #include "httpserver/log.h"
@@ -55,6 +57,9 @@ static int SHA1_finish(void *ctx, char *out);
 static void *SHA256_init();
 static void SHA256_update(void *ctx, const char *in, size_t len);
 static int SHA256_finish(void *ctx, char *out);
+static void *HMAC_initkey(const char *key, int keylen);
+static void HMAC_update(void *ctx, const char *in, size_t len);
+static int HMAC_finish(void *ctx, char *out);
 
 #ifndef LIBB64
 const base64_t *base64 = &(const base64_t)
@@ -89,6 +94,14 @@ const hash_t *hash_sha256 = &(const hash_t)
 	.finish = SHA256_finish,
 };
 const hash_t *hash_sha512 = NULL;
+const hash_t *hash_macsha256 = &(const hash_t)
+{
+	.size = 32,
+	.name = "HMACSHA256",
+	.initkey = HMAC_initkey,
+	.update = HMAC_update,
+	.finish = HMAC_finish,
+};
 
 static void *MD5_init()
 {
@@ -134,15 +147,17 @@ static int MD5_finish(void *ctx, char *out)
 
 static void *SHA1_init()
 {
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
 	mbedtls_sha1_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
-#if MBEDTLS_VERSION_NUMBER > 0x02070000
 	if (mbedtls_sha1_starts_ret(pctx))
 	{
 		free(pctx);
 		return NULL;
 	}
 #else
+	mbedtls_sha1_context *pctx;
+	pctx = calloc(1, sizeof(*pctx));
 	mbedtls_sha1_init(pctx);
 	mbedtls_sha1_starts(pctx);
 #endif
@@ -176,15 +191,17 @@ static int SHA1_finish(void *ctx, char *out)
 
 static void *SHA256_init()
 {
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
 	mbedtls_sha256_context *pctx;
 	pctx = calloc(1, sizeof(*pctx));
-#if MBEDTLS_VERSION_NUMBER > 0x02070000
 	if (mbedtls_sha256_starts_ret(pctx, 0))
 	{
 		free(pctx);
 		return NULL;
 	}
 #else
+	mbedtls_sha256_context *pctx;
+	pctx = calloc(1, sizeof(*pctx));
 	mbedtls_sha256_init(pctx);
 	mbedtls_sha256_starts(pctx, 0);
 #endif
@@ -216,11 +233,50 @@ static int SHA256_finish(void *ctx, char *out)
 	return 0;
 }
 
+static void *HMAC_initkey(const char *key, int keylen)
+{
+	mbedtls_md_context_t *pctx;
+	pctx = calloc(1, sizeof(*pctx));
+
+	const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+	mbedtls_md_init(pctx);
+	mbedtls_md_setup(pctx, info, 1);
+	mbedtls_md_hmac_starts(pctx, key, keylen);
+	return pctx;
+}
+
+static void HMAC_update(void *ctx, const char *input, size_t len)
+{
+	mbedtls_md_context_t *pctx = (mbedtls_md_context_t *)ctx;
+	mbedtls_md_hmac_update(pctx, input, len);
+};
+static int HMAC_finish(void *ctx, char *output)
+{
+	mbedtls_md_context_t *pctx = (mbedtls_md_context_t *)ctx;
+	mbedtls_md_hmac_finish(pctx, output);
+	free(pctx);
+	return mbedtls_md_get_size(pctx->md_info);
+}
+
 #ifndef LIBB64
 static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
+	char *offset = strchr(out, '=');
+	while (offset)
+	{
+		*offset = '\0';
+		cnt--;
+		offset = strchr(offset + 1, '=');
+	}
+	offset = strchr(out, '/');
+	while (offset != NULL)
+	{
+		*offset = '_';
+		offset = strchr(offset + 1, '/');
+	}
+
 	return cnt;
 }
 
