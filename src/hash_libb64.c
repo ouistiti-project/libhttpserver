@@ -26,6 +26,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 #include <stdlib.h>
+#include <string.h>
 
 #include "httpserver/hash.h"
 #include "httpserver/log.h"
@@ -41,30 +42,46 @@
 #define dbg(...)
 #endif
 
-static void BASE64_encode(const char *in, int inlen, char *out, int outlen);
-static void BASE64_decode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
 const base64_t *base64 = &(const base64_t)
 {
 	.encode = BASE64_encode,
 	.decode = BASE64_decode,
 };
 
-static void BASE64_encode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 {
 	base64_encodestate state;
 	base64_init_encodestate(&state);
+
 	int cnt = base64_encode_block(in, inlen, out, &state);
-	cnt = base64_encode_blockend(out + cnt, &state);
-	int i;
-	for (i = cnt-1; i < outlen; i++)
+	cnt += base64_encode_blockend(out + cnt, &state);
+	char *offset = out;
+	while (*offset != '\0')
 	{
-		if ((out[i] == '\n') ||
-			(out[i] == '\r'))
-			out[i] = '\0';
+		switch (*offset)
+		{
+			case '=':
+				*offset = '\0';
+			case '\n':
+				cnt = offset - out;
+				offset--;
+			break;
+			case '/':
+				*offset = '_';
+			break;
+			case '+':
+				*offset = '-';
+			break;
+		}
+		offset++;
 	}
+
+	return cnt;
 }
 
-static void BASE64_decode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_decode(const char *in, int inlen, char *out, int outlen)
 {
 	base64_decodestate decoder;
 	base64_init_decodestate(&decoder);
@@ -76,5 +93,6 @@ static void BASE64_decode(const char *in, int inlen, char *out, int outlen)
 			(out[i] == '\r'))
 			out[i] = '\0';
 	}
+	return cnt;
 }
 

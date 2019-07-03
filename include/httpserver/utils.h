@@ -29,19 +29,17 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-extern char *str_location;
+extern const char str_location[];
 
-typedef enum
-{
-	MIME_TEXTPLAIN,
-	MIME_TEXTHTML,
-	MIME_TEXTCSS,
-	MIME_TEXTJSON,
-	MIME_APPLICATIONJAVASCRIPT,
-	MIME_IMAGEPNG,
-	MIME_IMAGEJPEG,
-	MIME_APPLICATIONOCTETSTREAM,
-} utils_mimetype_enum;
+extern const char str_textplain[];
+extern const char str_texthtml[];
+extern const char str_textcss[];
+extern const char str_textjson[];
+extern const char str_imagepng[];
+extern const char str_imagejpeg[];
+extern const char str_applicationjavascript[];
+extern const char str_applicationoctetstream[];
+
 const char *utils_getmime(const char *path);
 void utils_addmime(const char *ext, const char*mime);
 
@@ -61,7 +59,7 @@ char *utils_buildpath(const char *docroot, const char *path_info,
  * Example:
  * keyvalue = cookie_get(request, "foo");
  * strcmp(keyvalue, "foo=bar") == 0
- * 
+ *
  * @param message the request message received
  * @param key the name of the cookie or NULL
  *
@@ -69,6 +67,6 @@ char *utils_buildpath(const char *docroot, const char *path_info,
  */
 const char *cookie_get(http_message_t *request, const char *key);
 
-void cookie_set(http_message_t *response, const char *key, char *value);
+void cookie_set(http_message_t *response, const char *key, const char *value);
 
 #endif

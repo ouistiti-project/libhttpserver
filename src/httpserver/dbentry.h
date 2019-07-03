@@ -28,14 +28,20 @@
 #ifndef DBENTRY_H
 #define DBENTRY_H
 
+//#define HTTPMESSAGE_DECL extern
+#define HTTPMESSAGE_DECL static
+
 struct dbentry_s
 {
 	char *storage;
-	char *key;
-	char *value;
+	const char *key;
+	const char *value;
 	struct dbentry_s *next;
 };
 
 typedef struct dbentry_s dbentry_t;
+
+HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key);
+HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry);
 
 #endif
