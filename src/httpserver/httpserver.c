@@ -54,6 +54,10 @@
 #include "_httpmessage.h"
 #include "dbentry.h"
 
+#ifndef HTTPMESSAGE_CHUNKSIZE
+#define HTTPMESSAGE_CHUNKSIZE 64
+#endif
+
 extern httpserver_ops_t *httpserver_ops;
 
 struct http_connector_list_s
@@ -142,8 +146,14 @@ static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
 /********************************************************************/
 #define BUFFERMAX 2048
-static int ChunkSize = 0;
-static buffer_t * _buffer_create(int nbchunks, int chunksize)
+static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
+/**
+ * the chunksize has to be constant during the life of the application.
+ * Two ways are available:
+ *  - to store the chunksize into each buffer (takes a lot of place).
+ *  - to store into a global variable (looks bad).
+ */
+static buffer_t * _buffer_create(int maxchunks)
 {
 	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
 	if (buffer == NULL)
@@ -153,22 +163,14 @@ static buffer_t * _buffer_create(int nbchunks, int chunksize)
 	 * Embeded version may use the nbchunk with special vcalloc.
 	 * The idea is to create a pool of chunks into the stack.
 	 */
-	buffer->data = vcalloc(1, chunksize + 1);
+	buffer->data = vcalloc(1, ChunkSize + 1);
 	if (buffer->data == NULL)
 	{
 		free(buffer);
 		return NULL;
 	}
-	/**
-	 * the chunksize has to be constant during the life of the application.
-	 * Two ways are available:
-	 *  - to store the chunksize into each buffer (takes a lot of place).
-	 *  - to store into a global variable (looks bad).
-	 */
-	if (ChunkSize == 0)
-		ChunkSize = chunksize;
-	buffer->maxchunks = nbchunks;
-	buffer->size = chunksize + 1;
+	buffer->maxchunks = maxchunks;
+	buffer->size = ChunkSize + 1;
 	buffer->offset = buffer->data;
 	return buffer;
 }
@@ -342,10 +344,15 @@ HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry)
 /**********************************************************************
  * http_message
  */
-#ifdef HTTPCLIENT_FEATURES
-http_message_t * httpmessage_create(int chunksize)
+int httpmessage_chunksize()
 {
-	http_message_t *client = _httpmessage_create(NULL, NULL, chunksize);
+	return ChunkSize;
+}
+
+#ifdef HTTPCLIENT_FEATURES
+http_message_t * httpmessage_create()
+{
+	http_message_t *client = _httpmessage_create(NULL, NULL);
 	return client;
 }
 
@@ -385,8 +392,8 @@ int httpmessage_request(http_message_t *message, const char *method, char *url)
 		httpmessage_addheader(message, "Port", port);
 
 		int length = strlen(pathname);
-		int nbchunks = (length / message->chunksize) + 1;
-		message->uri = _buffer_create(nbchunks, message->chunksize);
+		int nbchunks = (length / ChunkSize) + 1;
+		message->uri = _buffer_create(nbchunks);
 		_buffer_append(message->uri, pathname, length);
 	}
 	http_message_method_t *method_it = (http_message_method_t *)&default_methods[0];
@@ -407,7 +414,7 @@ int httpmessage_request(http_message_t *message, const char *method, char *url)
 }
 #endif
 
-HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent, int chunksize)
+HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent)
 {
 	http_message_t *message;
 
@@ -416,7 +423,6 @@ HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, htt
 	{
 		message->result = RESULT_200;
 		message->client = client;
-		message->chunksize = chunksize;
 //		message->content_length = (unsigned long long)-1);
 		if (parent)
 		{
@@ -530,7 +536,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					 * to use parse_cgi from a module, the functions
 					 * has to run on message without client attached.
 					 */
-					message->uri = _buffer_create(MAXCHUNKS_URI, message->chunksize);
+					message->uri = _buffer_create(MAXCHUNKS_URI);
 				}
 				while (data->offset < (data->data + data->length) && next == PARSE_URI)
 				{
@@ -672,7 +678,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				int length = 0;
 				if (message->headers_storage == NULL)
 				{
-					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->chunksize);
+					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 				}
 				/* store header line as "<key>:<value>\0" */
 				while (data->offset < (data->data + data->length) && next == PARSE_HEADER)
@@ -766,8 +772,8 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 
 				if (message->query_storage == NULL)
 				{
-					int nbchunks = (length / message->chunksize ) + 1;
-					message->query_storage = _buffer_create(nbchunks, message->chunksize);
+					int nbchunks = (length / ChunkSize ) + 1;
+					message->query_storage = _buffer_create(nbchunks);
 					if (message->query != NULL)
 					{
 						_buffer_append(message->query_storage, message->query, length);
@@ -1028,7 +1034,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 {
 	if (message->headers_storage == NULL)
 	{
-		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER, message->chunksize);
+		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 	}
 	_buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
@@ -1051,7 +1057,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, char *cont
 	}
 	if (message->content == NULL && content != NULL)
 	{
-		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->chunksize);
+		message->content = _buffer_create(MAXCHUNKS_CONTENT);
 	}
 
 	if (content != NULL)
@@ -1073,7 +1079,7 @@ int httpmessage_appendcontent(http_message_t *message, char *content, int length
 {
 	if (message->content == NULL && content != NULL)
 	{
-		message->content = _buffer_create(MAXCHUNKS_CONTENT, message->client->server->config->chunksize);
+		message->content = _buffer_create(MAXCHUNKS_CONTENT);
 	}
 
 	if (message->content != NULL && content != NULL)
@@ -1110,7 +1116,7 @@ int httpmessage_isprotected(http_message_t *message)
  */
 static void _httpclient_destroy(http_client_t *client);
 
-http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol, int chunksize)
+http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol)
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
 	if (client == NULL)
@@ -1134,7 +1140,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 	client->recv_arg = client->opsctx;
 	if (client->opsctx != NULL)
 	{
-		client->sockdata = _buffer_create(1, chunksize);
+		client->sockdata = _buffer_create(1);
 	}
 	if (client->sockdata == NULL)
 	{
@@ -1263,7 +1269,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 {
 	int size = 0;
 	if (client->sockdata == NULL)
-		client->sockdata = _buffer_create(MAXCHUNKS_HEADER, request->chunksize);
+		client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
 	buffer_t *data = client->sockdata;
 
 	int ret = ESUCCESS;
@@ -1530,7 +1536,7 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 		client->sockdata->offset = client->sockdata->data;
 
 		if (*prequest == NULL)
-			*prequest = _httpmessage_create(client, NULL, client->server->config->chunksize);
+			*prequest = _httpmessage_create(client, NULL);
 
 		/**
 		 * WAIT_ACCEPT does the first initialization
@@ -1569,7 +1575,7 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 		case EREJECT:
 		{
 			if ((*prequest)->response == NULL)
-				(*prequest)->response = _httpmessage_create(client, *prequest, client->server->config->chunksize);
+				(*prequest)->response = _httpmessage_create(client, *prequest);
 
 			warn("bad resquest");
 			(*prequest)->response->state = PARSE_END | GENERATE_ERROR;
@@ -1624,7 +1630,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		((request->state & GENERATE_MASK) == 0))
 	{
 		if (request->response == NULL)
-			request->response = _httpmessage_create(client, request, client->server->config->chunksize);
+			request->response = _httpmessage_create(client, request);
 
 		/**
 		 * this condition is necessary for bad request parsing
@@ -1750,7 +1756,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			else
 			{
 				if (response->header == NULL)
-					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
+					response->header = _buffer_create(MAXCHUNKS_HEADER);
 				buffer_t *buffer = response->header;
 				response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
 				_httpmessage_buildresponse(response, client->server->config->version, buffer);
@@ -1766,7 +1772,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			else
 			{
 				if (response->header == NULL)
-					response->header = _buffer_create(MAXCHUNKS_HEADER, client->server->config->chunksize);
+					response->header = _buffer_create(MAXCHUNKS_HEADER);
 				buffer_t *buffer = response->header;
 				if ((request->response->state & PARSE_MASK) >= PARSE_POSTHEADER)
 				{
@@ -2764,6 +2770,9 @@ http_server_t *httpserver_create(http_server_config_t *config)
 {
 	http_server_t *server;
 
+	if (config->chunksize > 0)
+		ChunkSize = config->chunksize;
+
 	server = vcalloc(1, sizeof(*server));
 	if (server == NULL)
 		return NULL;
@@ -3132,7 +3141,8 @@ const char *httpmessage_cookie(http_message_t *message, const char *key)
 	{
 		if (message->cookie == NULL)
 			return NULL;
-		message->cookie_storage = _buffer_create(1, strlen(message->cookie) + 1);
+		int nbchunks = ((strlen(message->cookie) + 1) / ChunkSize) + 1;
+		message->cookie_storage = _buffer_create(nbchunks);
 		_buffer_append(message->cookie_storage, message->cookie, -1);
 		_buffer_filldb(message->cookie_storage, &message->cookies, '=', ';');
 	}
@@ -3144,7 +3154,7 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, http_cli
 	http_server_session_t *session = NULL;
 	session = vcalloc(1, sizeof(*session));
 	if (session)
-		session->storage = _buffer_create(MAXCHUNKS_SESSION, server->config->chunksize);
+		session->storage = _buffer_create(MAXCHUNKS_SESSION);
 	return session;
 }
 

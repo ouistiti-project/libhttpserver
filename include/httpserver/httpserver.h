@@ -353,7 +353,7 @@ void httpserver_destroy(http_server_t *server);
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-http_message_t * httpmessage_create(int chunksize);
+http_message_t * httpmessage_create();
 
 /**
  * @brief destroy message created with httpmessage_create
@@ -579,13 +579,12 @@ typedef struct httpclient_ops_s httpclient_ops_t;
  *
  * @param server the server which manage the client or NULL for client application
  * @param fops the collection of operation to use client socket (tcpclient_ops)
- * @param chunksize the size of chunked data to collect on the socket
  *
  * @return the new client on success or NULL on error
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol, int chunksize);
+http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol);
 extern const httpclient_ops_t *tcpclient_ops;
 
 /**
