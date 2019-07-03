@@ -867,39 +867,23 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 	return ESUCCESS;
 }
 
-HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message, buffer_t *header)
+HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message)
 {
-	if (message->headers == NULL)
-		_httpmessage_fillheaderdb(message);
-	dbentry_t *headers = message->headers;
-	while (headers != NULL)
+	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 	{
-		if (!strncasecmp(headers->key, str_contentlength, 14))
-		{
-			headers = headers->next;
-			continue;
-		}
-		_buffer_append(header, headers->key, strlen(headers->key));
-		_buffer_append(header, ": ", 2);
-		_buffer_append(header, headers->value, strlen(headers->value));
-		_buffer_append(header, "\r\n", 2);
-		headers = headers->next;
+		httpmessage_addheader(message, str_connection, "Keep-Alive");
+	}
+	else
+	{
+		httpmessage_addheader(message, str_connection, "Close");
 	}
 	if (message->content_length != (unsigned long long)-1)
 	{
-		if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
-		{
-			char keepalive[32];
-			snprintf(keepalive, 31, "%s: %s\r\n", str_connection, "Keep-Alive");
-			dbg("header %s => %s", str_connection, "Keep-Alive");
-			_buffer_append(header, keepalive, strlen(keepalive));
-		}
 		char content_length[32];
-		snprintf(content_length, 31, "%s: %llu\r\n", str_contentlength, message->content_length);
-		dbg("header %s => %llu", str_contentlength, message->content_length);
-		_buffer_append(header, content_length, strlen(content_length));
+		snprintf(content_length, 31, "%llu",  message->content_length);
+		httpmessage_addheader(message, str_contentlength, content_length);
 	}
-	header->offset = header->data;
+	message->headers_storage->offset = message->headers_storage->data;
 	return ESUCCESS;
 }
 
@@ -1048,7 +1032,8 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 	}
 	_buffer_append(message->headers_storage, key, strlen(key));
 	_buffer_append(message->headers_storage, ":", 1);
-	_buffer_append(message->headers_storage, value, strlen(value) + 1);
+	_buffer_append(message->headers_storage, value, strlen(value));
+	_buffer_append(message->headers_storage, "\r\n", 2);
 }
 
 int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
@@ -1328,7 +1313,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		}
 		_buffer_reset(data);
 		*(data->offset) = 0;
-		_httpmessage_buildheader(request, data);
+		_httpmessage_buildheader(request);
 		data->offset = data->data;
 		while (data->length > 0)
 		{
@@ -1827,7 +1812,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			{
 				response->state = GENERATE_HEADER | (response->state & ~GENERATE_MASK);
 				_buffer_reset(buffer);
-				_httpmessage_buildheader(response, buffer);
+				_httpmessage_buildheader(response);
 			}
 			ret = ECONTINUE;
 		}
@@ -1835,7 +1820,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		case GENERATE_HEADER:
 		{
 			int size;
-			buffer_t *buffer = response->header;
+			buffer_t *buffer = response->headers_storage;
 			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
 			if (size < 0)
 			{
