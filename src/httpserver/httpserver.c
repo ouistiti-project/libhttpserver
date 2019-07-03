@@ -260,6 +260,8 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 				entry = vcalloc(1, sizeof(dbentry_t));
 				if (entry == NULL)
 					return -1;
+				while (*key == ' ')
+					key++;
 				entry->key = key;
 				entry->value = value;
 				entry->next = *db;
@@ -281,6 +283,8 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 		entry = vcalloc(1, sizeof(dbentry_t));
 		if (entry == NULL)
 			return -1;
+		while (*key == ' ')
+			key++;
 		entry->key = key;
 		entry->value = value;
 		entry->next = *db;
