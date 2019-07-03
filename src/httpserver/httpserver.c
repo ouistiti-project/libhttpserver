@@ -361,41 +361,9 @@ void httpmessage_destroy(http_message_t *message)
 	_httpmessage_destroy(message);
 }
 
-int httpmessage_request(http_message_t *message, const char *method, char *url)
+http_client_t *httpmessage_request(http_message_t *message, const char *method, char *url)
 {
-	if (url)
-	{
-		char *host = strstr(url, "://");
-		if (host == NULL)
-			return EREJECT;
-		host += 3;
-		char *pathname = strchr(host, '/');
-		if (pathname == NULL)
-			return EREJECT;
-		*pathname = 0;
-		pathname++;
-		char *port = strchr(host, ':');
-		if (port == NULL || port > pathname)
-		{
-			if (!strncmp(url, "https", 5))
-				port = "443";
-			else
-				port = "80";
-		}
-		else if (port != NULL)
-		{
-			*port = 0;
-			port++;
-		}
-
-		httpmessage_addheader(message, "Host", host);
-		httpmessage_addheader(message, "Port", port);
-
-		int length = strlen(pathname);
-		int nbchunks = (length / ChunkSize) + 1;
-		message->uri = _buffer_create(nbchunks);
-		_buffer_append(message->uri, pathname, length);
-	}
+	http_client_t *client = NULL;
 	http_message_method_t *method_it = (http_message_method_t *)&default_methods[0];
 	while (method_it != NULL)
 	{
@@ -410,7 +378,55 @@ int httpmessage_request(http_message_t *message, const char *method, char *url)
 	}
 	message->method = method_it;
 	message->version = HTTP11;
-	return ESUCCESS;
+	message->state = GENERATE_INIT;
+
+	char *host = NULL;
+	if (url)
+		host = strstr(url, "://");
+	if (host)
+	{
+		host += 3;
+		char *pathname = strchr(host, '/');
+		if (pathname == NULL)
+			return NULL;
+		*pathname = 0;
+		pathname++;
+		const httpclient_ops_t *protocol_ops = tcpclient_ops;
+		void *protocol_ctx = NULL;
+		int iport = protocol_ops->default_port;
+
+		char *port = strchr(host, ':');
+		if (port != NULL && port < pathname)
+		{
+			*port = 0;
+			port++;
+			iport = atoi(port);
+		}
+
+		httpmessage_addheader(message, "Host", host);
+		client = httpclient_create(NULL, protocol_ops, protocol_ctx);
+		if (client && client->ops->connect)
+		{
+			int ret = client->ops->connect(client->opsctx, host, iport);
+			if (ret == EREJECT)
+			{
+				err("client connection error");
+				httpclient_destroy(client);
+				client = NULL;
+			}
+		}
+		else
+			err("client creation error");
+		url = pathname;
+	}
+	if (url)
+	{
+		int length = strlen(url);
+		int nbchunks = (length / ChunkSize) + 1;
+		message->uri = _buffer_create(nbchunks);
+		_buffer_append(message->uri, url, length);
+	}
+	return client;
 }
 #endif
 

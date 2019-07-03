@@ -411,9 +411,10 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
  * @param type the method to use ("GET", "POST", "HEAD"...)
  * @param resource the path+query parts of the URI
  *
+ * @return the client to use for sending
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-int httpmessage_request(http_message_t *message, const char *method, char *resource);
+http_client_t *httpmessage_request(http_message_t *message, const char *method, char *resource);
 #endif
 
 /**
