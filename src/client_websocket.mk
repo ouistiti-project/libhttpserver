@@ -7,6 +7,6 @@ client_websocket_LDFLAGS+=-L$(obj)httpserver/
 client_websocket_LIBRARY+=pthread
 client_websocket_LIBS+=httpserver
 client_websocket_LIBS+=websocket hash_mod
-client_websocket_LIBS-$(MBEDTLS)+=mbedtls mbedx509 mbedcrypto
+client_websocket_LIBS-$(MBEDTLS)+=mbedtls mbedx509 mbedcrypto mod_mbedtls
 
 client_websocket_CFLAGS-$(DEBUG)+=-DDEBUG -g

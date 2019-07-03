@@ -53,6 +53,9 @@
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
 #include "dbentry.h"
+#ifdef TLS
+#include "mod_tls.h"
+#endif
 
 #ifndef HTTPMESSAGE_CHUNKSIZE
 #define HTTPMESSAGE_CHUNKSIZE 64
@@ -361,41 +364,9 @@ void httpmessage_destroy(http_message_t *message)
 	_httpmessage_destroy(message);
 }
 
-int httpmessage_request(http_message_t *message, const char *method, char *url)
+http_client_t *httpmessage_request(http_message_t *message, const char *method, char *url)
 {
-	if (url)
-	{
-		char *host = strstr(url, "://");
-		if (host == NULL)
-			return EREJECT;
-		host += 3;
-		char *pathname = strchr(host, '/');
-		if (pathname == NULL)
-			return EREJECT;
-		*pathname = 0;
-		pathname++;
-		char *port = strchr(host, ':');
-		if (port == NULL || port > pathname)
-		{
-			if (!strncmp(url, "https", 5))
-				port = "443";
-			else
-				port = "80";
-		}
-		else if (port != NULL)
-		{
-			*port = 0;
-			port++;
-		}
-
-		httpmessage_addheader(message, "Host", host);
-		httpmessage_addheader(message, "Port", port);
-
-		int length = strlen(pathname);
-		int nbchunks = (length / ChunkSize) + 1;
-		message->uri = _buffer_create(nbchunks);
-		_buffer_append(message->uri, pathname, length);
-	}
+	http_client_t *client = NULL;
 	http_message_method_t *method_it = (http_message_method_t *)&default_methods[0];
 	while (method_it != NULL)
 	{
@@ -410,7 +381,62 @@ int httpmessage_request(http_message_t *message, const char *method, char *url)
 	}
 	message->method = method_it;
 	message->version = HTTP11;
-	return ESUCCESS;
+	message->state = GENERATE_INIT;
+
+	char *host = NULL;
+	if (url)
+		host = strstr(url, "://");
+	if (host)
+	{
+		host += 3;
+		char *pathname = strchr(host, '/');
+		if (pathname == NULL)
+			return NULL;
+		*pathname = 0;
+		pathname++;
+		const httpclient_ops_t *protocol_ops = tcpclient_ops;
+		void *protocol_ctx = NULL;
+#ifdef TLS
+		if (!strncmp(url, tlsclient_ops->scheme, 5))
+		{
+			protocol_ops = tlsclient_ops;
+			protocol_ctx = client;
+		}
+#endif
+		int iport = protocol_ops->default_port;
+
+		char *port = strchr(host, ':');
+		if (port != NULL && port < pathname)
+		{
+			*port = 0;
+			port++;
+			iport = atoi(port);
+		}
+
+		httpmessage_addheader(message, "Host", host);
+		client = httpclient_create(NULL, protocol_ops, protocol_ctx);
+		if (client && client->ops->connect)
+		{
+			int ret = client->ops->connect(client->opsctx, host, iport);
+			if (ret == EREJECT)
+			{
+				err("client connection error");
+				httpclient_destroy(client);
+				client = NULL;
+			}
+		}
+		else
+			err("client creation error");
+		url = pathname;
+	}
+	if (url)
+	{
+		int length = strlen(url);
+		int nbchunks = (length / ChunkSize) + 1;
+		message->uri = _buffer_create(nbchunks);
+		_buffer_append(message->uri, url, length);
+	}
+	return client;
 }
 #endif
 
@@ -874,7 +900,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 	return ESUCCESS;
 }
 
-HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message)
+HTTPMESSAGE_DECL buffer_t *_httpmessage_buildheader(http_message_t *message)
 {
 	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 	{
@@ -891,7 +917,7 @@ HTTPMESSAGE_DECL int _httpmessage_buildheader(http_message_t *message)
 		httpmessage_addheader(message, str_contentlength, content_length);
 	}
 	message->headers_storage->offset = message->headers_storage->data;
-	return ESUCCESS;
+	return message->headers_storage;
 }
 
 void *httpmessage_private(http_message_t *message, void *data)
@@ -912,12 +938,6 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 {
 	int size = 0;
 	int state = message->state & PARSE_MASK;
-	if (message->content)
-	{
-		if (data)
-			*data = message->content->data;
-		size = message->content->length;
-	}
 	if (content_length)
 	{
 		if (message->content_length <= 0)
@@ -925,6 +945,17 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 		else
 			*content_length = message->content_length;
 	}
+	if (message->content)
+	{
+		size = message->content->length;
+		if (data)
+		{
+			*data = message->content->data;
+			//message->content = NULL;
+		}
+	}
+	if (message->state & GENERATE_MASK != 0)
+		return size;
 	if (state < PARSE_CONTENT)
 		return EINCOMPLETE;
 	if (size == 0 && state > PARSE_CONTENT)
@@ -1038,7 +1069,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 	}
 	_buffer_append(message->headers_storage, key, strlen(key));
-	_buffer_append(message->headers_storage, ":", 1);
+	_buffer_append(message->headers_storage, ": ", 2);
 	_buffer_append(message->headers_storage, value, strlen(value));
 	_buffer_append(message->headers_storage, "\r\n", 2);
 }
@@ -1072,8 +1103,8 @@ int httpmessage_addcontent(http_message_t *message, const char *type, char *cont
 		message->content_length = length;
 	}
 	if (message->content != NULL && message->content->data != NULL )
-		return message->content->size - message->content->length;
-	return message->client->server->config->chunksize;
+		return message->content->length;
+	return 0;
 }
 
 int httpmessage_appendcontent(http_message_t *message, char *content, int length)
@@ -1269,36 +1300,47 @@ http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *
 int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int size = 0;
-	if (client->sockdata == NULL)
-		client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
-	buffer_t *data = client->sockdata;
+	buffer_t *data = NULL;
 
 	int ret = ESUCCESS;
-
-	_httpmessage_fillheaderdb(request);
-	if (client->ops->connect)
+	switch (request->state & GENERATE_MASK)
 	{
-		const char *addr = httpmessage_REQUEST(request, "Host");
-		int port = atoi(httpmessage_REQUEST(request, "Port"));
-		ret = client->ops->connect(client->opsctx, addr, port);
-	}
-	if (ret == ESUCCESS && (request->state & GENERATE_MASK) < GENERATE_END)
-	{
+	case GENERATE_INIT:
 		request->client = client;
 
+		ret = EINCOMPLETE;
+		size = httpclient_wait(request->client, 1);
+		if (size < 0)
+			ret = EREJECT;
+		request->state = GENERATE_RESULT;
+	break;
+	case GENERATE_RESULT:
+	{
+		/**
+		 * send the request URI
+		 */
 		const char *method = httpmessage_REQUEST(request, "method");
-		_buffer_append(data, method, strlen(method));
-		_buffer_append(data, " ", 1);
+		client->client_send(client->send_arg, method, strlen(method));
+		client->client_send(client->send_arg, " /", 2);
 		const char *uri = httpmessage_REQUEST(request, "uri");
-		_buffer_append(data, uri, strlen(uri));
+		size = client->client_send(client->send_arg, uri, strlen(uri));
 		const char *version = httpmessage_REQUEST(request, "version");
 		if (version)
 		{
-			_buffer_append(data, " ", 1);
-			_buffer_append(data, version, strlen(version));
+			client->client_send(client->send_arg, " ", 1);
+			client->client_send(client->send_arg, version, strlen(version));
 		}
-		_buffer_append(data, "\r\n", 2);
-		data->offset = data->data;
+		client->client_send(client->send_arg, "\r\n", 2);
+
+		ret = EINCOMPLETE;
+		request->state = GENERATE_HEADER;
+	}
+	break;
+	case GENERATE_HEADER:
+		/**
+		 * send the header
+		 */
+		data = _httpmessage_buildheader(request);
 		while (data->length > 0)
 		{
 			/**
@@ -1318,32 +1360,20 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			data->offset += size;
 			data->length -= size;
 		}
-		_buffer_reset(data);
-		*(data->offset) = 0;
-		_httpmessage_buildheader(request);
-		data->offset = data->data;
-		while (data->length > 0)
-		{
-			/**
-			 * here, it is the call to the sendresp callback from the
-			 * server configuration.
-			 * see http_server_config_t and httpserver_create
-			 */
-			size = httpclient_wait(client, 1);
-			if (size > 0)
-			{
-				size = client->client_send(client->send_arg, data->offset, data->length);
-			}
-			if (size == EINCOMPLETE)
-				continue;
-			if (size < 0)
-				break;
-			data->offset += size;
-			data->length -= size;
-		}
+
+		ret = EINCOMPLETE;
+		request->state = GENERATE_SEPARATOR;
+	break;
+	case GENERATE_SEPARATOR:
 		size = client->client_send(client->send_arg, "\r\n", 2);
+		ret = EINCOMPLETE;
+		request->state = GENERATE_CONTENT;
+
 		data = request->content;
 		data->offset = data->data;
+	break;
+	case GENERATE_CONTENT:
+		data = request->content;
 		while (data->length > 0)
 		{
 			/**
@@ -1362,49 +1392,66 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				break;
 			data->offset += size;
 			data->length -= size;
+			if (request->content_length > 0)
+				request->content_length -= size;
 		}
-		request->state = GENERATE_END;
-		memset(data->data, 0, data->size);
-
-		response->client = client;
-		response->state = PARSE_STATUS;
-		response->content_length = -1;
-		response->method = request->method;
-	}
-
-	if ((response->state & PARSE_MASK) == PARSE_INIT)
-		response->state = PARSE_STATUS;
-
-	data = client->sockdata;
-	if (data)
-	{
-		_buffer_reset(data);
-		*(data->offset) = '\0';
-
-		if (response->content_length != 0)
-			size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
-		if (size > 0)
+		ret = EINCOMPLETE;
+			request->state = GENERATE_END;
+		if (request->content_length <= 0)
 		{
-			data->length += size;
-			data->data[data->length] = 0;
+			request->state = GENERATE_END;
 
-			data->offset = data->data;
-			ret = _httpmessage_parserequest(response, data);
-			while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
+			response->client = client;
+			response->state = PARSE_STATUS;
+			response->content_length = -1;
+			response->method = request->method;
+		}
+	break;
+	case GENERATE_END:
+		if (client->sockdata == NULL)
+			client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
+		data = client->sockdata;
+		if (data)
+		{
+			_buffer_reset(data);
+			*(data->offset) = '\0';
+
+			size = httpclient_wait(request->client, 1);
+			if (size < 0)
+				ret = EREJECT;
+			if (response->content_length != 0 && size > 0)
 			{
-				_buffer_shrink(data);
+				size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
+
+			}
+			if (size > 0)
+			{
+				data->length += size;
+				data->data[data->length] = 0;
+
 				data->offset = data->data;
 				ret = _httpmessage_parserequest(response, data);
+				while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
+				{
+					_buffer_shrink(data);
+					data->offset = data->data;
+					ret = _httpmessage_parserequest(response, data);
+				}
+			}
+			if ((response->state & PARSE_MASK) == PARSE_END)
+			{
+				request->state = GENERATE_ERROR;
 			}
 		}
-		else
-		{
-			/**
-			 * sockdata will be freed by the response content
-			 */
-			client->sockdata = NULL;
-		}
+	break;
+	case GENERATE_ERROR:
+		data = client->sockdata;
+		_buffer_reset(data);
+		*(data->offset) = '\0';
+		ret = ESUCCESS;
+	break;
 	}
+
 	return ret;
 }
 #endif
@@ -1442,6 +1489,11 @@ static int _httpclient_connect(http_client_t *client)
 int httpclient_socket(http_client_t *client)
 {
 	return client->sock;
+}
+
+http_server_t *httpclient_server(http_client_t *client)
+{
+	return client->server;
 }
 
 static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
@@ -2975,7 +3027,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 {
 	const char *value = default_value;
 
-	if (!strcasecmp(key, "name"))
+	if (!strcasecmp(key, "name") || !strcasecmp(key, "host") || !strcasecmp(key, "hostname"))
 	{
 		value = server->config->hostname;
 	}
@@ -2983,13 +3035,28 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	{
 		value = httpserver_software;
 	}
+	else if (!strcasecmp(key, "scheme"))
+	{
+		value = server->protocol_ops->scheme;
+	}
 	else if (!strcasecmp(key, "protocol"))
 	{
 		value = (char *)httpversion[(server->config->version & HTTPVERSION_MASK)];
 	}
+	else if (!strcasecmp(key, "service"))
+	{
+		snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
+		value = service;
+	}
 	else if (!strcasecmp(key, "port"))
 	{
-		//snprintf(value, 5, "%d", message->client->server->config->port);
+#if 1
+		if (server->protocol_ops->default_port != server->config->port)
+		{
+			snprintf(service, NI_MAXSERV, "%d", server->config->port);
+			value = service;
+		}
+#else
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
 		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
@@ -2999,6 +3066,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 				service, NI_MAXSERV, NI_NUMERICSERV);
 			value = service;
 		}
+#endif
 	}
 	else if (!strcasecmp(key, "addr"))
 	{

@@ -175,7 +175,7 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 	return ret;
 }
 
-static int tcpclient_send(void *ctl, char *data, int length)
+static int tcpclient_send(void *ctl, const char *data, int length)
 {
 	int ret;
 	http_client_t *client = (http_client_t *)ctl;
@@ -253,6 +253,7 @@ static void tcpclient_destroy(void *ctl)
 const httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 {
 	.scheme = str_defaultscheme,
+	.default_port = 80,
 	.create = tcpclient_create,
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,

@@ -65,6 +65,8 @@
 #include "httpserver/httpserver.h"
 #include "httpserver/mod_tls.h"
 
+#define tls_dbg(...)
+
 #define HANDSHAKE 0x01
 #define RECV_COMPLETE 0x02
 
@@ -241,7 +243,7 @@ static int _tls_handshake(_mod_mbedtls_t *ctx)
 	if (!(ctx->state & HANDSHAKE))
 	{
 		ctx->state &= ~RECV_COMPLETE;
-		dbg("TLS Handshake");
+		tls_dbg("TLS Handshake");
 		while((ret = mbedtls_ssl_handshake(&ctx->ssl)) != 0 )
 		{
 			if(ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
@@ -379,7 +381,7 @@ static int _tls_connect(void *vctx, const char *addr, int port)
 	return ret;
 }
 
-void _tls_disconnect(void *vctx)
+static void _tls_disconnect(void *vctx)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	int ret;
@@ -387,7 +389,7 @@ void _tls_disconnect(void *vctx)
 	ctx->protocolops->disconnect(ctx->protocol);
 }
 
-void _tls_destroy(void *vctx)
+static void _tls_destroy(void *vctx)
 {
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	mbedtls_ssl_free(&ctx->ssl);
@@ -405,6 +407,7 @@ static int _tls_recv(void *vctx, char *data, int size)
 #endif
 	{
 		ret = mbedtls_ssl_read(&ctx->ssl, (unsigned char *)data, size);
+		tls_dbg("tls recv %.*s", size, data);
 	}
 	if (ret == MBEDTLS_ERR_SSL_WANT_READ)
 		ret = EINCOMPLETE;
@@ -415,11 +418,12 @@ static int _tls_recv(void *vctx, char *data, int size)
 	return ret;
 }
 
-static int _tls_send(void *vctx, char *data, int size)
+static int _tls_send(void *vctx, const char *data, int size)
 {
 	int ret;
 	_mod_mbedtls_t *ctx = (_mod_mbedtls_t *)vctx;
 	ret = mbedtls_ssl_write(&ctx->ssl, (unsigned char *)data, size);
+	tls_dbg("tls send %.*s", size, data);
 	if (ret == MBEDTLS_ERR_SSL_WANT_WRITE)
 		ret = EINCOMPLETE;
 	else if (ret < 0)
@@ -442,6 +446,7 @@ static void _tls_flush(void *vctx)
 static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
 {
 	.scheme = str_https,
+	.default_port = 443,
 	.create = _tlsserver_create,
 	.recvreq = _tls_recv,
 	.sendresp = _tls_send,
@@ -454,6 +459,7 @@ static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
 const httpclient_ops_t *tlsclient_ops = &(httpclient_ops_t)
 {
 	.scheme = str_https,
+	.default_port = 443,
 	.create = _tlsclient_create,
 	.connect = _tls_connect,
 	.recvreq = _tls_recv,
