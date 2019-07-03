@@ -72,7 +72,7 @@ extern "C" {
 #include "_httpserver.h"
 
 #ifndef HAVE_GETNAMEINFO
-struct addrinfo 
+struct addrinfo
 {
 	int ai_family;
 	int ai_socktype;
@@ -91,8 +91,30 @@ struct addrinfo
 #define MSG_NOSIGNAL 0
 #endif
 
+static void *tcpclient_create(void *config, http_client_t *clt)
+{
+	http_server_t *server = (http_server_t *)config;
+	if (server && server->sock < 0)
+		return NULL;
+
+	// Client connection request recieved
+	// Create new client socket to communicate
+	clt->addr_size = sizeof(clt->addr);
+	if (server)
+	{
+		clt->sock = accept(server->sock, (struct sockaddr *)&clt->addr, &clt->addr_size);
+		if (clt->sock == -1)
+		{
+			dbg("tcp accept error %s", strerror(errno));
+			return NULL;
+		}
+	}
+
+	return clt;
+}
+
 #ifdef HTTPCLIENT_FEATURES
-static int tcpclient_connect(void *ctl, char *addr, int port)
+static int tcpclient_connect(void *ctl, const char *addr, int port)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	int family = AF_INET;
@@ -127,7 +149,7 @@ static int tcpclient_connect(void *ctl, char *addr, int port)
 
 	if (connect(client->sock, (struct sockaddr *)&client->addr, client->addr_size) != 0)
 	{
-		err("server connection failed: %s", strerror(errno));
+		err("server connection to %s failed: %s", addr, strerror(errno));
 		close(client->sock);
 		client->sock = 0;
 		return EREJECT;
@@ -157,6 +179,7 @@ static int tcpclient_send(void *ctl, char *data, int length)
 {
 	int ret;
 	http_client_t *client = (http_client_t *)ctl;
+
 	ret = send(client->sock, data, length, MSG_NOSIGNAL);
 	if (ret < 0)
 	{
@@ -187,6 +210,7 @@ static int tcpclient_status(void *ctl)
 static void tcpclient_flush(void *ctl)
 {
 	http_client_t *client = (http_client_t *)ctl;
+
 	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 }
 
@@ -226,8 +250,10 @@ static void tcpclient_destroy(void *ctl)
 	client->sock = -1;
 }
 
-httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
+const httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 {
+	.scheme = str_defaultscheme,
+	.create = tcpclient_create,
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,
 	.sendresp = tcpclient_send,
@@ -380,47 +406,34 @@ static int _tcpserver_start(http_server_t *server)
 
 static http_client_t *_tcpserver_createclient(http_server_t *server)
 {
-	http_client_t * client = httpclient_create(server, tcpclient_ops, server->config->chunksize);
+	http_client_t * client = httpclient_create(server, server->protocol_ops, server->protocol, server->config->chunksize);
 
-	if (server->sock < 0)
-		return NULL;
-
-	// Client connection request recieved
-	// Create new client socket to communicate
-	client->addr_size = sizeof(client->addr);
-	client->sock = accept(server->sock, (struct sockaddr *)&client->addr, &client->addr_size);
-	if (client->sock == -1)
+	if (client != NULL)
 	{
-		if (errno != EINTR)
-		{
-			err("tcpserver accept error %s", strerror(errno));
-		}
-		httpclient_destroy(client);
-		return NULL;
-	}
-	char hoststr[NI_MAXHOST];
+		char hoststr[NI_MAXHOST];
 
-	int rc;
+		int rc;
 #ifdef HAVE_GETNAMEINFO
-	rc = getnameinfo((struct sockaddr *)&client->addr, 
-		client->addr_size, hoststr, sizeof(hoststr), NULL, 0, 
-		NI_NUMERICHOST | NI_NUMERICSERV);
+		rc = getnameinfo((struct sockaddr *)&client->addr,
+			client->addr_size, hoststr, sizeof(hoststr), NULL, 0,
+			NI_NUMERICHOST | NI_NUMERICSERV);
 #else
-	struct hostent *entity;
+		struct hostent *entity;
 
-	entity = gethostbyaddr((void *)&client->addr, client->addr_size, server->type);
-	strncpy(hoststr, entity->h_name, NI_MAXHOST);
-	rc = 0;
+		entity = gethostbyaddr((void *)&client->addr, client->addr_size, server->type);
+		strncpy(hoststr, entity->h_name, NI_MAXHOST);
+		rc = 0;
 #endif
-	if (rc == 0) 
-		warn("new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
+		if (rc == 0)
+			warn("new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
 #ifndef BLOCK_SOCKET
-	int flags;
-	flags = fcntl(httpclient_socket(client), F_GETFL, 0);
-	fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
-	flags = fcntl(httpclient_socket(client), F_GETFD, 0);
-	fcntl(httpclient_socket(client), F_SETFD, flags | FD_CLOEXEC);
+		int flags;
+		flags = fcntl(httpclient_socket(client), F_GETFL, 0);
+		fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
+		flags = fcntl(httpclient_socket(client), F_GETFD, 0);
+		fcntl(httpclient_socket(client), F_SETFD, flags | FD_CLOEXEC);
 #endif
+	}
 	return client;
 }
 
@@ -430,8 +443,8 @@ static void _tcpserver_close(http_server_t *server)
 	while (client != NULL)
 	{
 		http_client_t *next = client->next;
-		client->ops.disconnect(client);
-		client->ops.destroy(client);
+		client->ops->disconnect(client->opsctx);
+		client->ops->destroy(client->opsctx);
 		client = next;
 	}
 	if (server->sock > 0)

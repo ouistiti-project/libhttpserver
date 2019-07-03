@@ -29,19 +29,17 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-extern char *str_location;
+extern const char str_location[];
 
-typedef enum
-{
-	MIME_TEXTPLAIN,
-	MIME_TEXTHTML,
-	MIME_TEXTCSS,
-	MIME_TEXTJSON,
-	MIME_APPLICATIONJAVASCRIPT,
-	MIME_IMAGEPNG,
-	MIME_IMAGEJPEG,
-	MIME_APPLICATIONOCTETSTREAM,
-} utils_mimetype_enum;
+extern const char str_textplain[];
+extern const char str_texthtml[];
+extern const char str_textcss[];
+extern const char str_textjson[];
+extern const char str_imagepng[];
+extern const char str_imagejpeg[];
+extern const char str_applicationjavascript[];
+extern const char str_applicationoctetstream[];
+
 const char *utils_getmime(const char *path);
 void utils_addmime(const char *ext, const char*mime);
 

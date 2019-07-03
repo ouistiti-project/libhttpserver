@@ -46,23 +46,6 @@ typedef struct http_client_modctx_s http_client_modctx_t;
 typedef struct http_message_method_s http_message_method_t;
 typedef struct http_server_session_s http_server_session_t;
 
-typedef int (*http_connect_t)(void *ctl, char *addr, int port);
-typedef int (*http_status_t)(void *ctl);
-typedef void (*http_flush_t)(void *ctl);
-typedef void (*http_disconnect_t)(void *ctl);
-typedef void (*http_destroy_t)(void *ctl);
-typedef struct httpclient_ops_s httpclient_ops_t;
-
-struct httpclient_ops_s
-{
-	http_connect_t connect; /* callback to connect on an external server */
-	http_recv_t recvreq; /* callback to receive data on the socket */
-	http_send_t sendresp; /* callback to send data on the socket */
-	http_status_t status; /* callback to get the socket status*/
-	http_flush_t flush; /* callback to flush the socket */
-	http_disconnect_t disconnect; /* callback to close the socket */
-	http_destroy_t destroy; /* callback to close the socket */
-};
 #define CLIENT_STARTED 0x0100
 #define CLIENT_RUNNING 0x0200
 #define CLIENT_STOPPED 0x0400
@@ -89,8 +72,13 @@ struct http_client_s
 	http_server_t *server; /* the server which create the client */
 	vthread_t thread; /* The thread of socket management during the live of the connection */
 
-	httpclient_ops_t ops;
-	void *ctx; /* ctx of recvreq and sendresp functions */
+	const httpclient_ops_t *ops;
+	void *opsctx; /* ctx of ops functions */
+
+	http_send_t client_send;
+	void *send_arg;
+	http_recv_t client_recv;
+	void *recv_arg;
 
 	http_connector_list_t *callbacks;
 	http_message_t *request;
@@ -135,7 +123,9 @@ struct http_server_s
 	http_connector_list_t *callbacks;
 	http_server_config_t *config;
 	http_server_mod_t *mod;
-	httpserver_ops_t *ops;
+	const httpserver_ops_t *ops;
+	const httpclient_ops_t *protocol_ops;
+	void *protocol;
 	http_message_method_t *methods;
 #ifdef USE_POLL
 	struct pollfd *poll_set;
