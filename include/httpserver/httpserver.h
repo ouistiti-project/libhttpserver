@@ -52,7 +52,7 @@ extern "C"
 /**
  * MAXCHUNKS defines the maximum number of memory chunk which may be allocated
  * The size of the chunks is configurable with the server (see chunksize).
- * 
+ *
  * The header may be large in some cases like POST multipart/form-data messages.
  * But it could be an attack by memory overflow. The value of MAXCHUNKS_HEADER
  * has to be correctly set (4 is to small, 8 seems to large for embeded target)
@@ -92,6 +92,7 @@ extern const char *str_get;
 extern const char *str_post;
 extern const char *str_head;
 extern const char *str_defaultscheme;
+extern const char *str_form_urlencoded;
 
 typedef enum
 {
@@ -138,13 +139,13 @@ typedef int http_message_result_e;
 
 /**
  * @brief callback to manage a request
- * 
+ *
  * @param arg		the pointer given to httpserver_addconnector
  * @param request	the client request received
  * @param response	the server response to send after
- * 
+ *
  * @return ESUCCESS	to complete the response sending, ECONTINUE to look for another callback
- * 
+ *
  * The callback can set the header of the response and returns with ECONTINUE.
  * At least one callback has to return ESUCCESS otherwise the http response will be "404 Not found".
  * connector returns
@@ -158,39 +159,39 @@ typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message
 
 /**
  * @brief callback to manage a sender module context
- * 
+ *
  * @param arg		the argument passed to httpserver_addmod fucnction
  * @param clt		the client data to use with httpclient_recv and httpclient_send
  * @param addr		the client socket address
  * @param addrsize	the client socket address size
- * 
+ *
  * @return the context pointer of the module
  */
 typedef void *(*http_getctx_t)(void* arg, http_client_t *clt, struct sockaddr *addr, int addrsize);
 /**
  * @brief callback to manage a sender module context
- * 
+ *
  * @param ctx	the context pointer of the module, returned by http_getctx_t
- * 
+ *
  */
 typedef void (*http_freectx_t)(void *ctx);
 /**
  * @brief callback to read the request of the client
- * 
+ *
  * @param ctx		the context pointer of the module
  * @param data		the data buffer to push the request of the client
  * @param length	the size of the data buffer
- * 
+ *
  * @return the length of the request of the client
  */
 typedef int (*http_recv_t)(void *ctx, char *data, int length);
 /**
  * @brief callback to send the response to the client
- * 
+ *
  * @param ctx		the context pointer of the module
  * @param data		the data buffer to send
  * @param length	the size of the data buffer
- * 
+ *
  * @return the length of the response
  */
 typedef int (*http_send_t)(void *ctx, char *data, int length);
@@ -215,7 +216,7 @@ typedef struct http_server_config_s
 
 /**
  * @brief software name
- * 
+ *
  * This value may be changed, by default it is "libhttpserver".
  * It is returned by httpserver_INFO(server, "software")
  */
@@ -284,10 +285,10 @@ void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t 
 void httpserver_connect(http_server_t *server);
 
 /**
- * @brief run all servers 
+ * @brief run all servers
  *
  * @param server the first server connected
- * 
+ *
  * @return ESUCCESS when all servers closed
  * 	EINCOMPLETE when at least one server must be call again.
  */
@@ -312,9 +313,9 @@ void httpserver_destroy(http_server_t *server);
 /*****************************************/
 /**
  * @brief create message
- * 
+ *
  * @return the message
- * 
+ *
  * create message to be use with parsecgi
  * out of modules
  *
@@ -324,7 +325,7 @@ http_message_t * httpmessage_create(int chunksize);
 
 /**
  * @brief destroy message created with httpmessage_create
- * 
+ *
  * @param message the message to destroy
  */
 void httpmessage_destroy(http_message_t *message);
@@ -333,7 +334,7 @@ void httpmessage_destroy(http_message_t *message);
  * @brief return the client of the request
  *
  * @param message the response message to update
- * 
+ *
  * @return the client instance
  */
 http_client_t *httpmessage_client(http_message_t *message);
@@ -342,9 +343,9 @@ http_client_t *httpmessage_client(http_message_t *message);
  * @brief store and return private data for callback
  *
  * @param message the response message to update
- * @param data the pointer on the data to store, 
+ * @param data the pointer on the data to store,
  * 	      may be null to retreive the previous storage.
- * 
+ *
  * @return the same pointer as stored
  */
 void *httpmessage_private(http_message_t *message, void *data);
@@ -354,9 +355,9 @@ void *httpmessage_private(http_message_t *message, void *data);
  *
  * @param message the response message to update
  * @param result value to add
- * 
+ *
  * @return current result of the message.
- * 
+ *
  * If result is 0, the function only returns the current result of the message.
  */
 http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result);
@@ -367,7 +368,7 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
  * @param message the request message to update
  * @param type the method to use ("GET", "POST", "HEAD"...)
  * @param resource the path+query parts of the URI
- * 
+ *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
 void httpmessage_request(http_message_t *message, const char *method, char *resource);
@@ -388,7 +389,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
  * @param type the mime type of the content, NULL will set to "text/plain"
  * @param content the data of the content
  * @param length the length of the bitstream of the content
- * 
+ *
  * @return the space available into the chunk of content
  */
 int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length);
@@ -399,7 +400,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, char *cont
  * @param message the response message to update
  * @param content the data of the content
  * @param length the length of the bitstream of the content
- * 
+ *
  * @return the space available into the chunk of content
  */
 int httpmessage_appendcontent(http_message_t *message, char *content, int length);
@@ -410,7 +411,7 @@ int httpmessage_appendcontent(http_message_t *message, char *content, int length
  * @param message the request message
  * @param contentpart the data of the content
  * @param contentlenght the rest size of the content to read
- * 
+ *
  * @return the length of data pop into contentpart
  */
 int httpmessage_content(http_message_t *message, char **contentpart, unsigned long long *contentlenght);
@@ -442,13 +443,13 @@ int httpmessage_lock(http_message_t *message);
 
 /**
  * @brief return the protection of the message
- * 
+ *
  * if the message is protected, an authentication should be done.
- * 
+ *
  * @param message the request to test
- * 
+ *
  * @return 0 for unprotected message, or -1 for forbidden message,
- * otherwise a value > 0 
+ * otherwise a value > 0
  */
 int httpmessage_isprotected(http_message_t *message);
 
@@ -513,6 +514,30 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key);
  */
 const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value);
 
+/**
+ * @brief get value from query parameters and/or POST form data
+ *
+ * the value are stored by mod with the same function.
+ *
+ * @param message the request message received
+ * @param key the name of the attribute
+ *
+ * @return the value of the paramater or NULL
+ */
+const char *httpmessage_parameter(http_message_t *message, const char *key);
+
+/**
+ * @brief get value from Cookie header
+ *
+ * the value are stored by mod with the same function.
+ *
+ * @param message the request message received
+ * @param key the name of the attribute
+ *
+ * @return the value of the cookie or NULL
+ */
+const char *httpmessage_cookie(http_message_t *message, const char *key);
+
 /**********************************************************************/
 typedef struct httpclient_ops_s httpclient_ops_t;
 /**
@@ -531,7 +556,7 @@ extern httpclient_ops_t *tcpclient_ops;
 
 /**
  * @brief delete the client object
- * 
+ *
  * @param client the connection that will send the request
  */
 void httpclient_destroy(http_client_t *client);
@@ -615,10 +640,10 @@ void httpclient_shutdown(http_client_t *client);
 
 /**
  * @brief wait on the socket while no dat available
- * 
+ *
  * @param client the connection that received the request
  * @param options 1 to wait place to send data, 0 to receive
- * 
+ *
  * @return socket fd
  */
 #define WAIT_SEND 0x01
