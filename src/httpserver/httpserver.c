@@ -1026,7 +1026,9 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 			return _http_message_result[i]->status;
 		i++;
 	}
-	return NULL;
+	static char status[] = " XXX ";
+	sprintf(status, " %.3d", message->result);
+	return status;
 }
 
 HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
