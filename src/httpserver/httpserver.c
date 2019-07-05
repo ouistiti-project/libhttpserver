@@ -954,7 +954,7 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 			//message->content = NULL;
 		}
 	}
-	if (message->state & GENERATE_MASK != 0)
+	if ((message->state & GENERATE_MASK) != 0)
 		return size;
 	if (state < PARSE_CONTENT)
 		return EINCOMPLETE;
@@ -1026,7 +1026,9 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 			return _http_message_result[i]->status;
 		i++;
 	}
-	return NULL;
+	static char status[] = " XXX ";
+	sprintf(status, " %.3d", message->result);
+	return status;
 }
 
 HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
@@ -1368,12 +1370,10 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		size = client->client_send(client->send_arg, "\r\n", 2);
 		ret = EINCOMPLETE;
 		request->state = GENERATE_CONTENT;
-
-		data = request->content;
-		data->offset = data->data;
 	break;
 	case GENERATE_CONTENT:
 		data = request->content;
+		data->offset = data->data;
 		while (data->length > 0)
 		{
 			/**
@@ -1396,7 +1396,6 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				request->content_length -= size;
 		}
 		ret = EINCOMPLETE;
-			request->state = GENERATE_END;
 		if (request->content_length <= 0)
 		{
 			request->state = GENERATE_END;
