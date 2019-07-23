@@ -1829,7 +1829,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				if ((request->response->state & PARSE_MASK) >= PARSE_POSTHEADER)
 				{
 					response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
-					_httpmessage_buildresponse(response, client->server->config->version, buffer);
+					_httpmessage_buildresponse(response,response->version, buffer);
 				}
 			}
 			ret = ECONTINUE;
