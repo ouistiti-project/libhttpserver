@@ -3149,6 +3149,19 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 		if (message->method)
 			value = (char *)message->method->key;
 	}
+	else if (!strcasecmp(key, "result"))
+	{
+		int i = 0;
+		while (_http_message_result[i] != NULL)
+		{
+			if (_http_message_result[i]->result == message->result)
+			{
+				value = _http_message_result[i]->status;
+				break;
+			}
+			i++;
+		}
+	}
 	else if (!strcasecmp(key, "content"))
 	{
 		if (message->content != NULL)
