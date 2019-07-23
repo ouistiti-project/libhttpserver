@@ -97,7 +97,8 @@ static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *
 		hash_sha1->finish(ctx, accept);
 
 		char out[40];
-		base64->encode(accept, hash_sha1->size, out, hash_sha1->size * 2);
+		base64->encode(accept, hash_sha1->size, out, 40);
+		dbg("websocket handshake %s", out);
 
 		httpmessage_addheader(response, str_accept, out);
 	}
@@ -173,7 +174,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 					_mod_websocket_handshake(ctx, request, response);
 					httpmessage_addheader(response, str_connection, (char *)str_upgrade);
 					httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
-					httpmessage_addcontent(response, "none", "", -1);
+					httpmessage_addcontent(response, "none", NULL, -1);
 					httpmessage_result(response, RESULT_101);
 					dbg("result 101");
 					ret = ECONTINUE;
