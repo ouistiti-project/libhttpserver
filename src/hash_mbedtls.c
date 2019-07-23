@@ -46,6 +46,8 @@
 #define dbg(...)
 #endif
 
+static int BASE64_encode1(const char *in, int inlen, char *out, int outlen);
+static int BASE64_encode2(const char *in, int inlen, char *out, int outlen);
 static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
 static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
 static void *MD5_init();
@@ -64,7 +66,12 @@ static int HMAC_finish(void *ctx, char *out);
 #ifndef LIBB64
 const base64_t *base64 = &(const base64_t)
 {
-	.encode = BASE64_encode,
+	.encode = BASE64_encode1,
+	.decode = BASE64_decode,
+};
+const base64_t *base64_urlencoding = &(const base64_t)
+{
+	.encode = BASE64_encode2,
 	.decode = BASE64_decode,
 };
 #endif
@@ -259,22 +266,36 @@ static int HMAC_finish(void *ctx, char *output)
 }
 
 #ifndef LIBB64
-static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode1(const char *in, int inlen, char *out, int outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
-	char *offset = strchr(out, '=');
-	while (offset)
+	return cnt;
+}
+
+static int BASE64_encode2(const char *in, int inlen, char *out, int outlen)
+{
+	size_t cnt = 0;
+	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
+	char *offset = out;
+	while (*offset != '\0')
 	{
-		*offset = '\0';
-		cnt--;
-		offset = strchr(offset + 1, '=');
-	}
-	offset = strchr(out, '/');
-	while (offset != NULL)
-	{
-		*offset = '_';
-		offset = strchr(offset + 1, '/');
+		switch (*offset)
+		{
+			case '\n':
+			case '=':
+				*offset = '\0';
+				cnt = offset - out;
+				offset--;
+			break;
+			case '/':
+				*offset = '_';
+			break;
+			case '+':
+				*offset = '-';
+			break;
+		}
+		offset++;
 	}
 
 	return cnt;

@@ -43,6 +43,7 @@ struct base64_s
 #endif
 
 extern const base64_t *base64;
+extern const base64_t *base64_urlencoding;
 
 typedef struct hash_s hash_t;
 struct hash_s
