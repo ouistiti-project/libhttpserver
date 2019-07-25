@@ -53,9 +53,6 @@
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
 #include "dbentry.h"
-#ifdef TLS
-#include "mod_tls.h"
-#endif
 
 #ifndef HTTPMESSAGE_CHUNKSIZE
 #define HTTPMESSAGE_CHUNKSIZE 64
@@ -386,6 +383,10 @@ int httpmessage_chunksize()
 }
 
 #ifdef HTTPCLIENT_FEATURES
+#ifdef TLS
+extern const httpclient_ops_t *tlsclient_ops;
+#endif
+
 http_message_t * httpmessage_create()
 {
 	http_message_t *client = _httpmessage_create(NULL, NULL);
@@ -430,7 +431,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 		const httpclient_ops_t *protocol_ops = tcpclient_ops;
 		void *protocol_ctx = NULL;
 #ifdef TLS
-		if (!strncmp(url, tlsclient_ops->scheme, 5))
+		if (tlsclient_ops && !strncmp(url, tlsclient_ops->scheme, 5))
 		{
 			protocol_ops = tlsclient_ops;
 			protocol_ctx = client;
