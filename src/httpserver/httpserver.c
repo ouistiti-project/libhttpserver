@@ -3215,9 +3215,13 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, str_contenttype))
 	{
-		if (message->content != NULL)
+		if (message->content_type != NULL)
 		{
 			value = message->content_type;
+		}
+		if (value == default_value)
+		{
+			value = dbentry_search(message->headers, key);
 		}
 	}
 	else if (!strncasecmp(key, "remote_addr", 11))
