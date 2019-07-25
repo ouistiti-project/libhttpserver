@@ -782,6 +782,12 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_POSTHEADER:
 			{
+				/**
+				 * If the client send headers with only \n at end of each line
+				 * it is impossible to rebuild the header correctly.
+				 * This null character allows to add \r\n at the end of the headers.
+				 */
+				_buffer_append(message->headers_storage, "\0", 1);
 				if (_httpmessage_fillheaderdb(message) != ESUCCESS)
 				{
 					next = PARSE_END;
