@@ -1021,11 +1021,16 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 		else
 			return EINCOMPLETE;
 	}
+	if ((message->state & PARSE_MASK) == PARSE_END)
+	{
+		return ESUCCESS;
+	}
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
 	tempo.length = *size;
 	tempo.size = *size;
+
 	if ((message->state & PARSE_MASK) == PARSE_INIT)
 		message->state = PARSE_STATUS;
 	if (message->content_length == 0)
@@ -1034,23 +1039,17 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length - (tempo.offset - tempo.data);
 	if (*size > 0)
+	{
 		_buffer_shrink(&tempo);
-
+		message->content = &tempo;
+	}
 	if ((message->state & PARSE_MASK) == PARSE_END)
 	{
 		if (*size > 0)
 		{
 			*size = 0;
 		}
-		/**
-		 * The request may not contain the ContentLength.
-		 * In this case the function must continue after the end.
-		 * The caller must stop by itself
-		 */
-		if (message->content_length == (unsigned long long)-1)
-			ret = ECONTINUE;
-		else
-			message->content = NULL;
+		ret = ECONTINUE;
 	}
 	return ret;
 }
