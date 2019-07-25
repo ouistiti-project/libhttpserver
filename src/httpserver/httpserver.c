@@ -3111,24 +3111,12 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 		}
 #endif
 	}
-	else if (!strcasecmp(key, "addr"))
-	{
-		struct sockaddr_in sin;
-		socklen_t len = sizeof(sin);
-		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
-		{
-			getnameinfo((struct sockaddr *) &sin, len,
-				host, NI_MAXHOST,
-				0, 0, NI_NUMERICHOST);
-			value = host;
-		}
-	}
 	return value;
 }
 
 const char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
-	if (message->client == NULL)
+	if (message->client == NULL || message->client->server == NULL)
 		return NULL;
 	const char *value = default_value;
 
@@ -3136,7 +3124,7 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
 		{
 			getnameinfo((struct sockaddr *) &sin, len,
 				0, 0,
@@ -3144,22 +3132,20 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 			value = service;
 		}
 	}
-	else if (!strcasecmp(key, "name"))
-	{
-		value = httpmessage_REQUEST(message, "Host");
-		if (value == NULL)
-			value = message->client->server->config->hostname;
-	}
 	else if (!strcasecmp(key, "addr"))
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
 		{
-			getnameinfo((struct sockaddr *) &sin, len,
+			int ret = getnameinfo((struct sockaddr *) &sin, len,
 				host, NI_MAXHOST,
 				0, 0, NI_NUMERICHOST);
 			value = host;
+		}
+		if (value != host)
+		{
+			value = message->client->server->config->addr;
 		}
 	}
 	else
