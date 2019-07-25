@@ -71,13 +71,13 @@ struct http_message_s
 	http_message_method_t *method;
 	enum {
 		PARSE_INIT,
-		PARSE_URI,
+		PARSE_URI = 0x0001,
 		PARSE_VERSION,
 		PARSE_STATUS,
 		PARSE_HEADER,
 		PARSE_POSTCONTENT, /**POSTCONTENT is hear to allow to parse all the content of POST request  see _httpclient_request*/
 		PARSE_POSTHEADER,
-		PARSE_PRECONTENT,
+		PARSE_PRECONTENT = 0x0007,
 		PARSE_CONTENT,
 		PARSE_END,
 		PARSE_MASK = 0x000F,

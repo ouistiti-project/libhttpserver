@@ -335,6 +335,39 @@ HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
 	return value;
 }
 
+HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *entry, char separator, char fieldsep)
+{
+	while (entry != NULL)
+	{
+		int i = 0;
+		while ((entry->key[i]) != '\0') i++;
+		((char *)entry->key)[i] = separator;
+
+		if (entry->key < entry->value)
+		{
+			int i = 0;
+			while ((entry->value[i]) != '\0') i++;
+			if ((fieldsep == '\r' || fieldsep == '\n') && entry->value[i + 1] == '\0')
+			{
+				((char *)entry->value)[i] = '\r';
+				((char *)entry->value)[i + 1] = '\n';
+			}
+			else
+				((char *)entry->value)[i] = fieldsep;
+		}
+		else
+		{
+			if ((fieldsep == '\r' || fieldsep == '\n') && entry->key[i + 1] == '\0')
+			{
+				((char *)entry->key)[i] = '\r';
+				((char *)entry->key)[i + 1] = '\n';
+			}
+		}
+
+		entry = entry->next;
+	}
+}
+
 HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry)
 {
 	while (entry)
@@ -902,13 +935,19 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 
 HTTPMESSAGE_DECL buffer_t *_httpmessage_buildheader(http_message_t *message)
 {
+	if (message->headers != NULL)
+	{
+		dbentry_revert(message->headers, ':', '\n');
+		dbentry_destroy(message->headers);
+		message->headers = NULL;
+	}
 	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 	{
 		httpmessage_addheader(message, str_connection, "Keep-Alive");
 	}
 	else
 	{
-		httpmessage_addheader(message, str_connection, "Close");
+		//httpmessage_addheader(message, str_connection, "Close");
 	}
 	if (message->content_length != (unsigned long long)-1)
 	{
