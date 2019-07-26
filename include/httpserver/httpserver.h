@@ -123,6 +123,7 @@ typedef int http_message_result_e;
 #define RESULT_405 405
 #ifndef HTTP_STATUS_PARTIAL
 #define RESULT_101 101
+#define RESULT_204 204
 #define RESULT_206 206
 #define RESULT_301 301
 #define RESULT_302 302

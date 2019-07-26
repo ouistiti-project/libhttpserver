@@ -413,6 +413,9 @@ static int _tls_recv(void *vctx, char *data, int size)
 		ret = EINCOMPLETE;
 	else if (ret < 0)
 	{
+		char buffer[256];
+		mbedtls_strerror(ret, buffer, sizeof(buffer));
+		err("tls: recv error %s", buffer);
 		ret = EREJECT;
 	}
 	return ret;
@@ -427,7 +430,12 @@ static int _tls_send(void *vctx, const char *data, int size)
 	if (ret == MBEDTLS_ERR_SSL_WANT_WRITE)
 		ret = EINCOMPLETE;
 	else if (ret < 0)
+	{
+		char buffer[256];
+		mbedtls_strerror(ret, buffer, sizeof(buffer));
+		err("tls: send error %s", buffer);
 		ret = EREJECT;
+	}
 	return ret;
 }
 

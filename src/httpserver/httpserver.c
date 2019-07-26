@@ -53,9 +53,6 @@
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
 #include "dbentry.h"
-#ifdef TLS
-#include "mod_tls.h"
-#endif
 
 #ifndef HTTPMESSAGE_CHUNKSIZE
 #define HTTPMESSAGE_CHUNKSIZE 64
@@ -335,6 +332,39 @@ HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
 	return value;
 }
 
+HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *entry, char separator, char fieldsep)
+{
+	while (entry != NULL)
+	{
+		int i = 0;
+		while ((entry->key[i]) != '\0') i++;
+		((char *)entry->key)[i] = separator;
+
+		if (entry->key < entry->value)
+		{
+			int i = 0;
+			while ((entry->value[i]) != '\0') i++;
+			if ((fieldsep == '\r' || fieldsep == '\n') && entry->value[i + 1] == '\0')
+			{
+				((char *)entry->value)[i] = '\r';
+				((char *)entry->value)[i + 1] = '\n';
+			}
+			else
+				((char *)entry->value)[i] = fieldsep;
+		}
+		else
+		{
+			if ((fieldsep == '\r' || fieldsep == '\n') && entry->key[i + 1] == '\0')
+			{
+				((char *)entry->key)[i] = '\r';
+				((char *)entry->key)[i + 1] = '\n';
+			}
+		}
+
+		entry = entry->next;
+	}
+}
+
 HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry)
 {
 	while (entry)
@@ -353,6 +383,10 @@ int httpmessage_chunksize()
 }
 
 #ifdef HTTPCLIENT_FEATURES
+#ifdef TLS
+extern const httpclient_ops_t *tlsclient_ops;
+#endif
+
 http_message_t * httpmessage_create()
 {
 	http_message_t *client = _httpmessage_create(NULL, NULL);
@@ -397,7 +431,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 		const httpclient_ops_t *protocol_ops = tcpclient_ops;
 		void *protocol_ctx = NULL;
 #ifdef TLS
-		if (!strncmp(url, tlsclient_ops->scheme, 5))
+		if (tlsclient_ops && !strncmp(url, tlsclient_ops->scheme, 5))
 		{
 			protocol_ops = tlsclient_ops;
 			protocol_ctx = client;
@@ -749,6 +783,12 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_POSTHEADER:
 			{
+				/**
+				 * If the client send headers with only \n at end of each line
+				 * it is impossible to rebuild the header correctly.
+				 * This null character allows to add \r\n at the end of the headers.
+				 */
+				_buffer_append(message->headers_storage, "\0", 1);
 				if (_httpmessage_fillheaderdb(message) != ESUCCESS)
 				{
 					next = PARSE_END;
@@ -902,13 +942,19 @@ HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int ver
 
 HTTPMESSAGE_DECL buffer_t *_httpmessage_buildheader(http_message_t *message)
 {
+	if (message->headers != NULL)
+	{
+		dbentry_revert(message->headers, ':', '\n');
+		dbentry_destroy(message->headers);
+		message->headers = NULL;
+	}
 	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 	{
 		httpmessage_addheader(message, str_connection, "Keep-Alive");
 	}
 	else
 	{
-		httpmessage_addheader(message, str_connection, "Close");
+		//httpmessage_addheader(message, str_connection, "Close");
 	}
 	if (message->content_length != (unsigned long long)-1)
 	{
@@ -976,11 +1022,16 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 		else
 			return EINCOMPLETE;
 	}
+	if ((message->state & PARSE_MASK) == PARSE_END)
+	{
+		return ESUCCESS;
+	}
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
 	tempo.length = *size;
 	tempo.size = *size;
+
 	if ((message->state & PARSE_MASK) == PARSE_INIT)
 		message->state = PARSE_STATUS;
 	if (message->content_length == 0)
@@ -989,23 +1040,17 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	int ret = _httpmessage_parserequest(message, &tempo);
 	*size = tempo.length - (tempo.offset - tempo.data);
 	if (*size > 0)
+	{
 		_buffer_shrink(&tempo);
-
+		message->content = &tempo;
+	}
 	if ((message->state & PARSE_MASK) == PARSE_END)
 	{
 		if (*size > 0)
 		{
 			*size = 0;
 		}
-		/**
-		 * The request may not contain the ContentLength.
-		 * In this case the function must continue after the end.
-		 * The caller must stop by itself
-		 */
-		if (message->content_length == (unsigned long long)-1)
-			ret = ECONTINUE;
-		else
-			message->content = NULL;
+		ret = ECONTINUE;
 	}
 	return ret;
 }
@@ -1829,7 +1874,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				if ((request->response->state & PARSE_MASK) >= PARSE_POSTHEADER)
 				{
 					response->state = GENERATE_RESULT | (response->state & ~GENERATE_MASK);
-					_httpmessage_buildresponse(response, client->server->config->version, buffer);
+					_httpmessage_buildresponse(response,response->version, buffer);
 				}
 			}
 			ret = ECONTINUE;
@@ -3067,24 +3112,12 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 		}
 #endif
 	}
-	else if (!strcasecmp(key, "addr"))
-	{
-		struct sockaddr_in sin;
-		socklen_t len = sizeof(sin);
-		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
-		{
-			getnameinfo((struct sockaddr *) &sin, len,
-				host, NI_MAXHOST,
-				0, 0, NI_NUMERICHOST);
-			value = host;
-		}
-	}
 	return value;
 }
 
 const char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
-	if (message->client == NULL)
+	if (message->client == NULL || message->client->server == NULL)
 		return NULL;
 	const char *value = default_value;
 
@@ -3092,7 +3125,7 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
 		{
 			getnameinfo((struct sockaddr *) &sin, len,
 				0, 0,
@@ -3100,22 +3133,20 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 			value = service;
 		}
 	}
-	else if (!strcasecmp(key, "name"))
-	{
-		value = httpmessage_REQUEST(message, "Host");
-		if (value == NULL)
-			value = message->client->server->config->hostname;
-	}
 	else if (!strcasecmp(key, "addr"))
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		if (getsockname(message->client->server->sock, (struct sockaddr *)&sin, &len) == 0)
+		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
 		{
-			getnameinfo((struct sockaddr *) &sin, len,
+			int ret = getnameinfo((struct sockaddr *) &sin, len,
 				host, NI_MAXHOST,
 				0, 0, NI_NUMERICHOST);
 			value = host;
+		}
+		if (value != host)
+		{
+			value = message->client->server->config->addr;
 		}
 	}
 	else
@@ -3149,6 +3180,19 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 		if (message->method)
 			value = (char *)message->method->key;
 	}
+	else if (!strcasecmp(key, "result"))
+	{
+		int i = 0;
+		while (_http_message_result[i] != NULL)
+		{
+			if (_http_message_result[i]->result == message->result)
+			{
+				value = _http_message_result[i]->status;
+				break;
+			}
+			i++;
+		}
+	}
 	else if (!strcasecmp(key, "content"))
 	{
 		if (message->content != NULL)
@@ -3158,9 +3202,13 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, str_contenttype))
 	{
-		if (message->content != NULL)
+		if (message->content_type != NULL)
 		{
 			value = message->content_type;
+		}
+		if (value == default_value)
+		{
+			value = dbentry_search(message->headers, key);
 		}
 	}
 	else if (!strncasecmp(key, "remote_addr", 11))

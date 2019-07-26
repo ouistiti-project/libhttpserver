@@ -42,34 +42,65 @@
 #define dbg(...)
 #endif
 
+static int BASE64_encode1(const char *in, int inlen, char *out, int outlen);
+static int BASE64_encode2(const char *in, int inlen, char *out, int outlen);
 static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
 static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
 const base64_t *base64 = &(const base64_t)
 {
-	.encode = BASE64_encode,
+	.encode = BASE64_encode1,
 	.decode = BASE64_decode,
 };
 
-static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
+const base64_t *base64_urlencoding = &(const base64_t)
 {
-	base64_encodestate state;
-	base64_init_encodestate(&state);
+	.encode = BASE64_encode2,
+	.decode = BASE64_decode,
+};
 
+static int BASE64_encode1(const char *in, int inlen, char *out, int outlen)
+{
 #ifdef __LIBB64_URLENCODING
-	LIBB64_URLENCODING=1;
+	LIBB64_URLENCODING=0;
 #endif
 
-	int cnt = base64_encode_block(in, inlen, out, &state);
-	cnt += base64_encode_blockend(out + cnt, &state);
+	int ret;
+	ret = BASE64_encode(in, inlen, out, outlen);
 #ifndef __LIBB64_URLENCODING
 	char *offset = out;
 	while (*offset != '\0')
 	{
 		switch (*offset)
 		{
+			case '\n':
+				cnt = offset - out;
+				offset--;
+			break;
+		}
+		offset++;
+		printf("a\r");
+	}
+#endif
+	return ret;
+}
+
+static int BASE64_encode2(const char *in, int inlen, char *out, int outlen)
+{
+#ifdef __LIBB64_URLENCODING
+	LIBB64_URLENCODING=1;
+#endif
+
+	int ret;
+	ret = BASE64_encode(in, inlen, out, outlen);
+#ifndef __LIBB64_URLENCODING
+	char *offset = out;
+	while (*offset != '\0')
+	{
+		switch (*offset)
+		{
+			case '\n':
 			case '=':
 				*offset = '\0';
-			case '\n':
 				cnt = offset - out;
 				offset--;
 			break;
@@ -83,6 +114,16 @@ static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 		offset++;
 	}
 #endif
+	return ret;
+}
+
+static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
+{
+	base64_encodestate state;
+	base64_init_encodestate(&state);
+
+	int cnt = base64_encode_block(in, inlen, out, &state);
+	cnt += base64_encode_blockend(out + cnt, &state);
 
 	return cnt;
 }

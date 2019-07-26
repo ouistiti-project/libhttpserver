@@ -71,6 +71,8 @@ extern "C" {
 #include "httpserver.h"
 #include "_httpserver.h"
 
+#define tcp_dbg(...)
+
 #ifndef HAVE_GETNAMEINFO
 struct addrinfo
 {
@@ -172,6 +174,10 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 			ret = EREJECT;
 		//err("client %p recv error %s %d", client, strerror(errno), ret);
 	}
+	else
+	{
+		tcp_dbg("tcp recv %.*s", ret, data);
+	}
 	return ret;
 }
 
@@ -188,6 +194,10 @@ static int tcpclient_send(void *ctl, const char *data, int length)
 		else
 			ret = EREJECT;
 		//err("client %p send error %s %d", client, strerror(errno), ret);
+	}
+	else
+	{
+		tcp_dbg("tcp send %.*s", length, data);
 	}
 	return ret;
 }
