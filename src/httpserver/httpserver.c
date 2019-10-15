@@ -2447,7 +2447,8 @@ static int _httpserver_prepare(http_server_t *server)
 	{
 		if (httpclient_socket(client) > 0)
 		{
-			if (client->ops->status(client->opsctx) == ESUCCESS)
+			int status = client->ops->status(client->opsctx);
+			if (status == ESUCCESS)
 			{
 				/**
 				 * data already availlables.
@@ -2818,6 +2819,10 @@ static int _httpserver_run(http_server_t *server)
 #ifdef VTHREAD
 			//vthread_yield(server->thread);
 #else
+			/**
+			 * poll/select exit on timeout
+			 * Check if a client is still available
+			 */
 			int checkclients = 0;
 			http_client_t *client = server->clients;
 			while (client != NULL)

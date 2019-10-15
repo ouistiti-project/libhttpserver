@@ -176,7 +176,7 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 	}
 	else
 	{
-		tcp_dbg("tcp recv %.*s", ret, data);
+		tcp_dbg("tcp recv %d %.*s", ret, ret, data);
 	}
 	return ret;
 }
@@ -197,7 +197,7 @@ static int tcpclient_send(void *ctl, const char *data, int length)
 	}
 	else
 	{
-		tcp_dbg("tcp send %.*s", length, data);
+		tcp_dbg("tcp send %d %.*s", ret, length, data);
 	}
 	return ret;
 }
@@ -209,7 +209,7 @@ static int tcpclient_status(void *ctl)
 		return EREJECT;
 	int nbbytes = 0;
 	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
-	//dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
+	tcp_dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
 	if (ret < 0)
 		return EREJECT;
 	if (nbbytes == 0)
