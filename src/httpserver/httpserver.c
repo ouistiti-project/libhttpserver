@@ -483,7 +483,7 @@ HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, htt
 	{
 		message->result = RESULT_200;
 		message->client = client;
-//		message->content_length = (unsigned long long)-1);
+		message->content_length = (unsigned long long)-1;
 		if (parent)
 		{
 			parent->response = message;
@@ -984,12 +984,12 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 {
 	int size = 0;
 	int state = message->state & PARSE_MASK;
-	if (content_length)
+	if (content_length != NULL)
 	{
-		if (message->content_length <= 0)
-			*content_length = 0;
-		else
+		if (message->content_length != (unsigned long long)-1)
 			*content_length = message->content_length;
+		else
+			*content_length = 0;
 	}
 	if (message->content)
 	{
@@ -1141,11 +1141,13 @@ int httpmessage_addcontent(http_message_t *message, const char *type, char *cont
 
 	if (content != NULL)
 	{
+		_buffer_reset(message->content);
 		if (length == -1)
 			length = strlen(content);
 		_buffer_append(message->content, content, length);
 	}
-	if (message->content_length <= 0)
+
+	if (message->content_length == (unsigned long long)-1)
 	{
 		message->content_length = length;
 	}
@@ -1165,6 +1167,8 @@ int httpmessage_appendcontent(http_message_t *message, char *content, int length
 	{
 		if (length == -1)
 			length = strlen(content);
+		if (message->content_length != (unsigned long long)-1)
+			message->content_length += length;
 		_buffer_append(message->content, content, length);
 		return message->content->size - message->content->length;
 	}
@@ -1784,6 +1788,41 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 	return ret;
 }
 
+static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
+{
+	int ret = ECONTINUE;
+	if ((buffer != NULL) && (buffer->length > 0))
+	{
+		buffer->offset = buffer->data;
+		while (buffer->length > 0)
+		{
+			int size;
+			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
+			if (size == EINCOMPLETE)
+			{
+				ret = EINCOMPLETE;
+				break;
+			}
+			else if (size < 0)
+			{
+				err("client %p rest %d send error %s", client, buffer->length, strerror(errno));
+				/**
+				 * error on sending the communication is broken and the thread must die
+				 */
+				ret = ESUCCESS;
+				break;
+			}
+			buffer->length -= size;
+			buffer->offset += size;
+		}
+	}
+	else
+	{
+		dbg("empty buffer to send");
+	}
+	return ret;
+}
+
 /**
  * @brief This function build and send the response of the request
  *
@@ -1882,22 +1921,14 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		break;
 		case GENERATE_RESULT:
 		{
-			int size;
 			/**
 			 * here, it is the call to the sendresp callback from the
 			 * server configuration.
 			 * see http_server_config_t and httpserver_create
 			 */
-			buffer_t *buffer = response->header;
-			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
-			if (size < 0)
-			{
-				err("client %p RESULT send error %s", client, strerror(errno));
-				ret = EREJECT;
+			ret = _httpclient_sendpart(client, response->header);
+			if (ret != ECONTINUE)
 				break;
-			}
-			buffer->offset += size;
-			buffer->length -= size;
 
 			/**
 			 * for error the content must be set before the header
@@ -1911,34 +1942,17 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				httpmessage_appendcontent(response, (char *)"\n\r", 2);
 			}
 
-			if (buffer->length <= 0)
-			{
-				response->state = GENERATE_HEADER | (response->state & ~GENERATE_MASK);
-				_buffer_reset(buffer);
-				_httpmessage_buildheader(response);
-			}
-			ret = ECONTINUE;
+			response->state = GENERATE_HEADER | (response->state & ~GENERATE_MASK);
+			_buffer_reset(response->header);
+			_httpmessage_buildheader(response);
 		}
 		break;
 		case GENERATE_HEADER:
 		{
-			int size;
-			buffer_t *buffer = response->headers_storage;
-			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
-			if (size < 0)
-			{
-				err("client %p HEADER send error %s", client, strerror(errno));
-				ret = EREJECT;
+			ret = _httpclient_sendpart(client, response->headers_storage);
+			if (ret != ECONTINUE)
 				break;
-			}
-			buffer->offset += size;
-			buffer->length -= size;
-
-			if (buffer->length <= 0)
-			{
-				response->state = GENERATE_SEPARATOR | (response->state & ~GENERATE_MASK);
-			}
-			ret = ECONTINUE;
+			response->state = GENERATE_SEPARATOR | (response->state & ~GENERATE_MASK);
 		}
 		break;
 		case GENERATE_SEPARATOR:
@@ -1951,44 +1965,59 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				ret = EREJECT;
 				break;
 			}
+			client->ops->flush(client->opsctx);
 			if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
 				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
-			else
+			else if (response->content != NULL)
 			{
-				response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+				/**
+				 * send the first part of the content.
+				 * The next loop may append data into the content, but
+				 * the first part has to be already sent
+				 */
+				if (response->content_length != (unsigned long long) -1)
+					response->content_length -= response->content->length;
+				ret = _httpclient_sendpart(client, response->content);
+				if (ret != ECONTINUE || (response->content->length == 0 && !(response->state & PARSE_CONTINUE)))
+				{
+					_buffer_shrink(response->content);
+					response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
+				}
+				else
+					response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
 			}
-			client->ops->flush(client->opsctx);
-			ret = ECONTINUE;
+			else if (response->state & PARSE_CONTINUE)
+					response->state = GENERATE_CONTENT | (response->state & ~GENERATE_MASK);
+			else
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 		}
 		break;
 		case GENERATE_CONTENT:
 		{
-			int size;
-			buffer_t *buffer = response->content;
-			if ((response->state & PARSE_MASK) == PARSE_END)
-				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
-			if ((buffer != NULL) && (buffer->length > 0))
+			/**
+			 * The module may send data by itself (mod_sendfile).
+			 * In this case the content doesn't existe but the connector
+			 * has to be called
+			 */
+			if (response->content != NULL)
 			{
+				static long long sent = 0;
+				sent += response->content->length;
+				if (response->content_length != (unsigned long long) -1)
+					response->content_length -= response->content->length;
+				ret = _httpclient_sendpart(client, response->content);
+				//warn("sent 3 content %d %lld %lld", ret, response->content_length, sent);
+				//if ((response->content->length <= 0 ) && (response->state & PARSE_MASK) == PARSE_END)
+			}
+			if (ret != ECONTINUE || (response->content_length == 0 && !(response->state & PARSE_CONTINUE)))
+			{
+				response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 				ret = ECONTINUE;
-				buffer->offset = buffer->data;
-				while (buffer->length > 0)
-				{
-					size = client->client_send(client->send_arg, buffer->offset, buffer->length);
-					if (size == EINCOMPLETE)
-					{
-						ret = EINCOMPLETE;
-						break;
-					}
-					else if (size < 0)
-					{
-						err("client %p CONTENT rest %d send error %s", client, buffer->length, strerror(errno));
-						ret = EREJECT;
-						break;
-					}
-					buffer->length -= size;
-					buffer->offset += size;
-				}
-				_buffer_reset(buffer);
+			}
+			if (ret != ECONTINUE)
+			{
+				_buffer_shrink(response->content);
+				break;
 			}
 		}
 		break;
@@ -2418,7 +2447,8 @@ static int _httpserver_prepare(http_server_t *server)
 	{
 		if (httpclient_socket(client) > 0)
 		{
-			if (client->ops->status(client->opsctx) == ESUCCESS)
+			int status = client->ops->status(client->opsctx);
+			if (status == ESUCCESS)
 			{
 				/**
 				 * data already availlables.
@@ -2789,6 +2819,10 @@ static int _httpserver_run(http_server_t *server)
 #ifdef VTHREAD
 			//vthread_yield(server->thread);
 #else
+			/**
+			 * poll/select exit on timeout
+			 * Check if a client is still available
+			 */
 			int checkclients = 0;
 			http_client_t *client = server->clients;
 			while (client != NULL)

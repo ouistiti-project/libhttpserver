@@ -174,6 +174,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 					_mod_websocket_handshake(ctx, request, response);
 					httpmessage_addheader(response, str_connection, (char *)str_upgrade);
 					httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
+					/** disable Content-Type and Content-Length inside the headers **/
 					httpmessage_addcontent(response, "none", NULL, -1);
 					httpmessage_result(response, RESULT_101);
 					dbg("result 101");
@@ -348,6 +349,7 @@ static void *_websocket_main(void *arg)
 					char *out = calloc(1, length);
 					ret = websocket_unframed(buffer, ret, out, arg);
 					ret = send(client, out, ret, MSG_NOSIGNAL);
+					fsync(client);
 					free(out);
 				}
 				if (ret < 0)
