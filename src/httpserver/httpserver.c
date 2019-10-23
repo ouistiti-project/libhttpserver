@@ -1996,7 +1996,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				ret = _httpclient_sendpart(client, response->content);
 				if (ret != ECONTINUE || (response->content->length == 0 && !(response->state & PARSE_CONTINUE)))
 				{
-					_buffer_shrink(response->content);
 					response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 				}
 				else
