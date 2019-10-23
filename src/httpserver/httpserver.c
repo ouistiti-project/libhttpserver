@@ -2426,7 +2426,7 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 			ret = EREJECT;
 			break;
 		}
-
+		dbg("new module instance %s", mod->name);
 		if (mod->func)
 		{
 			modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
