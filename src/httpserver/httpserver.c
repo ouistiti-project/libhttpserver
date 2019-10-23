@@ -383,9 +383,19 @@ int httpmessage_chunksize()
 }
 
 #ifdef HTTPCLIENT_FEATURES
-#ifdef TLS
-extern const httpclient_ops_t *tlsclient_ops;
-#endif
+
+static httpclient_ops_t *httpclient_ops;
+
+void httpclient_appendops(httpclient_ops_t *ops)
+{
+	if (httpclient_ops == NULL)
+		httpclient_ops = ops;
+	else
+	{
+		ops->next = httpclient_ops;
+		httpclient_ops = ops;
+	}
+}
 
 http_message_t * httpmessage_create()
 {
@@ -422,21 +432,27 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 		host = strstr(url, "://");
 	if (host)
 	{
+		int schemelength = host - url;
 		host += 3;
 		char *pathname = strchr(host, '/');
 		if (pathname == NULL)
 			return NULL;
 		*pathname = 0;
 		pathname++;
-		const httpclient_ops_t *protocol_ops = tcpclient_ops;
+		const httpclient_ops_t *it_ops = httpclient_ops;
+		const httpclient_ops_t *protocol_ops = NULL;
 		void *protocol_ctx = NULL;
-#ifdef TLS
-		if (tlsclient_ops && !strncmp(url, tlsclient_ops->scheme, 5))
+		while (it_ops != NULL)
 		{
-			protocol_ops = tlsclient_ops;
-			protocol_ctx = client;
+			if (!strncmp(url, it_ops->scheme, schemelength))
+			{
+				protocol_ops = it_ops;
+				protocol_ctx = client;
+				break;
+			}
 		}
-#endif
+		if (protocol_ops)
+			return NULL;
 		int iport = protocol_ops->default_port;
 
 		char *port = strchr(host, ':');

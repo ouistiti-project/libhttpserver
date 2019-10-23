@@ -476,3 +476,8 @@ httpserver_ops_t *httpserver_ops = &(httpserver_ops_t)
 };
 
 //httpserver_ops_t *httpserver_ops __attribute__ ((weak, alias ("tcpops")));
+__attribute__((constructor))
+static void _init(void)
+{
+		httpclient_appendops((httpclient_ops_t *)tcpclient_ops);
+}

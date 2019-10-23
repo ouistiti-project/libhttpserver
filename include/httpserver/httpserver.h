@@ -166,6 +166,7 @@ typedef int (*http_send_t)(void *ctx, const char *data, int length);
 typedef void (*http_disconnect_t)(void *ctx);
 typedef void (*http_destroy_t)(void *ctx);
 
+typedef struct httpclient_ops_s httpclient_ops_t;
 struct httpclient_ops_s
 {
 	const char *scheme;
@@ -178,8 +179,11 @@ struct httpclient_ops_s
 	http_flush_t flush; /* callback to flush the socket */
 	http_disconnect_t disconnect; /* callback to close the socket */
 	http_destroy_t destroy; /* callback to close the socket */
+
+	httpclient_ops_t *next;
 };
-typedef struct httpclient_ops_s httpclient_ops_t;
+
+void httpclient_appendops(httpclient_ops_t *ops);
 
 /**
  * @brief callback to manage a request
