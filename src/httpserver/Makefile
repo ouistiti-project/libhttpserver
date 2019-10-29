@@ -19,7 +19,6 @@ httpserver_CFLAGS+=-I../../include/httpserver
 httpserver_CFLAGS-$(IPV6)+=-DIPV6
 httpserver_CFLAGS+=-DSERVER_DEFER_ACCEPT
 httpserver_CFLAGS+=-DUSE_POLL
-httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
 httpserver_CFLAGS-$(MBEDTLS)+=-DTLS
 httpserver_CFLAGS-$(WOLFSSL)+=-DTLS
 httpserver_CFLAGS-$(OPENSSL)+=-DTLS

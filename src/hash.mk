@@ -1,44 +1,3 @@
-lib-$(SHARED)+=hash_mod
-slib-$(STATIC)+=hash_mod
-
-hash_mod_SOURCES-y:=hash_default.c hash_libb64.c
-LIBMD5_DIR?=../md5-c
-LIBSHA1_DIR?=../libsha1
-ifneq ($(wildcard $(LIBMD5_DIR)/md5c.c),)
-  libmd5_dir:=$(realpath $(LIBMD5_DIR))
-  hash_mod_CFLAGS-y+=-I$(libmd5_dir)/../
-  hash_mod_CFLAGS-y+=-DMD5_RONRIVEST
-  hash_mod_SOURCES-y+=$(LIBMD5_DIR)/md5c.c
-else
-  hash_mod_SOURCES-y+=md5/md5.c
-endif
-
-ifneq ($(wildcard $(LIBSHA1_DIR)/sha1.c),)
-  libsha1_dir:=$(realpath $(LIBSHA1_DIR))
-  hash_mod_CFLAGS-y+=-I$(libsha1_dir)/
-  hash_mod_CFLAGS-y+=-DLIBSHA1
-  hash_mod_SOURCES-y+=$(LIBSHA1_DIR)/sha1.c
-else
-  hash_mod_LIBS-y+=sha1
-endif
-
-# reinitialization of VARIABLES if OPENSSL
-hash_mod_SOURCES-$(OPENSSL):=hash_openssl.c
-hash_mod_CFLAGS-$(OPENSSL):=-DOPENSSL
-hash_mod_LIBS-$(OPENSSL):=crypto
-
-# reinitialization of VARIABLES if WOLFSSL
-hash_mod_SOURCES-$(WOLFSSL):=hash_wolfssl.c
-hash_mod_CFLAGS-$(WOLFSSL):=-DWOLFSSL
-hash_mod_LIBS-$(WOLFSSL):=wolfssl
-
-# reinitialization of VARIABLES if MBEDTLS
-hash_mod_SOURCES-$(MBEDTLS):=hash_mbedtls.c
-hash_mod_CFLAGS-$(MBEDTLS):=-DMBEDTLS
-hash_mod_LIBS-$(MBEDTLS):=mbedtls
-
-hash_mod_CFLAGS+=-I../include
-
 ifeq ($(MBEDTLS),y)
 LIBB64:=y
 endif
@@ -49,17 +8,67 @@ ifeq ($(WOLFSSL),y)
 LIBB64?=y
 endif
 
+LIBB64_DIR?=libb64
+
+download-$(LIBB64_DL)+=libb64
+libb64_SOURCE=libb64
+#libb64_SITE=https://github.com/ouistiti-project/libb64.git
+libb64_SITE=/home/mch/Projects/libb64
+libb64_SITE_METHOD=git
+
+subdir-$(LIBB64_DL)+=src/$(LIBB64_DIR)
+libb64_CONFIGURE=echo configure
+
+ifeq ($(LIBMD5_RONRIVEST), )
+LIBMD5_DIR?=md5-c
+endif
+
+LIBSHA1_DIR?=libsha1
+
+lib-$(SHARED)+=hash_mod
+slib-$(STATIC)+=hash_mod
+hostslib-y+=hash_mod
+
+ifeq ($(findstring y,$(OPENSSL)$(WOLFSSL)$(MBEDTLS)), )
+hash_mod_SOURCES:=hash_default.c
+endif
+
+hash_mod_CFLAGS-$(LIBMD5_RONRIVEST)+=-I$(dirname $(LIBMD5_DIR))
+hash_mod_CFLAGS-$(LIBMD5_RONRIVEST)+=-DMD5_RONRIVEST
+hash_mod_SOURCES-$(LIBMD5_RONRIVEST)+=$(LIBMD5_DIR)/md5c.c
+
+hash_mod_SOURCES-$(LIBMD5)+=md5/md5.c
+
+ifneq ($(wildcard $(LIBSHA1_DIR)/sha1.c),)
+	hash_mod_CFLAGS-$(LIBSHA1)+=-I$(LIBSHA1_DIR)/
+	hash_mod_CFLAGS-$(LIBSHA1)+=-DLIBSHA1
+	hash_mod_SOURCES-$(LIBSHA1)+=$(LIBSHA1_DIR)/sha1.c
+else
+	hash_mod_LIBS-$(LIBSHA1)+=sha1
+endif
+
+# reinitialization of VARIABLES if OPENSSL
+hash_mod_SOURCES-$(OPENSSL):=hash_openssl.c
+hash_mod_LIBS-$(OPENSSL):=crypto
+
+# reinitialization of VARIABLES if WOLFSSL
+hash_mod_SOURCES-$(WOLFSSL):=hash_wolfssl.c
+hash_mod_LIBS-$(WOLFSSL):=wolfssl
+
+# reinitialization of VARIABLES if MBEDTLS
+hash_mod_SOURCES-$(MBEDTLS):=hash_mbedtls.c
+hash_mod_LIBS-$(MBEDTLS):=mbedcrypto
+
+hash_mod_CFLAGS+=-I../include
+
 hash_mod_SOURCES-$(LIBB64)+=hash_libb64.c
-hash_mod_CFLAGS-$(LIBB64)+=-DLIBB64
 
 hash_mod_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
-LIBB64_DIR?=$(srcdir)/libb64
 ifeq ($(LIBB64),y)
   ifneq ($(wildcard $(LIBB64_DIR)/src/cdecode.c),)
-    libb64_dir:=$(realpath $(LIBB64_DIR))
-    hash_mod_CFLAGS+=-I$(libb64_dir)/include/
-    hash_mod_LDFLAGS+=-L$(libb64_dir)/src -L$(libb64_dir)/src
+    hash_mod_CFLAGS+=-I$(LIBB64_DIR)/include/
+    hash_mod_LDFLAGS+=-L$(LIBB64_DIR)/src -L$(LIBB64_DIR)/src
     hash_mod_SOURCES+=$(LIBB64_DIR)/src/cdecode.c
     hash_mod_SOURCES+=$(LIBB64_DIR)/src/cencode.c
   else
