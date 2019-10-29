@@ -20,6 +20,7 @@ subdir-$(LIBUTILS)+=src/utils.mk
 subdir-$(LIBHASH)+=src/hash.mk
 subdir-$(WOLFSSL)+=src/mod_wolfssl.mk
 subdir-$(MBEDTLS)+=src/mod_mbedtls.mk
+subdir-$(OPENSSL)+=src/mod_openssl.mk
 subdir-$(WEBSOCKET)+=src/mod_websocket.mk
 subdir-$(FORMPARSER)+=src/mod_formparser.mk
 subdir-$(DATE)+=src/mod_date.mk

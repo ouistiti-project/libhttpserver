@@ -39,9 +39,15 @@ hash_mod_LIBS-$(MBEDTLS):=mbedtls
 
 hash_mod_CFLAGS+=-I../include
 
-LIBB64:=$(MBEDTLS)
-LIBB64:=$(OPENSSL)
-LIBB64:=$(WOLFSSL)
+ifeq ($(MBEDTLS),y)
+LIBB64:=y
+endif
+ifeq ($(OPENSSL),y)
+LIBB64?=y
+endif
+ifeq ($(WOLFSSL),y)
+LIBB64?=y
+endif
 
 hash_mod_SOURCES-$(LIBB64)+=hash_libb64.c
 hash_mod_CFLAGS-$(LIBB64)+=-DLIBB64
