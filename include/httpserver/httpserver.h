@@ -441,7 +441,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
  *
  * @return the space available into the chunk of content
  */
-int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length);
+int httpmessage_addcontent(http_message_t *message, const char *type, const char *content, int length);
 
 /**
  * @brief append data to content of the response message before sending

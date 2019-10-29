@@ -1137,7 +1137,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 	_buffer_append(message->headers_storage, "\r\n", 2);
 }
 
-int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
+int httpmessage_addcontent(http_message_t *message, const char *type, const char *content, int length)
 {
 	if (message->content == NULL)
 	{
