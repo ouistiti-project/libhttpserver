@@ -247,15 +247,26 @@ const char *cookie_get(http_message_t *request, const char *key)
 
 void cookie_set(http_message_t *response, const char *key, const char *value)
 {
-	char *keyvalue = malloc(strlen(key) + 1 + strlen(value) + 1);
-	sprintf(keyvalue, "%s=%s", key, value);
+	const char *domain = httpmessage_SERVER(response, "domain");
+	char *keyvalue = NULL;
+	if (domain != NULL)
+	{
+		keyvalue = malloc(strlen(key) + 1 + strlen(value) + 18 + strlen(domain) + 1);
+		sprintf(keyvalue, "%s=%s; Path=/; Domain=.%s", key, value, domain);
+	}
+	else
+	{
+		keyvalue = malloc(strlen(key) + 1 + strlen(value) + 8 + 1);
+		sprintf(keyvalue, "%s=%s; Path=/", key, value);
+	}
 	httpmessage_addheader(response, str_SetCookie, keyvalue);
+	dbg("cookie: new %s", keyvalue);
 	free(keyvalue);
 }
 
 const module_t mod_cookie =
 {
-	.name = str_cookie,
+	.name = "cookie",
 	.create = (module_create_t)mod_cookie_create,
 	.destroy = mod_cookie_destroy
 };

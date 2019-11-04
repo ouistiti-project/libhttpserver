@@ -403,7 +403,7 @@ const char *cookie_get(http_message_t *request, const char *key)
 	return value;
 }
 
-void cookie_set(http_message_t *response, const char *key, char *value)
+void cookie_set(http_message_t *response, const char *key, const char *value)
 {
 	char *keyvalue = malloc(strlen(key) + 1 + strlen(value) + 1);
 	sprintf(keyvalue, "%s=%s", key, value);
