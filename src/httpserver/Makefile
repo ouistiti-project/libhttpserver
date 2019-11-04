@@ -12,6 +12,7 @@ endif
 
 lib-$(DLIB_HTTPSERVER)+=httpserver
 slib-$(SLIB_HTTPSERVER)+=httpserver
+hostslib-y+=httpserver
 httpserver_SOURCES+=httpserver.c tcpserver.c
 httpserver_CFLAGS+=-I../../include/httpserver
 # SERVER_DEFER_ACCEPT may protect the client connection from some exceptions.
@@ -19,7 +20,6 @@ httpserver_CFLAGS+=-I../../include/httpserver
 httpserver_CFLAGS-$(IPV6)+=-DIPV6
 httpserver_CFLAGS+=-DSERVER_DEFER_ACCEPT
 httpserver_CFLAGS+=-DUSE_POLL
-httpserver_CFLAGS-$(HTTPCLIENT_FEATURES)+=-DHTTPCLIENT_FEATURES
 httpserver_CFLAGS-$(MBEDTLS)+=-DTLS
 httpserver_CFLAGS-$(WOLFSSL)+=-DTLS
 httpserver_CFLAGS-$(OPENSSL)+=-DTLS
@@ -49,17 +49,19 @@ else ifeq ($(VTHREAD_TYPE),pthread)
 httpserver_LIBRARY-$(VTHREAD)+=pthread
 endif
 httpserver_SOURCES-$(VTHREAD)+=vthread_$(VTHREAD_TYPE).c
-httpserver_CFLAGS-$(VTHREAD)+=-DVTHREAD
 vthread_pthread_CFLAGS+=-DHAVE_SCHED_YIELD
 vthread_fork_CFLAGS+=-DHAVE_SCHED_YIELD
 
 lib-$(DLIB_URI)+=uri
 slib-$(SLIB_URI)+=uri
+hostslib-y+=uri
+
 uri_SOURCES+=uri.c
 uri_CFLAGS+=-I../../include/httpserver
 
 lib-$(DLIB_WEBSOCKET)+=websocket
 slib-$(SLIB_WEBSOCKET)+=websocket
+hostslib-$(WEBSOCKET)+=websocket
 websocket_SOURCES+=websocket.c
 websocket_CFLAGS+=-I../../include/httpserver
 

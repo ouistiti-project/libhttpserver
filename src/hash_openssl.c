@@ -29,6 +29,7 @@
 
 #include <openssl/conf.h>
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 #include "httpserver/hash.h"
 #include "httpserver/log.h"
@@ -39,6 +40,10 @@ static void *SHA256_init();
 static void *SHA512_init();
 static void HASH_update(void *ctx, const char *in, size_t len);
 static int HASH_finish(void *ctx, char *out);
+
+static void *HMAC_initkey(const char *key, int keylen);
+static void HMAC_update(void *ctx, const char *in, size_t len);
+static int HMAC_finish(void *ctx, char *out);
 
 const hash_t *hash_md5 = &(const hash_t)
 {
@@ -73,6 +78,15 @@ const hash_t *hash_sha512 = &(const hash_t)
 	.update = HASH_update,
 	.finish = HASH_finish,
 };
+const hash_t *hash_macsha256 = &(const hash_t)
+{
+	.size = 32,
+	.name = "HMACSHA256",
+	.initkey = HMAC_initkey,
+	.update = HMAC_update,
+	.finish = HMAC_finish,
+};
+
 
 static void *MD5_init()
 {
@@ -118,3 +132,30 @@ static int HASH_finish(void *ctx, char *out)
 	EVP_DigestFinal_ex(pctx, out, &len);
 	EVP_MD_CTX_destroy(pctx);
 }
+
+static void *HMAC_initkey(const char *key, int keylen)
+{
+	dbg("HMAC 1");
+	HMAC_CTX *pctx = HMAC_CTX_new();
+	HMAC_Init_ex(pctx, key, keylen, EVP_sha256(), NULL);
+	dbg("HMAC 2");
+	return pctx;
+}
+
+static void HMAC_update(void *ctx, const char *input, size_t len)
+{
+	dbg("HMAC 3");
+	HMAC_Update(ctx, input, len);
+	dbg("HMAC 4");
+}
+
+static int HMAC_finish(void *ctx, char *output)
+{
+	dbg("HMAC 4");
+	int len = 32;
+	HMAC_Final(ctx, output, &len);
+	HMAC_CTX_free(ctx);
+	dbg("HMAC 5");
+	return len;
+}
+

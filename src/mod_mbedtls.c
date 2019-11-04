@@ -100,7 +100,8 @@ struct _mod_mbedtls_config_s
 };
 
 static http_server_config_t mod_mbedtls_config;
-static const httpclient_ops_t *tlsserver_ops;
+static const httpclient_ops_t *_tlsclient_ops;
+static const httpclient_ops_t *_tlsserver_ops;
 
 void *mod_mbedtls_create(http_server_t *server, char *vhost, mod_tls_t *modconfig)
 {
@@ -191,7 +192,7 @@ void *mod_mbedtls_create(http_server_t *server, char *vhost, mod_tls_t *modconfi
 			err("mbedtls_dhm_parse_dhmfile %d\n", ret);
 	}
 
-	config->protocolops = httpserver_changeprotocol(server, tlsserver_ops, config);
+	config->protocolops = httpserver_changeprotocol(server, _tlsserver_ops, config);
 	config->protocol = server;
 	config->vhost = vhost;
 	return config;
@@ -462,7 +463,7 @@ static void _tls_flush(void *vctx)
 	return ctx->protocolops->flush(ctx->protocol);
 }
 
-static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
+static const httpclient_ops_t *_tlsserver_ops = &(httpclient_ops_t)
 {
 	.scheme = str_https,
 	.default_port = 443,
@@ -475,7 +476,7 @@ static const httpclient_ops_t *tlsserver_ops = &(httpclient_ops_t)
 	.destroy = _tls_destroy,
 };
 
-const httpclient_ops_t *tlsclient_ops = &(httpclient_ops_t)
+static const httpclient_ops_t *_tlsclient_ops = &(httpclient_ops_t)
 {
 	.scheme = str_https,
 	.default_port = 443,
@@ -497,4 +498,12 @@ const module_t mod_tls =
 };
 #ifdef MODULES
 extern module_t mod_info __attribute__ ((weak, alias ("mod_tls")));
+#endif
+
+#ifdef HTTPCLIENT_FEATURES
+__attribute__((constructor))
+static void _init(void)
+{
+		httpclient_appendops((httpclient_ops_t *)_tlsclient_ops);
+}
 #endif

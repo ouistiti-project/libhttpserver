@@ -5,9 +5,6 @@ slib-y+=mod_websocket
 mod_websocket_LDFLAGS+=-L../utils
 mod_websocket_SOURCES-$(WEBSOCKET)+=mod_websocket.c
 mod_websocket_CFLAGS+=-I../include
-mod_websocket_CFLAGS+=-DWEBSOCKET
-mod_websocket_CFLAGS-$(MODULES)+=-DMODULES
-mod_websocket_CFLAGS-$(VTHREAD)+=-DVTHREAD
 mod_websocket_LIBS+=websocket
 mod_websocket_LIBS+=hash_mod
 

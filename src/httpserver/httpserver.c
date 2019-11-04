@@ -383,9 +383,19 @@ int httpmessage_chunksize()
 }
 
 #ifdef HTTPCLIENT_FEATURES
-#ifdef TLS
-extern const httpclient_ops_t *tlsclient_ops;
-#endif
+
+static httpclient_ops_t *httpclient_ops;
+
+void httpclient_appendops(httpclient_ops_t *ops)
+{
+	if (httpclient_ops == NULL)
+		httpclient_ops = ops;
+	else
+	{
+		ops->next = httpclient_ops;
+		httpclient_ops = ops;
+	}
+}
 
 http_message_t * httpmessage_create()
 {
@@ -422,21 +432,27 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 		host = strstr(url, "://");
 	if (host)
 	{
+		int schemelength = host - url;
 		host += 3;
 		char *pathname = strchr(host, '/');
 		if (pathname == NULL)
 			return NULL;
 		*pathname = 0;
 		pathname++;
-		const httpclient_ops_t *protocol_ops = tcpclient_ops;
+		const httpclient_ops_t *it_ops = httpclient_ops;
+		const httpclient_ops_t *protocol_ops = NULL;
 		void *protocol_ctx = NULL;
-#ifdef TLS
-		if (tlsclient_ops && !strncmp(url, tlsclient_ops->scheme, 5))
+		while (it_ops != NULL)
 		{
-			protocol_ops = tlsclient_ops;
-			protocol_ctx = client;
+			if (!strncmp(url, it_ops->scheme, schemelength))
+			{
+				protocol_ops = it_ops;
+				protocol_ctx = client;
+				break;
+			}
 		}
-#endif
+		if (protocol_ops)
+			return NULL;
 		int iport = protocol_ops->default_port;
 
 		char *port = strchr(host, ':');
@@ -1121,7 +1137,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 	_buffer_append(message->headers_storage, "\r\n", 2);
 }
 
-int httpmessage_addcontent(http_message_t *message, const char *type, char *content, int length)
+int httpmessage_addcontent(http_message_t *message, const char *type, const char *content, int length)
 {
 	if (message->content == NULL)
 	{
@@ -1980,7 +1996,6 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				ret = _httpclient_sendpart(client, response->content);
 				if (ret != ECONTINUE || (response->content->length == 0 && !(response->state & PARSE_CONTINUE)))
 				{
-					_buffer_shrink(response->content);
 					response->state = GENERATE_END | (response->state & ~GENERATE_MASK);
 				}
 				else
@@ -2411,7 +2426,7 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 			ret = EREJECT;
 			break;
 		}
-
+		dbg("new module instance %s", mod->name);
 		if (mod->func)
 		{
 			modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
