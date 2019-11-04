@@ -2932,12 +2932,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	server->protocol_ops = tcpclient_ops;
 	server->protocol = server;
 
-	server->protocol_ops = tcpclient_ops;
-	server->protocol = server;
-
-	server->protocol_ops = tcpclient_ops;
-	server->protocol = server;
-
 	_maxclients += server->config->maxclients;
 	nice(-4);
 #ifdef USE_POLL
@@ -3123,6 +3117,11 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	if (!strcasecmp(key, "name") || !strcasecmp(key, "host") || !strcasecmp(key, "hostname"))
 	{
 		value = server->config->hostname;
+	}
+	else if (!strcasecmp(key, "domain"))
+	{
+		value = strchr(server->config->hostname, '.');
+		value ++;
 	}
 	else if (!strcasecmp(key, "software"))
 	{
