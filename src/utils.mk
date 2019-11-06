@@ -1,7 +1,7 @@
-lib-$(SHARED)+=utils_mod
-slib-$(STATIC)+=utils_mod
-utils_mod_SOURCES=utils.c
-utils_mod_CFLAGS+=-I../include
+lib-$(SHARED)+=ouiutils
+slib-$(STATIC)+=ouiutils
+ouiutils_SOURCES=utils.c
+ouiutils_CFLAGS+=-I../include
 
-utils_mod_CFLAGS-$(DEBUG)+=-g -DDEBUG
+ouiutils_CFLAGS-$(DEBUG)+=-g -DDEBUG
 

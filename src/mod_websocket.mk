@@ -6,7 +6,7 @@ mod_websocket_LDFLAGS+=-L../utils
 mod_websocket_SOURCES-$(WEBSOCKET)+=mod_websocket.c
 mod_websocket_CFLAGS+=-I../include
 mod_websocket_LIBS+=websocket
-mod_websocket_LIBS+=hash_mod
+mod_websocket_LIBS+=ouihash
 
 mod_websocket_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
