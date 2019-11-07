@@ -2026,7 +2026,17 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				static long long sent = 0;
 				sent += response->content->length;
 				if (response->content_length != (unsigned long long) -1)
-					response->content_length -= response->content->length;
+				{
+
+					/**
+					 * if for any raison the content_length is not the real
+					 * size of the content the following condition must stop
+					 * the request
+					 */
+					response->content_length -=
+						(response->content_length < response->content->length)?
+						response->content_length : response->content->length;
+				}
 				ret = _httpclient_sendpart(client, response->content);
 				//warn("sent 3 content %d %lld %lld", ret, response->content_length, sent);
 				//if ((response->content->length <= 0 ) && (response->state & PARSE_MASK) == PARSE_END)
