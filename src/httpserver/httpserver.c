@@ -58,6 +58,8 @@
 #define HTTPMESSAGE_CHUNKSIZE 64
 #endif
 
+#define message_dbg(...)
+
 extern httpserver_ops_t *httpserver_ops;
 
 struct http_connector_list_s
@@ -1120,7 +1122,8 @@ HTTPMESSAGE_DECL int _httpmessage_runconnector(http_message_t *request, http_mes
 	http_connector_list_t *connector = request->connector;
 	if (connector && connector->func)
 	{
-		ret = connector->func(connector->arg, request, response);
+		message_dbg("message %p connector \"%s\"", client, iterator->name);
+		ret = connector->func(&connector->arg, request, response);
 	}
 	return ret;
 }
@@ -1579,7 +1582,8 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 
 		if (vhost == NULL && iterator->func)
 		{
-			ret = iterator->func(iterator->arg, request, response);
+			dbg("client %p connector \"%s\"", client, iterator->name);
+			ret = iterator->func(&iterator->arg, request, response);
 			if (ret != EREJECT)
 			{
 				if (ret == ESUCCESS)
@@ -1754,6 +1758,9 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		 */
 		if ((request->response->state & PARSE_MASK) < PARSE_END)
 		{
+			/*
+			 * the connector should run only on pushed request
+			 */
 			if (request->connector == NULL)
 				ret = _httpclient_checkconnector(client, request, request->response);
 			else

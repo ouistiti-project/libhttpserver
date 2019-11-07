@@ -43,7 +43,7 @@ typedef struct _mod_cookie_s _mod_cookie_t;
 
 static void *_mod_cookie_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize);
 static void _mod_cookie_freectx(void *vctx);
-static int _cookie_connector(void *arg, http_message_t *request, http_message_t *response);
+static int _cookie_connector(void **arg, http_message_t *request, http_message_t *response);
 
 static const char str_cookie[] = "Cookie";
 static const char str_Cookie[] = "Cookie";
@@ -132,9 +132,9 @@ void _cookie_free(_cookiesession_t *cookie)
 	free(cookie);
 }
 
-static int _cookie_connector(void *arg, http_message_t *request, http_message_t *response)
+static int _cookie_connector(void **arg, http_message_t *request, http_message_t *response)
 {
-	_mod_cookie_ctx_t *ctx = (_mod_cookie_ctx_t *)arg;
+	_mod_cookie_ctx_t *ctx = (_mod_cookie_ctx_t *)*arg;
 	_mod_cookie_t *mod = ctx->mod;
 
 	const char *data = httpmessage_REQUEST(request, str_Cookie);
