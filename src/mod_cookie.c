@@ -43,7 +43,7 @@ typedef struct _mod_cookie_s _mod_cookie_t;
 
 static void *_mod_cookie_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize);
 static void _mod_cookie_freectx(void *vctx);
-static int _cookie_connector(void *arg, http_message_t *request, http_message_t *response);
+static int _cookie_connector(void **arg, http_message_t *request, http_message_t *response);
 
 static const char str_cookie[] = "Cookie";
 static const char str_Cookie[] = "Cookie";
@@ -132,9 +132,9 @@ void _cookie_free(_cookiesession_t *cookie)
 	free(cookie);
 }
 
-static int _cookie_connector(void *arg, http_message_t *request, http_message_t *response)
+static int _cookie_connector(void **arg, http_message_t *request, http_message_t *response)
 {
-	_mod_cookie_ctx_t *ctx = (_mod_cookie_ctx_t *)arg;
+	_mod_cookie_ctx_t *ctx = (_mod_cookie_ctx_t *)*arg;
 	_mod_cookie_t *mod = ctx->mod;
 
 	const char *data = httpmessage_REQUEST(request, str_Cookie);
@@ -247,15 +247,26 @@ const char *cookie_get(http_message_t *request, const char *key)
 
 void cookie_set(http_message_t *response, const char *key, const char *value)
 {
-	char *keyvalue = malloc(strlen(key) + 1 + strlen(value) + 1);
-	sprintf(keyvalue, "%s=%s", key, value);
+	const char *domain = httpmessage_SERVER(response, "domain");
+	char *keyvalue = NULL;
+	if (domain != NULL)
+	{
+		keyvalue = malloc(strlen(key) + 1 + strlen(value) + 18 + strlen(domain) + 1);
+		sprintf(keyvalue, "%s=%s; Path=/; Domain=.%s", key, value, domain);
+	}
+	else
+	{
+		keyvalue = malloc(strlen(key) + 1 + strlen(value) + 8 + 1);
+		sprintf(keyvalue, "%s=%s; Path=/", key, value);
+	}
 	httpmessage_addheader(response, str_SetCookie, keyvalue);
+	dbg("cookie: new %s", keyvalue);
 	free(keyvalue);
 }
 
 const module_t mod_cookie =
 {
-	.name = str_cookie,
+	.name = "cookie",
 	.create = (module_create_t)mod_cookie_create,
 	.destroy = mod_cookie_destroy
 };

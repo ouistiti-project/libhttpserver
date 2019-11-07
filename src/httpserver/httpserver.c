@@ -58,6 +58,8 @@
 #define HTTPMESSAGE_CHUNKSIZE 64
 #endif
 
+#define message_dbg(...)
+
 extern httpserver_ops_t *httpserver_ops;
 
 struct http_connector_list_s
@@ -1120,7 +1122,8 @@ HTTPMESSAGE_DECL int _httpmessage_runconnector(http_message_t *request, http_mes
 	http_connector_list_t *connector = request->connector;
 	if (connector && connector->func)
 	{
-		ret = connector->func(connector->arg, request, response);
+		message_dbg("message %p connector \"%s\"", client, iterator->name);
+		ret = connector->func(&connector->arg, request, response);
 	}
 	return ret;
 }
@@ -1579,7 +1582,8 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 
 		if (vhost == NULL && iterator->func)
 		{
-			ret = iterator->func(iterator->arg, request, response);
+			dbg("client %p connector \"%s\"", client, iterator->name);
+			ret = iterator->func(&iterator->arg, request, response);
 			if (ret != EREJECT)
 			{
 				if (ret == ESUCCESS)
@@ -1754,6 +1758,9 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		 */
 		if ((request->response->state & PARSE_MASK) < PARSE_END)
 		{
+			/*
+			 * the connector should run only on pushed request
+			 */
 			if (request->connector == NULL)
 				ret = _httpclient_checkconnector(client, request, request->response);
 			else
@@ -2019,7 +2026,17 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				static long long sent = 0;
 				sent += response->content->length;
 				if (response->content_length != (unsigned long long) -1)
-					response->content_length -= response->content->length;
+				{
+
+					/**
+					 * if for any raison the content_length is not the real
+					 * size of the content the following condition must stop
+					 * the request
+					 */
+					response->content_length -=
+						(response->content_length < response->content->length)?
+						response->content_length : response->content->length;
+				}
 				ret = _httpclient_sendpart(client, response->content);
 				//warn("sent 3 content %d %lld %lld", ret, response->content_length, sent);
 				//if ((response->content->length <= 0 ) && (response->state & PARSE_MASK) == PARSE_END)
@@ -2932,12 +2949,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	server->protocol_ops = tcpclient_ops;
 	server->protocol = server;
 
-	server->protocol_ops = tcpclient_ops;
-	server->protocol = server;
-
-	server->protocol_ops = tcpclient_ops;
-	server->protocol = server;
-
 	_maxclients += server->config->maxclients;
 	nice(-4);
 #ifdef USE_POLL
@@ -3123,6 +3134,11 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	if (!strcasecmp(key, "name") || !strcasecmp(key, "host") || !strcasecmp(key, "hostname"))
 	{
 		value = server->config->hostname;
+	}
+	else if (!strcasecmp(key, "domain"))
+	{
+		value = strchr(server->config->hostname, '.');
+		value ++;
 	}
 	else if (!strcasecmp(key, "software"))
 	{
