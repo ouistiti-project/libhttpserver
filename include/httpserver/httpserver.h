@@ -259,6 +259,8 @@ extern char *httpserver_software;
  */
 http_server_t *httpserver_create(http_server_config_t *config);
 
+http_server_t *httpserver_dup(http_server_t *server);
+
 /**
  * @brief get value for different attributs of the server
  *

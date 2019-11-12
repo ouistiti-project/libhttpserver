@@ -2954,6 +2954,23 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	return server;
 }
 
+http_server_t *httpserver_dup(http_server_t *server)
+{
+	http_server_t *vserver;
+
+	vserver = vcalloc(1, sizeof(*vserver));
+	if (vserver == NULL)
+		return NULL;
+	vserver->config = server->config;
+	vserver->ops = server->ops;
+	vserver->methods = (http_message_method_t *)default_methods;
+
+	vserver->protocol_ops = server->protocol_ops;
+	vserver->protocol = server->protocol;
+
+	return vserver;
+}
+
 void httpserver_addmethod(http_server_t *server, const char *key, short properties)
 {
 	short id = 0;
