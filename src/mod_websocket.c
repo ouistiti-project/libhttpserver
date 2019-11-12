@@ -117,10 +117,10 @@ static int _checkname(mod_websocket_t *config, char *pathname)
 	return ESUCCESS;
 }
 
-static int websocket_connector(void **arg, http_message_t *request, http_message_t *response)
+static int websocket_connector(void *arg, http_message_t *request, http_message_t *response)
 {
 	int ret = EREJECT;
-	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)*arg;
+	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)arg;
 
 	if (ctx->filepath == NULL)
 	{

@@ -1122,7 +1122,7 @@ HTTPMESSAGE_DECL int _httpmessage_runconnector(http_message_t *request, http_mes
 	if (connector && connector->func)
 	{
 		message_dbg("message %p connector \"%s\"", client, iterator->name);
-		ret = connector->func(&connector->arg, request, response);
+		ret = connector->func(connector->arg, request, response);
 	}
 	return ret;
 }
@@ -1564,7 +1564,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 		if (iterator->func)
 		{
 			dbg("client %p connector \"%s\"", client, iterator->name);
-			ret = iterator->func(&iterator->arg, request, response);
+			ret = iterator->func(iterator->arg, request, response);
 			if (ret != EREJECT)
 			{
 				if (ret == ESUCCESS)

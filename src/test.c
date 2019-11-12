@@ -59,7 +59,7 @@ struct test_config_s
 struct test_config_s *ptest_config = &test_config;
 int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
-	struct test_config_s *ptest_config = arg;
+	struct test_config_s *ptest_config = (struct test_config_s *)arg;
 	char * test = strstr(httpmessage_REQUEST(request, "uri"), "test");
 	if (test == NULL)
 		return EREJECT;

@@ -142,10 +142,10 @@ static int _mod_form_urlencoded_send(void *vctx, char *data, int size)
 static const char empty[] = "";
 static const char _form_urlencoded_mime[] = "application/x-www-form-urlencoded";
 static const char _multipart_form_data_mime[] = "multipart/form-data";
-static int _form_connector(void **arg, http_message_t *request, http_message_t *response)
+static int _form_connector(void *arg, http_message_t *request, http_message_t *response)
 {
 	int ret = EREJECT;
-	_mod_form_urlencoded_t *ctx = (_mod_form_urlencoded_t *)*arg;
+	_mod_form_urlencoded_t *ctx = (_mod_form_urlencoded_t *)arg;
 	_mod_form_urlencoded_config_t *config = ctx->config;
 
 	char *content_type = httpmessage_REQUEST(request, "Content-Type");
