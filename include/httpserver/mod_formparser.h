@@ -39,8 +39,7 @@ typedef struct mod_form_urlencoded_s
 	char version_l;
 } mod_form_urlencoded_t;
 
-void *mod_form_urlencoded_create(http_server_t *server, mod_form_urlencoded_t *modconfig);
-void mod_form_urlencoded_destroy(void *mod);
+extern const module_t mod_form_urlencoded;
 char *mod_form_urlencoded_post(http_message_t *message, char *key);
 
 #ifdef __cplusplus

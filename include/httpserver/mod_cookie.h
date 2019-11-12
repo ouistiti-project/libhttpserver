@@ -36,8 +36,6 @@ extern "C"
 typedef void mod_cookie_t;
 
 extern const module_t mod_cookie;
-void *mod_cookie_create(http_server_t *server, char *vhost, mod_cookie_t *modconfig);
-void mod_cookie_destroy(void *mod);
 
 #ifdef __cplusplus
 }

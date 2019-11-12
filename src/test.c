@@ -96,9 +96,9 @@ int main(int argc, char * const *argv)
 	http_server_t *server = httpserver_create(config);
 	if (server)
 	{
-		httpserver_addconnector(server, NULL, test_func, ptest_config);
+		httpserver_addconnector(server, test_func, ptest_config);
 #ifdef MBEDTLS
-		mod_mbedtls_t mbedtlsconfig = 
+		mod_mbedtls_t mbedtlsconfig =
 		{
 			.pers = "httpserver-mbedtls",
 			.crtfile = "/etc/ssl/private/server.pem",

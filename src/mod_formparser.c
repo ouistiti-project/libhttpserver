@@ -107,7 +107,7 @@ static void *_mod_form_urlencoded_getctx(void *arg, http_client_t *ctl, struct s
 	ctx->config = config;
 
 	ctx->oldctx = httpclient_context(ctl);
-	httpclient_addconnector(ctl, NULL, _form_connector, ctx, "formparser");
+	httpclient_addconnector(ctl, _form_connector, ctx, "formparser");
 	ctx->recvreq = httpclient_addreceiver(ctl, _mod_form_urlencoded_recv, ctx);
 	ctx->sendresp = httpclient_addsender(ctl, _mod_form_urlencoded_send, ctx);
 

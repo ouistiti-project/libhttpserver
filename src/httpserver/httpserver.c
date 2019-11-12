@@ -64,7 +64,6 @@ extern httpserver_ops_t *httpserver_ops;
 
 struct http_connector_list_s
 {
-	char *vhost;
 	http_connector_t func;
 	void *arg;
 	struct http_connector_list_s *next;
@@ -1230,7 +1229,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 		http_connector_list_t *callback = server->callbacks;
 		while (callback != NULL)
 		{
-			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg, callback->name);
+			httpclient_addconnector(client, callback->func, callback->arg, callback->name);
 			callback = callback->next;
 		}
 	}
@@ -1263,8 +1262,6 @@ static void _httpclient_destroy(http_client_t *client)
 	while (callback != NULL)
 	{
 		http_connector_list_t *next = callback->next;
-		if (callback->vhost)
-			free(callback->vhost);
 		free(callback);
 		callback = next;
 	}
@@ -1301,19 +1298,13 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
-void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg, const char *name)
+void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, const char *name)
 {
 	http_connector_list_t *callback;
 
 	callback = vcalloc(1, sizeof(*callback));
 	if (callback == NULL)
 		return;
-	if (vhost)
-	{
-		int length = strlen(vhost);
-		callback->vhost = malloc(length + 1);
-		strcpy(callback->vhost, vhost);
-	}
 
 	callback->func = func;
 	callback->name = name;
@@ -1566,21 +1557,11 @@ http_server_t *httpclient_server(http_client_t *client)
 static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int ret = ESUCCESS;
-	char *vhost = NULL;
 	http_connector_list_t *iterator = request->connector;
-
 	iterator = client->callbacks;
 	while (iterator != NULL)
 	{
-		vhost = iterator->vhost;
-		if (vhost != NULL)
-		{
-			const char *host = httpmessage_REQUEST(request, "Host");
-			if (!strcasecmp(vhost, host))
-				vhost = NULL;
-		}
-
-		if (vhost == NULL && iterator->func)
+		if (iterator->func)
 		{
 			dbg("client %p connector \"%s\"", client, iterator->name);
 			ret = iterator->func(&iterator->arg, request, response);
@@ -2434,7 +2415,7 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 {
 	int ret = ESUCCESS;
 	http_server_mod_t *mod = server->mod;
-	http_client_modctx_t *currentctx = NULL;
+	http_client_modctx_t *currentctx = client->modctx;
 	while (mod)
 	{
 		http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
@@ -3024,19 +3005,13 @@ void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t
 	server->mod = mod;
 }
 
-void httpserver_addconnector(http_server_t *server, char *vhost, http_connector_t func, void *funcarg)
+void httpserver_addconnector(http_server_t *server, http_connector_t func, void *funcarg)
 {
 	http_connector_list_t *callback;
 
 	callback = vcalloc(1, sizeof(*callback));
 	if (callback == NULL)
 		return;
-	if (vhost)
-	{
-		int length = strlen(vhost);
-		callback->vhost = malloc(length + 1);
-		strcpy(callback->vhost, vhost);
-	}
 	callback->func = func;
 	callback->arg = funcarg;
 	callback->next = server->callbacks;
@@ -3096,8 +3071,6 @@ void httpserver_destroy(http_server_t *server)
 	while (callback)
 	{
 		http_connector_list_t  *next = callback->next;
-		if (callback->vhost)
-			vfree(callback->vhost);
 		vfree(callback);
 		callback = next;
 	}

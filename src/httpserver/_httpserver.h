@@ -133,6 +133,7 @@ struct http_server_s
 	fd_set fds[3];
 #endif
 	int numfds;
+	http_server_t *next;
 };
 
 typedef enum

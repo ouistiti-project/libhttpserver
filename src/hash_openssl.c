@@ -135,27 +135,21 @@ static int HASH_finish(void *ctx, char *out)
 
 static void *HMAC_initkey(const char *key, int keylen)
 {
-	dbg("HMAC 1");
 	HMAC_CTX *pctx = HMAC_CTX_new();
 	HMAC_Init_ex(pctx, key, keylen, EVP_sha256(), NULL);
-	dbg("HMAC 2");
 	return pctx;
 }
 
 static void HMAC_update(void *ctx, const char *input, size_t len)
 {
-	dbg("HMAC 3");
 	HMAC_Update(ctx, input, len);
-	dbg("HMAC 4");
 }
 
 static int HMAC_finish(void *ctx, char *output)
 {
-	dbg("HMAC 4");
 	int len = 32;
 	HMAC_Final(ctx, output, &len);
 	HMAC_CTX_free(ctx);
-	dbg("HMAC 5");
 	return len;
 }
 

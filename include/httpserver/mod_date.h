@@ -33,8 +33,7 @@ extern "C"
 {
 #endif
 
-void *mod_date_create(http_server_t *server);
-void mod_date_destroy(void *mod);
+extern const module_t mod_date;
 
 #ifdef __cplusplus
 }

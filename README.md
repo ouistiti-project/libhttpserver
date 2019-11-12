@@ -1,9 +1,9 @@
 # libhttpserver
 
 ## Introduction
-libhttpserver allows to accept a http communication into an application.  
+libhttpserver allows to accept a http communication into an application.
 Very simple and light, it is not fully featured, but may be useable for small project.
-The content of the response are defined by a callback function.  
+The content of the response are defined by a callback function.
 It is also possible to create modules to link with this library to extend the features.
 
 ## Configuration
@@ -17,16 +17,16 @@ The configuration file (named "config") may be edited to set the following param
  * libdir=/my/libraries/path to change the installation of libraries (default: $prefix/lib)
 
 ## Build
-By default the code may be integrated directly into the project.  
+By default the code may be integrated directly into the project.
 But the Makefile builds three binary types:
 
- * a static library around 12kB and a dynamic library around 80kB.  
+ * a static library around 12kB and a dynamic library around 80kB.
 > CC=gcc make
 
- * a test application that creates a little server responding a very small HTML content.  
+ * a test application that creates a little server responding a very small HTML content.
 > make TEST=y
 
-libhttpserver is WIN32 compatible and can be build with mingw32:  
+libhttpserver is WIN32 compatible and can be build with mingw32:
 > CC=mingw32-gcc make
 
 and can build DLL file.
@@ -55,7 +55,7 @@ Two examples are availlable inside the code file under the TEST flag.
     if (server)
     {
         /* add the function to response to the request */
-        httpserver_addconnector(server, NULL, test_func1, NULL);
+        httpserver_addconnector(server, test_func1, NULL);
         /* start the server */
         httpserver_connect(server);
         /* wait the end of the appication */
