@@ -68,6 +68,7 @@ struct http_connector_list_s
 	void *arg;
 	struct http_connector_list_s *next;
 	const char *name;
+	int priority;
 };
 
 struct http_server_mod_s
@@ -102,6 +103,9 @@ struct http_server_session_s
 };
 
 static int _httpclient_run(http_client_t *client);
+static void _http_addconnector(http_connector_list_t **first,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name);
 
 /********************************************************************/
 static http_server_config_t defaultconfig = {
@@ -1229,7 +1233,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 		http_connector_list_t *callback = server->callbacks;
 		while (callback != NULL)
 		{
-			httpclient_addconnector(client, callback->func, callback->arg, callback->name);
+			httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
 			callback = callback->next;
 		}
 	}
@@ -1298,7 +1302,7 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
-void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, const char *name)
+void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name)
 {
 	http_connector_list_t *callback;
 
@@ -1306,11 +1310,7 @@ void httpclient_addconnector(http_client_t *client, http_connector_t func, void 
 	if (callback == NULL)
 		return;
 
-	callback->func = func;
-	callback->name = name;
-	callback->arg = funcarg;
-	callback->next = client->callbacks;
-	client->callbacks = callback;
+	_http_addconnector(&client->callbacks, func, funcarg, priority, name);
 }
 
 void *httpclient_context(http_client_t *client)
@@ -3022,7 +3022,9 @@ void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t
 	server->mod = mod;
 }
 
-void httpserver_addconnector(http_server_t *server, http_connector_t func, void *funcarg)
+static void _http_addconnector(http_connector_list_t **first,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name)
 {
 	http_connector_list_t *callback;
 
@@ -3031,8 +3033,41 @@ void httpserver_addconnector(http_server_t *server, http_connector_t func, void 
 		return;
 	callback->func = func;
 	callback->arg = funcarg;
-	callback->next = server->callbacks;
-	server->callbacks = callback;
+	callback->name = name;
+	callback->priority = priority;
+	if (*first == NULL)
+	{
+		*first = callback;
+		dbg("install connector %s", callback->name);
+	}
+	else
+	{
+		http_connector_list_t *previous = NULL;
+		http_connector_list_t *it = *first;
+		while (it->priority < callback->priority)
+		{
+			previous = it;
+			it = it->next;
+		}
+		callback->next = it;
+		if (previous == NULL)
+		{
+			dbg("install connector first =  %s < %s", callback->name, it->name);
+			*first = callback;
+		}
+		else
+		{
+			dbg("install connector %s < %s < %s", previous->name, callback->name, it->name);
+			previous->next = callback;
+		}
+	}
+}
+
+void httpserver_addconnector(http_server_t *server,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name)
+{
+	_http_addconnector(&server->callbacks, func, funcarg, priority, name);
 }
 
 void httpserver_connect(http_server_t *server)

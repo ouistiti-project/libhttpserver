@@ -75,7 +75,7 @@ void *mod_skeleton_create(http_server_t *server, mod_skeleton_t *modconfig)
 	strcpy(config->header_key, "SKELETON");
 	config->header_value = calloc(1, sizeof("V1.0") + 1);
 	sprintf(config->header_value, "V%01d.%01d",modconfig->version_h,modconfig->version_l);
-	httpserver_addconnector(server, _skeleton_connector, config);
+	httpserver_addconnector(server, _skeleton_connector, config, CONNECTOR_ERROR, "skeleton");
 	httpserver_addmod(server, _mod_skeleton_getctx, _mod_skeleton_freectx, config);
 
 	return config;
