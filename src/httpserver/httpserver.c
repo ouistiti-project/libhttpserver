@@ -3068,7 +3068,7 @@ static void _http_addconnector(http_connector_list_t **first,
 	{
 		http_connector_list_t *previous = NULL;
 		http_connector_list_t *it = *first;
-		while (it->priority < callback->priority)
+		while (it != NULL && it->priority < callback->priority)
 		{
 			previous = it;
 			it = it->next;
@@ -3076,12 +3076,22 @@ static void _http_addconnector(http_connector_list_t **first,
 		callback->next = it;
 		if (previous == NULL)
 		{
-			dbg("install connector first =  %s < %s", callback->name, it->name);
+#ifdef DEBUG
+			if (it != NULL)
+				dbg("install connector first =  %s < %s", callback->name, it->name);
+			else
+				dbg("install connector first =  %s", callback->name);
+#endif
 			*first = callback;
 		}
 		else
 		{
-			dbg("install connector %s < %s < %s", previous->name, callback->name, it->name);
+#ifdef DEBUG
+			if (it != NULL)
+				dbg("install connector %s < %s < %s", previous->name, callback->name, it->name);
+			else
+				dbg("install connector %s < %s = end ", previous->name, callback->name);
+#endif
 			previous->next = callback;
 		}
 	}
