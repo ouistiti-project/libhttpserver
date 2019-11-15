@@ -1109,7 +1109,7 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	_buffer_filldb(message->headers_storage, &message->headers, ':', '\r');
 	const char *value = NULL;
 	value = dbentry_search(message->headers, str_connection);
-	if (value != NULL && !strcasestr(value, "Keep-Alive"))
+	if (value != NULL && strcasestr(value, "Keep-Alive") != NULL)
 		message->mode |= HTTPMESSAGE_KEEPALIVE;
 	value = dbentry_search(message->headers, str_contentlength);
 	if (value != NULL)
@@ -1872,7 +1872,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 		case ESUCCESS:
 		{
-			client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
+			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
 			response->state = PARSE_END | (response->state & ~PARSE_MASK);
 			response->state &= ~PARSE_CONTINUE;
 			if (response->mode & HTTPMESSAGE_LOCKED)
@@ -2176,7 +2176,10 @@ static int _httpclient_wait(http_client_t *client, int options)
 			}
 			else if (ret != ESUCCESS)
 			{
-				err("httpclient_wait %p socket closed ", client);
+				if (ret == EINCOMPLETE)
+					err("httpclient_wait %p socket empty", client);
+				else
+					err("httpclient_wait %p socket closed", client);
 				ret = EREJECT;
 			}
 		}
