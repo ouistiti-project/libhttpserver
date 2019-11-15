@@ -592,6 +592,12 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						message->method = method;
 						data->offset += length + 1;
 						next = PARSE_URI;
+						/**
+						 * to parse a request the default value of content_length MUST be 0
+						 * otherwise the parser continue to wait content.
+						 * for GET method, there isn't any content and content_length is not set
+					 */
+						message->content_length = 0;
 						break;
 					}
 					method = method->next;
@@ -928,6 +934,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_END:
 			{
+				dbg("parse end with %d data: %s", data->length, data->offset);
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;
 				else
@@ -1635,10 +1642,6 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 	{
 		client->sockdata->length += size;
 		client->sockdata->offset[size] = 0;
-		client->sockdata->offset = client->sockdata->data;
-
-		if (*prequest == NULL)
-			*prequest = _httpmessage_create(client, NULL);
 
 		/**
 		 * WAIT_ACCEPT does the first initialization
@@ -1654,8 +1657,21 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 	{
 		size = ECONTINUE;
 	}
+
+	/**
+	 * the message must be create in all cases
+	 * the sockdata may contain a new message
+	 */
+	if (*prequest == NULL)
+		*prequest = _httpmessage_create(client, NULL);
+
 	if (client->sockdata->length > 0)
 	{
+		/**
+		 * the buffer must always be read from the beginning
+		 */
+		client->sockdata->offset = client->sockdata->data;
+
 		int ret = _httpmessage_parserequest(*prequest, client->sockdata);
 
 		switch (ret)
@@ -2232,9 +2248,9 @@ static int _httpclient_run(http_client_t *client)
 	 * othe cases it needs to be reset after _httpmessage_runconnector.
 	 */
 	if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
+	{
 		_buffer_reset(client->sockdata);
-	else
-		_buffer_shrink(client->sockdata);
+	}
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
@@ -2256,6 +2272,10 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_READING:
 		{
+			if (client->sockdata->offset != client->sockdata->data)
+			{
+				_buffer_shrink(client->sockdata);
+			}
 			/**
 			 * The modification of the client state is done after
 			 * _httpclient_message
@@ -2329,7 +2349,8 @@ static int _httpclient_run(http_client_t *client)
 	if (client->request != NULL)
 	{
 		int ret = _httpclient_request(client, client->request);
-		if (ret != EINCOMPLETE && (client->request->state & PARSE_MASK) == PARSE_END)
+		//if (ret != EINCOMPLETE && (client->request->state & PARSE_MASK) == PARSE_END)
+		if (ret != EINCOMPLETE)
 		{
 			client->request = NULL;
 		}
