@@ -902,12 +902,19 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					if (message->content_length <= length)
 					{
 						data->offset += message->content_length;
+						/**
+						 * the last chunk of the content may contain dat from the next request.
+						 * The length of the buffer "content" may be larger than the content, but
+						 * httpmessage_content must return the length of the content and not more
+						 */
+						message->content_packet = message->content_length;
 						message->content_length = 0;
 						next = PARSE_END;
 					}
 					else
 					{
 						data->offset += length;
+						message->content_packet = length;
 						message->content_length -= length;
 					}
 				}
@@ -1021,7 +1028,7 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 	}
 	if (message->content)
 	{
-		size = message->content->length;
+		size = message->content_packet;
 		if (data)
 		{
 			*data = message->content->data;
