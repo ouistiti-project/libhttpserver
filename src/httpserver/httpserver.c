@@ -58,6 +58,7 @@
 #define HTTPMESSAGE_CHUNKSIZE 64
 #endif
 
+#define buffer_dbg(...)
 #define message_dbg(...)
 
 extern httpserver_ops_t *httpserver_ops;
@@ -284,7 +285,7 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 				entry->next = *db;
 				*db = entry;
 				count++;
-				dbg("fill %d\t%s\t%s", count, key, value);
+				buffer_dbg("fill %d\t%s\t%s", count, key, value);
 			}
 			key = storage->data + i + 1;
 			value = NULL;
@@ -307,7 +308,7 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 		entry->next = *db;
 		*db = entry;
 		count++;
-		dbg("fill %d\t%s\t%s", count, key, value);
+		buffer_dbg("fill %d\t%s\t%s", count, key, value);
 	}
 	return count;
 }
@@ -332,7 +333,7 @@ HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
 	}
 	if (entry == NULL)
 	{
-		dbg("dbentry %s not found", key);
+		buffer_dbg("dbentry %s not found", key);
 	}
 	return value;
 }
@@ -941,7 +942,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_END:
 			{
-				dbg("parse end with %d data: %s", data->length, data->offset);
+				message_dbg("parse end with %d data: %s", data->length, data->offset);
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;
 				else
