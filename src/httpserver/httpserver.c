@@ -603,6 +603,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					}
 					method = method->next;
 				}
+				message->client->state &= ~CLIENT_KEEPALIVE;
 
 				if (method == NULL)
 				{
