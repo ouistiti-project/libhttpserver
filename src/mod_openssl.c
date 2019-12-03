@@ -62,7 +62,6 @@ typedef struct _mod_openssl_ctx_s
 
 struct _mod_openssl_s
 {
-	void *vhost;
 	const httpclient_ops_t *protocolops;
 	void *protocol;
 	SSL_CTX *openssl_ctx;
@@ -71,7 +70,7 @@ struct _mod_openssl_s
 static http_server_config_t mod_openssl_config;
 static const httpclient_ops_t *tlsserver_ops;
 
-void *mod_openssl_create(http_server_t *server, char *vhost, mod_tls_t *modconfig)
+void *mod_openssl_create(http_server_t *server, mod_tls_t *modconfig)
 {
 	int ret;
 	int is_set_pemkey = 0;
@@ -119,11 +118,10 @@ void *mod_openssl_create(http_server_t *server, char *vhost, mod_tls_t *modconfi
 
 		mod->protocolops = httpserver_changeprotocol(server, tlsserver_ops, mod);
 		mod->protocol = server;
-		mod->vhost = vhost;
 	}
 	return mod;
 }
-void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_openssl_create")));
+void *mod_tls_create(http_server_t *server, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_openssl_create")));
 
 void mod_openssl_destroy(void *arg)
 {

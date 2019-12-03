@@ -89,7 +89,7 @@ static void *_mod_cookie_getctx(void *arg, http_client_t *ctl, struct sockaddr *
 	ctx->ctl = ctl;
 	ctx->mod = mod;
 
-	httpclient_addconnector(ctl, NULL, _cookie_connector, ctx, str_cookie);
+	httpclient_addconnector(ctl, _cookie_connector, ctx, str_cookie);
 
 	return ctx;
 }

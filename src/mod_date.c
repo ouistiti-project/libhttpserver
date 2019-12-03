@@ -69,8 +69,8 @@ void *mod_date_create(http_server_t *server)
 	strcpy(config->header_key, "Date");
 
 	config->header_value = calloc(1, 30);
-	
-	httpserver_addconnector(server, NULL, _date_connector, config, str_date);
+
+	httpserver_addconnector(server, _date_connector, config, CONNECTOR_DOCFILTER, str_date);
 
 	return config;
 }

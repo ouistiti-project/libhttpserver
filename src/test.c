@@ -59,7 +59,7 @@ struct test_config_s
 struct test_config_s *ptest_config = &test_config;
 int test_func(void *arg, http_message_t *request, http_message_t *response)
 {
-	struct test_config_s *ptest_config = arg;
+	struct test_config_s *ptest_config = (struct test_config_s *)arg;
 	char * test = strstr(httpmessage_REQUEST(request, "uri"), "test");
 	if (test == NULL)
 		return EREJECT;
@@ -96,9 +96,9 @@ int main(int argc, char * const *argv)
 	http_server_t *server = httpserver_create(config);
 	if (server)
 	{
-		httpserver_addconnector(server, NULL, test_func, ptest_config);
+		httpserver_addconnector(server, test_func, ptest_config);
 #ifdef MBEDTLS
-		mod_mbedtls_t mbedtlsconfig = 
+		mod_mbedtls_t mbedtlsconfig =
 		{
 			.pers = "httpserver-mbedtls",
 			.crtfile = "/etc/ssl/private/server.pem",

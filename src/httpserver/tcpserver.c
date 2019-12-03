@@ -211,7 +211,10 @@ static int tcpclient_status(void *ctl)
 	int ret = ioctl(client->sock, FIONREAD, &nbbytes);
 	tcp_dbg("client status (%p %x) %d %d", client, client->state, ret, nbbytes);
 	if (ret < 0)
+	{
+		err("tcp: socket status error %s", strerror(errno));
 		return EREJECT;
+	}
 	if (nbbytes == 0)
 		return EINCOMPLETE;
 	return ESUCCESS;

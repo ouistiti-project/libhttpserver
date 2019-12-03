@@ -40,8 +40,6 @@ typedef struct mod_skeleton_s
 } mod_skeleton_t;
 
 extern const module_t mod_skeleton;
-void *mod_skeleton_create(http_server_t *server, mod_skeleton_t *modconfig);
-void mod_skeleton_destroy(void *mod);
 
 #ifdef __cplusplus
 }

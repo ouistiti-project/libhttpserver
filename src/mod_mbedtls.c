@@ -87,7 +87,6 @@ typedef struct _mod_mbedtls_s
 
 struct _mod_mbedtls_config_s
 {
-	void *vhost;
 	const httpclient_ops_t *protocolops;
 	void *protocol;
 	mbedtls_ssl_config conf;
@@ -103,7 +102,7 @@ static http_server_config_t mod_mbedtls_config;
 static const httpclient_ops_t *_tlsclient_ops;
 static const httpclient_ops_t *_tlsserver_ops;
 
-void *mod_mbedtls_create(http_server_t *server, char *vhost, mod_tls_t *modconfig)
+void *mod_mbedtls_create(http_server_t *server, mod_tls_t *modconfig)
 {
 	int ret;
 	int is_set_pemkey = 0;
@@ -194,10 +193,9 @@ void *mod_mbedtls_create(http_server_t *server, char *vhost, mod_tls_t *modconfi
 
 	config->protocolops = httpserver_changeprotocol(server, _tlsserver_ops, config);
 	config->protocol = server;
-	config->vhost = vhost;
 	return config;
 }
-void *mod_tls_create(http_server_t *server, char *unused, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_mbedtls_create")));
+void *mod_tls_create(http_server_t *server, mod_tls_t *modconfig) __attribute__ ((weak, alias ("mod_mbedtls_create")));
 
 void mod_mbedtls_destroy(void *mod)
 {

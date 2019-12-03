@@ -58,17 +58,18 @@
 #define HTTPMESSAGE_CHUNKSIZE 64
 #endif
 
+#define buffer_dbg(...)
 #define message_dbg(...)
 
 extern httpserver_ops_t *httpserver_ops;
 
 struct http_connector_list_s
 {
-	char *vhost;
 	http_connector_t func;
 	void *arg;
 	struct http_connector_list_s *next;
 	const char *name;
+	int priority;
 };
 
 struct http_server_mod_s
@@ -103,6 +104,9 @@ struct http_server_session_s
 };
 
 static int _httpclient_run(http_client_t *client);
+static void _http_addconnector(http_connector_list_t **first,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name);
 
 /********************************************************************/
 static http_server_config_t defaultconfig = {
@@ -281,7 +285,7 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 				entry->next = *db;
 				*db = entry;
 				count++;
-				dbg("fill %d\t%s\t%s", count, key, value);
+				buffer_dbg("fill %d\t%s\t%s", count, key, value);
 			}
 			key = storage->data + i + 1;
 			value = NULL;
@@ -304,7 +308,7 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 		entry->next = *db;
 		*db = entry;
 		count++;
-		dbg("fill %d\t%s\t%s", count, key, value);
+		buffer_dbg("fill %d\t%s\t%s", count, key, value);
 	}
 	return count;
 }
@@ -329,7 +333,7 @@ HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
 	}
 	if (entry == NULL)
 	{
-		dbg("dbentry %s not found", key);
+		buffer_dbg("dbentry %s not found", key);
 	}
 	return value;
 }
@@ -589,10 +593,17 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 						message->method = method;
 						data->offset += length + 1;
 						next = PARSE_URI;
+						/**
+						 * to parse a request the default value of content_length MUST be 0
+						 * otherwise the parser continue to wait content.
+						 * for GET method, there isn't any content and content_length is not set
+					 */
+						message->content_length = 0;
 						break;
 					}
 					method = method->next;
 				}
+				message->client->state &= ~CLIENT_KEEPALIVE;
 
 				if (method == NULL)
 				{
@@ -893,12 +904,19 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					if (message->content_length <= length)
 					{
 						data->offset += message->content_length;
+						/**
+						 * the last chunk of the content may contain dat from the next request.
+						 * The length of the buffer "content" may be larger than the content, but
+						 * httpmessage_content must return the length of the content and not more
+						 */
+						message->content_packet = message->content_length;
 						message->content_length = 0;
 						next = PARSE_END;
 					}
 					else
 					{
 						data->offset += length;
+						message->content_packet = length;
 						message->content_length -= length;
 					}
 				}
@@ -925,6 +943,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_END:
 			{
+				message_dbg("parse end with %d data: %s", data->length, data->offset);
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;
 				else
@@ -1011,7 +1030,7 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 	}
 	if (message->content)
 	{
-		size = message->content->length;
+		size = message->content_packet;
 		if (data)
 		{
 			*data = message->content->data;
@@ -1099,7 +1118,7 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	_buffer_filldb(message->headers_storage, &message->headers, ':', '\r');
 	const char *value = NULL;
 	value = dbentry_search(message->headers, str_connection);
-	if (value != NULL && !strcasestr(value, "Keep-Alive"))
+	if (value != NULL && strcasestr(value, "Keep-Alive") != NULL)
 		message->mode |= HTTPMESSAGE_KEEPALIVE;
 	value = dbentry_search(message->headers, str_contentlength);
 	if (value != NULL)
@@ -1123,7 +1142,7 @@ HTTPMESSAGE_DECL int _httpmessage_runconnector(http_message_t *request, http_mes
 	if (connector && connector->func)
 	{
 		message_dbg("message %p connector \"%s\"", client, iterator->name);
-		ret = connector->func(&connector->arg, request, response);
+		ret = connector->func(connector->arg, request, response);
 	}
 	return ret;
 }
@@ -1230,7 +1249,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 		http_connector_list_t *callback = server->callbacks;
 		while (callback != NULL)
 		{
-			httpclient_addconnector(client, callback->vhost, callback->func, callback->arg, callback->name);
+			httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
 			callback = callback->next;
 		}
 	}
@@ -1263,8 +1282,6 @@ static void _httpclient_destroy(http_client_t *client)
 	while (callback != NULL)
 	{
 		http_connector_list_t *next = callback->next;
-		if (callback->vhost)
-			free(callback->vhost);
 		free(callback);
 		callback = next;
 	}
@@ -1301,25 +1318,15 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
-void httpclient_addconnector(http_client_t *client, char *vhost, http_connector_t func, void *funcarg, const char *name)
+void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name)
 {
 	http_connector_list_t *callback;
 
 	callback = vcalloc(1, sizeof(*callback));
 	if (callback == NULL)
 		return;
-	if (vhost)
-	{
-		int length = strlen(vhost);
-		callback->vhost = malloc(length + 1);
-		strcpy(callback->vhost, vhost);
-	}
 
-	callback->func = func;
-	callback->name = name;
-	callback->arg = funcarg;
-	callback->next = client->callbacks;
-	client->callbacks = callback;
+	_http_addconnector(&client->callbacks, func, funcarg, priority, name);
 }
 
 void *httpclient_context(http_client_t *client)
@@ -1566,24 +1573,14 @@ http_server_t *httpclient_server(http_client_t *client)
 static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int ret = ESUCCESS;
-	char *vhost = NULL;
 	http_connector_list_t *iterator = request->connector;
-
 	iterator = client->callbacks;
 	while (iterator != NULL)
 	{
-		vhost = iterator->vhost;
-		if (vhost != NULL)
-		{
-			const char *host = httpmessage_REQUEST(request, "Host");
-			if (!strcasecmp(vhost, host))
-				vhost = NULL;
-		}
-
-		if (vhost == NULL && iterator->func)
+		if (iterator->func)
 		{
 			dbg("client %p connector \"%s\"", client, iterator->name);
-			ret = iterator->func(&iterator->arg, request, response);
+			ret = iterator->func(iterator->arg, request, response);
 			if (ret != EREJECT)
 			{
 				if (ret == ESUCCESS)
@@ -1654,10 +1651,6 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 	{
 		client->sockdata->length += size;
 		client->sockdata->offset[size] = 0;
-		client->sockdata->offset = client->sockdata->data;
-
-		if (*prequest == NULL)
-			*prequest = _httpmessage_create(client, NULL);
 
 		/**
 		 * WAIT_ACCEPT does the first initialization
@@ -1673,8 +1666,21 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 	{
 		size = ECONTINUE;
 	}
+
+	/**
+	 * the message must be create in all cases
+	 * the sockdata may contain a new message
+	 */
+	if (*prequest == NULL)
+		*prequest = _httpmessage_create(client, NULL);
+
 	if (client->sockdata->length > 0)
 	{
+		/**
+		 * the buffer must always be read from the beginning
+		 */
+		client->sockdata->offset = client->sockdata->data;
+
 		int ret = _httpmessage_parserequest(*prequest, client->sockdata);
 
 		switch (ret)
@@ -1875,7 +1881,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 		case ESUCCESS:
 		{
-			client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
+			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
 			response->state = PARSE_END | (response->state & ~PARSE_MASK);
 			response->state &= ~PARSE_CONTINUE;
 			if (response->mode & HTTPMESSAGE_LOCKED)
@@ -2179,7 +2185,10 @@ static int _httpclient_wait(http_client_t *client, int options)
 			}
 			else if (ret != ESUCCESS)
 			{
-				err("httpclient_wait %p socket closed ", client);
+				if (ret == EINCOMPLETE)
+					err("httpclient_wait %p socket empty", client);
+				else
+					err("httpclient_wait %p socket closed", client);
 				ret = EREJECT;
 			}
 		}
@@ -2251,9 +2260,9 @@ static int _httpclient_run(http_client_t *client)
 	 * othe cases it needs to be reset after _httpmessage_runconnector.
 	 */
 	if (client->sockdata->length <= (client->sockdata->offset - client->sockdata->data))
+	{
 		_buffer_reset(client->sockdata);
-	else
-		_buffer_shrink(client->sockdata);
+	}
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
@@ -2275,6 +2284,10 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case CLIENT_READING:
 		{
+			if (client->sockdata->offset != client->sockdata->data)
+			{
+				_buffer_shrink(client->sockdata);
+			}
 			/**
 			 * The modification of the client state is done after
 			 * _httpclient_message
@@ -2348,7 +2361,8 @@ static int _httpclient_run(http_client_t *client)
 	if (client->request != NULL)
 	{
 		int ret = _httpclient_request(client, client->request);
-		if (ret != EINCOMPLETE && (client->request->state & PARSE_MASK) == PARSE_END)
+		//if (ret != EINCOMPLETE && (client->request->state & PARSE_MASK) == PARSE_END)
+		if (ret != EINCOMPLETE)
 		{
 			client->request = NULL;
 		}
@@ -2434,7 +2448,7 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 {
 	int ret = ESUCCESS;
 	http_server_mod_t *mod = server->mod;
-	http_client_modctx_t *currentctx = NULL;
+	http_client_modctx_t *currentctx = client->modctx;
 	while (mod)
 	{
 		http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
@@ -2973,6 +2987,23 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	return server;
 }
 
+http_server_t *httpserver_dup(http_server_t *server)
+{
+	http_server_t *vserver;
+
+	vserver = vcalloc(1, sizeof(*vserver));
+	if (vserver == NULL)
+		return NULL;
+	vserver->config = server->config;
+	vserver->ops = server->ops;
+	vserver->methods = (http_message_method_t *)default_methods;
+
+	vserver->protocol_ops = server->protocol_ops;
+	vserver->protocol = server->protocol;
+
+	return vserver;
+}
+
 void httpserver_addmethod(http_server_t *server, const char *key, short properties)
 {
 	short id = 0;
@@ -3024,23 +3055,62 @@ void httpserver_addmod(http_server_t *server, http_getctx_t modf, http_freectx_t
 	server->mod = mod;
 }
 
-void httpserver_addconnector(http_server_t *server, char *vhost, http_connector_t func, void *funcarg)
+static void _http_addconnector(http_connector_list_t **first,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name)
 {
 	http_connector_list_t *callback;
 
 	callback = vcalloc(1, sizeof(*callback));
 	if (callback == NULL)
 		return;
-	if (vhost)
-	{
-		int length = strlen(vhost);
-		callback->vhost = malloc(length + 1);
-		strcpy(callback->vhost, vhost);
-	}
 	callback->func = func;
 	callback->arg = funcarg;
-	callback->next = server->callbacks;
-	server->callbacks = callback;
+	callback->name = name;
+	callback->priority = priority;
+	if (*first == NULL)
+	{
+		*first = callback;
+		dbg("install connector %s", callback->name);
+	}
+	else
+	{
+		http_connector_list_t *previous = NULL;
+		http_connector_list_t *it = *first;
+		while (it != NULL && it->priority < callback->priority)
+		{
+			previous = it;
+			it = it->next;
+		}
+		callback->next = it;
+		if (previous == NULL)
+		{
+#ifdef DEBUG
+			if (it != NULL)
+				dbg("install connector first =  %s < %s", callback->name, it->name);
+			else
+				dbg("install connector first =  %s", callback->name);
+#endif
+			*first = callback;
+		}
+		else
+		{
+#ifdef DEBUG
+			if (it != NULL)
+				dbg("install connector %s < %s < %s", previous->name, callback->name, it->name);
+			else
+				dbg("install connector %s < %s = end ", previous->name, callback->name);
+#endif
+			previous->next = callback;
+		}
+	}
+}
+
+void httpserver_addconnector(http_server_t *server,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name)
+{
+	_http_addconnector(&server->callbacks, func, funcarg, priority, name);
 }
 
 void httpserver_connect(http_server_t *server)
@@ -3096,8 +3166,6 @@ void httpserver_destroy(http_server_t *server)
 	while (callback)
 	{
 		http_connector_list_t  *next = callback->next;
-		if (callback->vhost)
-			vfree(callback->vhost);
 		vfree(callback);
 		callback = next;
 	}

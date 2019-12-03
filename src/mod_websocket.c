@@ -64,7 +64,6 @@ typedef struct _mod_websocket_ctx_s _mod_websocket_ctx_t;
 struct _mod_websocket_s
 {
 	mod_websocket_t *config;
-	void *vhost;
 	mod_websocket_run_t run;
 	void *runarg;
 };
@@ -118,10 +117,10 @@ static int _checkname(mod_websocket_t *config, char *pathname)
 	return ESUCCESS;
 }
 
-static int websocket_connector(void **arg, http_message_t *request, http_message_t *response)
+static int websocket_connector(void *arg, http_message_t *request, http_message_t *response)
 {
 	int ret = EREJECT;
-	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)*arg;
+	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)arg;
 
 	if (ctx->filepath == NULL)
 	{
@@ -207,7 +206,7 @@ static void *_mod_websocket_getctx(void *arg, http_client_t *ctl, struct sockadd
 
 	_mod_websocket_ctx_t *ctx = calloc(1, sizeof(*ctx));
 	ctx->mod = mod;
-	httpclient_addconnector(ctl, mod->vhost, websocket_connector, ctx, str_websocket);
+	httpclient_addconnector(ctl, websocket_connector, ctx, CONNECTOR_DOCUMENT, str_websocket);
 
 	return ctx;
 }
@@ -236,14 +235,13 @@ static void _mod_websocket_freectx(void *arg)
 	free(ctx);
 }
 
-void *mod_websocket_create(http_server_t *server, char *vhost, mod_websocket_t *config)
+void *mod_websocket_create(http_server_t *server, mod_websocket_t *config)
 {
 	_mod_websocket_t *mod = calloc(1, sizeof(*mod));
 
 	mod_websocket_run_t run = config->run;
 	if (run == NULL)
 		run = default_websocket_run;
-	mod->vhost = vhost;
 	mod->config = config;
 	mod->run = run;
 	mod->runarg = config;

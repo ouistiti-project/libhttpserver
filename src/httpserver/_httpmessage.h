@@ -95,6 +95,7 @@ struct http_message_s
 	buffer_t *content;
 	buffer_t *header;
 	unsigned long long content_length;
+	unsigned int content_packet;
 	const char *content_type;
 	buffer_t *uri;
 	http_message_version_e version;
