@@ -482,5 +482,7 @@ httpserver_ops_t *httpserver_ops = &(httpserver_ops_t)
 __attribute__((constructor))
 static void _init(void)
 {
+#ifdef HTTPCLIENT_FEATURES
 		httpclient_appendops((httpclient_ops_t *)tcpclient_ops);
+#endif
 }

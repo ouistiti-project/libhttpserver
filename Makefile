@@ -1,9 +1,12 @@
 include scripts.mk
 
-package=libhttpserver
-version=2.1
+package?=httpserver
+version=2.2
 
 LIBHASH=y
+
+LIBHTTPSERVER_NAME?=$(package)
+export LIBHTTPSERVER_NAME
 
 ifneq ($(MBEDTLS),)
 LIBUTILS=y
