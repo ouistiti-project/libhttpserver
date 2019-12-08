@@ -60,6 +60,7 @@
 
 #define buffer_dbg(...)
 #define message_dbg(...)
+#define server_dbg(...)
 
 extern httpserver_ops_t *httpserver_ops;
 
@@ -115,7 +116,7 @@ static http_server_config_t defaultconfig = {
 	.maxclients = 10,
 	.chunksize = 64,
 	.keepalive = 1,
-	.version = HTTP10,
+	.version = HTTP11,
 };
 
 const char *httpversion[] =
@@ -2660,10 +2661,11 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 {
 	int ret = ESUCCESS;
 	int count = 0;
+
 	count = _httpserver_checkclients(server, prfds, pwfds, pefds);
 #ifdef DEBUG
 	_debug_maxclients = (_debug_maxclients > count)? _debug_maxclients: count;
-	//dbg("nb clients %d / %d / %d", count, _debug_maxclients, _debug_nbclients);
+	server_dbg("nb clients %d / %d / %d", count, _debug_maxclients, _debug_nbclients);
 #endif
 
 	if (FD_ISSET(server->sock, pefds))
@@ -2859,7 +2861,7 @@ static int _httpserver_run(http_server_t *server)
 			nbselect = pselect(maxfd +1, &server->fds[0],
 						&server->fds[1], &server->fds[2], ptimeout, NULL);
 #endif
-
+		server_dbg("server: events %d", nbselect);
 		if (nbselect == 0)
 		{
 #ifdef VTHREAD
