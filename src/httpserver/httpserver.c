@@ -2760,10 +2760,16 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	return ret;
 }
 
+#ifndef VTHREAD
 static int _httpserver_connect(http_server_t *server)
 {
+	/**
+	 * TODO: this function will be use
+	 * to connect all server socket on the same loop
+	 */
 	return ESUCCESS;
 }
+#endif
 
 static int _httpserver_run(http_server_t *server)
 {
@@ -3182,7 +3188,11 @@ void httpserver_destroy(http_server_t *server)
 	while (method)
 	{
 		http_message_method_t *next = method->next;
-		vfree(method);
+		/**
+		 * default_method must not be freed
+		 * prefere to have memory leaks
+		 */
+		/*vfree(method);*/
 		method = next;
 	}
 	vfree(server);
