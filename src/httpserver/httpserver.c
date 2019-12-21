@@ -1142,7 +1142,7 @@ HTTPMESSAGE_DECL int _httpmessage_runconnector(http_message_t *request, http_mes
 	http_connector_list_t *connector = request->connector;
 	if (connector && connector->func)
 	{
-		message_dbg("message %p connector \"%s\"", client, iterator->name);
+		message_dbg("message %p connector \"%s\"", request->client, connector->name);
 		ret = connector->func(connector->arg, request, response);
 	}
 	return ret;
@@ -1542,6 +1542,7 @@ static int _httpclient_connect(http_client_t *client)
 	 * TODO : dispatch close and destroy from tcpserver.
 	 */
 	close(client->server->sock);
+	client->server->sock = -1;
 #endif
 	do
 	{
@@ -2662,6 +2663,9 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	int ret = ESUCCESS;
 	int count = 0;
 
+	if (server->sock == -1)
+		return EREJECT;
+
 	count = _httpserver_checkclients(server, prfds, pwfds, pefds);
 #ifdef DEBUG
 	_debug_maxclients = (_debug_maxclients > count)? _debug_maxclients: count;
@@ -2936,7 +2940,11 @@ static int _httpserver_run(http_server_t *server)
 		}
 		else if (nbselect > 0)
 		{
-			_httpserver_checkserver(server, prfds, pwfds, pefds);
+			ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+			if (ret == EREJECT)
+			{
+				server->run = 0;
+			}
 #ifdef VTHREAD
 			vthread_yield(server->thread);
 #endif
@@ -2947,6 +2955,7 @@ static int _httpserver_run(http_server_t *server)
 			server->ops->close(server);
 		}
 	}
+	warn("server end");
 	return ret;
 }
 

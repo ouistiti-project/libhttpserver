@@ -461,8 +461,11 @@ static void _tcpserver_close(http_server_t *server)
 		client->ops->destroy(client->opsctx);
 		client = next;
 	}
+	server->clients = NULL;
 	if (server->sock > 0)
+	{
 		shutdown(server->sock, SHUT_RDWR);
+	}
 	warn("server %p close", server);
 	server->sock = -1;
 #ifdef WIN32
