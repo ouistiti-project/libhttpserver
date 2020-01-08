@@ -354,7 +354,7 @@ static int _http_sock(http_t *thiz)
 	_direct_t *private = thiz->private;
 	return private->sock;
 }
-	
+
 http_t *http_create(const char *host, int *port)
 {
 	http_t *http = calloc(1, sizeof(*http));
@@ -458,7 +458,7 @@ http_t *http_open(char *url, int tls, ...)
 			}
 		}
 	}
-	
+
 	if (host == NULL)
 		return NULL;
 
@@ -747,11 +747,15 @@ static void _setpidfile(char *pidfile)
 #endif
 			pid = getpid();
 			length = snprintf(buffer, 32, "%d\n", pid);
-			write(pidfd, buffer, length);
+			int len = write(pidfd, buffer, length);
+			if (len != length)
+			{
+				err("pid file error %s", strerror(errno));
+			}
 			/**
 			 * the file must be open while the process is running
 			close(pidfd);
-			 */ 
+			 */
 		}
 		else
 		{
@@ -849,8 +853,10 @@ int main(int argc, char **argv)
 	{
 		struct passwd *user = NULL;
 		user = getpwnam(username);
-		setgid(user->pw_gid);
-		seteuid(user->pw_uid);
+		if (setgid(user->pw_gid) < 0)
+			warn("not enought rights to change group");
+		if (seteuid(user->pw_uid) < 0)
+			warn("not enought rights to change user");
 	}
 
 	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -930,11 +936,11 @@ int main(int argc, char **argv)
 							close(sock);
 							sock = -1;
 						}
-					}				
+					}
 				}
 			} while(sock > 0);
 		}
-		
+
 		unlink(addr.sun_path);
 		if (ret)
 		{
