@@ -2981,7 +2981,8 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	server->protocol = server;
 
 	_maxclients += server->config->maxclients;
-	nice(-4);
+	if (nice(-4) <0)
+		warn("not enought rights to change the process priority");
 #ifdef USE_POLL
 	server->poll_set =
 #ifndef VTHREAD
@@ -3227,7 +3228,10 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	else if (!strcasecmp(key, "domain"))
 	{
 		value = strchr(server->config->hostname, '.');
-		value ++;
+		if (value)
+			value ++;
+		else
+			value = default_value;
 	}
 	else if (!strcasecmp(key, "software"))
 	{
