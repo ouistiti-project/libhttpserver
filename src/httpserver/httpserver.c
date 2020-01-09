@@ -247,6 +247,29 @@ static void _buffer_reset(buffer_t *buffer)
 	buffer->length = 0;
 }
 
+static int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value)
+{
+	if (key[0] != 0)
+	{
+		if (value == NULL)
+		{
+			value = str_true;
+		}
+		dbentry_t *entry;
+		entry = vcalloc(1, sizeof(dbentry_t));
+		if (entry == NULL)
+			return -1;
+		while (*key == ' ')
+			key++;
+		entry->key = key;
+		entry->value = value;
+		entry->next = *db;
+		*db = entry;
+		buffer_dbg("fill \t%s\t%s", key, value);
+	}
+	return 0;
+}
+
 static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep)
 {
 	int i;
@@ -269,48 +292,18 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 				(storage->data[i] == fieldsep))
 		{
 			storage->data[i] = '\0';
-			if (key[0] != 0)
-			{
-				if (value == NULL)
-				{
-					value = str_true;
-				}
-				dbentry_t *entry;
-				entry = vcalloc(1, sizeof(dbentry_t));
-				if (entry == NULL)
-					return -1;
-				while (*key == ' ')
-					key++;
-				entry->key = key;
-				entry->value = value;
-				entry->next = *db;
-				*db = entry;
+			if (_buffer_dbentry(storage, db, key, value) < 0)
+				return -1;
+			else
 				count++;
-				buffer_dbg("fill %d\t%s\t%s", count, key, value);
-			}
 			key = storage->data + i + 1;
 			value = NULL;
 		}
 	}
-	if (key[0] != 0)
-	{
-		if (value == NULL)
-		{
-			value = str_true;
-		}
-		dbentry_t *entry;
-		entry = vcalloc(1, sizeof(dbentry_t));
-		if (entry == NULL)
-			return -1;
-		while (*key == ' ')
-			key++;
-		entry->key = key;
-		entry->value = value;
-		entry->next = *db;
-		*db = entry;
+	if (_buffer_dbentry(storage, db, key, value) < 0)
+		return -1;
+	else
 		count++;
-		buffer_dbg("fill %d\t%s\t%s", count, key, value);
-	}
 	return count;
 }
 
