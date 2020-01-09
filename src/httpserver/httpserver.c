@@ -1103,7 +1103,7 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 		i++;
 	}
 	static char status[] = " XXX ";
-	sprintf(status, " %.3d", message->result);
+	snprintf(status, 6, " %.3d", message->result);
 	return status;
 }
 
