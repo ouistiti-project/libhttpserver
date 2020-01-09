@@ -68,7 +68,7 @@ struct http_message_s
 	http_client_t *client;
 	http_message_t *response;
 	void *connector;
-	http_message_method_t *method;
+	const http_message_method_t *method;
 	enum {
 		PARSE_INIT,
 		PARSE_URI = 0x0001,

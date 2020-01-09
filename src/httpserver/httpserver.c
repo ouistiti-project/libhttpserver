@@ -95,7 +95,7 @@ struct http_message_method_s
 	const char *key;
 	short id;
 	short properties;
-	http_message_method_t *next;
+	const http_message_method_t *next;
 };
 
 struct http_server_session_s
@@ -133,8 +133,8 @@ const char str_post[] = "POST";
 const char str_head[] = "HEAD";
 
 static const http_message_method_t default_methods[] = {
-	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (http_message_method_t*)&default_methods[1]},
-	{ .key = str_post, .id = MESSAGE_TYPE_POST, .next = (http_message_method_t*)&default_methods[2]},
+	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (const http_message_method_t*)&default_methods[1]},
+	{ .key = str_post, .id = MESSAGE_TYPE_POST, .next = (const http_message_method_t*)&default_methods[2]},
 	{ .key = str_head, .id = MESSAGE_TYPE_HEAD, .next = NULL},
 #ifdef HTTPCLIENT_FEATURES
 	{ .key = NULL, .id = -1, .next = NULL},
@@ -584,7 +584,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 		{
 			case PARSE_INIT:
 			{
-				http_message_method_t *method = message->client->server->methods;
+				const http_message_method_t *method = message->client->server->methods;
 				while (method != NULL)
 				{
 					int length = strlen(method->key);
@@ -3033,7 +3033,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		{
 			break;
 		}
-		method = method->next;
+		method = (http_message_method_t *)method->next;
 	}
 	if (method == NULL)
 	{
@@ -3042,7 +3042,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 			return;
 		method->key = key;
 		method->id = id + 1;
-		method->next = server->methods;
+		method->next = (const http_message_method_t *)server->methods;
 		server->methods = method;
 	}
 	if (properties > method->properties)
@@ -3194,10 +3194,10 @@ void httpserver_destroy(http_server_t *server)
 		vfree(mod);
 		mod = next;
 	}
-	http_message_method_t *method = server->methods;
+	http_message_method_t *method = (http_message_method_t *)server->methods;
 	while (method)
 	{
-		http_message_method_t *next = method->next;
+		http_message_method_t *next = (http_message_method_t *) method->next;
 		/**
 		 * default_method must not be freed
 		 * prefere to have memory leaks
