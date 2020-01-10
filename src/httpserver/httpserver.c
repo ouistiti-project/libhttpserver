@@ -1189,7 +1189,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 	return 0;
 }
 
-int httpmessage_appendcontent(http_message_t *message, char *content, int length)
+int httpmessage_appendcontent(http_message_t *message, const char *content, int length)
 {
 	if (message->content == NULL && content != NULL)
 	{
@@ -1963,8 +1963,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				(response->content == NULL))
 			{
 				const char *value = _httpmessage_status(response);
-				httpmessage_addcontent(response, "text/plain", (char *)value, strlen(value));
-				httpmessage_appendcontent(response, (char *)"\n\r", 2);
+				httpmessage_addcontent(response, "text/plain", value, strlen(value));
+				httpmessage_appendcontent(response, "\n\r", 2);
 			}
 
 			response->state = GENERATE_HEADER | (response->state & ~GENERATE_MASK);

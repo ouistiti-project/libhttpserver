@@ -460,7 +460,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
  *
  * @return the space available into the chunk of content
  */
-int httpmessage_appendcontent(http_message_t *message, char *content, int length);
+int httpmessage_appendcontent(http_message_t *message, const char *content, int length);
 
 /**
  * @brief returns the content of the request message
