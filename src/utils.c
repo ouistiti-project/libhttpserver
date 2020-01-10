@@ -220,7 +220,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	if (haystack != NULL)
 	{
 		int i = -1;
-		char *needle = (char *)needleslist;
+		const char *needle = needleslist;
 		while (needle != NULL)
 		{
 			i = -1;
@@ -230,7 +230,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 			{
 				wildcard = 0;
 			}
-			char *needle_entry = needle;
+			const char *needle_entry = needle;
 			do
 			{
 				if (*needle == '*')
