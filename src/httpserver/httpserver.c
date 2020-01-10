@@ -945,6 +945,9 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					ret = EREJECT;
 			}
 			break;
+			default:
+				err("httpmessage: bad state internal error");
+			break;
 		}
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
@@ -1707,6 +1710,9 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 			size = ESUCCESS;
 		}
 		break;
+		default:
+			err("client: parserequest error");
+		break;
 		}
 		/**
 		 * the request is not fully received.
@@ -1803,6 +1809,9 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 				// The response is an error and it is ready to be sent
 				ret = ESUCCESS;
 			}
+			break;
+			default:
+				err("client: connector error");
 			break;
 			}
 		}
@@ -1902,6 +1911,9 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		case EINCOMPLETE:
 		{
 		}
+		break;
+		default:
+			err("client: connector error");
 		break;
 		}
 	}
@@ -2064,6 +2076,9 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			warn("response to %p from connector \"%s\" result %d", client, name, request->response->result);
 			ret = ESUCCESS;
 		}
+		break;
+		default:
+			err("client: bad state %d", response->state & GENERATE_MASK);
 		break;
 	}
 	return ret;
