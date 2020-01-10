@@ -54,43 +54,42 @@ struct mime_entry_s
 	mime_entry_t *next;
 };
 
-static const mime_entry_t *mime_entry =
-&(mime_entry_t){
+static mime_entry_t *mime_entry = NULL;
+
+static const mime_entry_t *mime_default =
+(mime_entry_t *)&(const mime_entry_t){
+	.ext = "*",
+	.mime = str_applicationoctetstream,
+	.next =
+(mime_entry_t *)&(const mime_entry_t){
 	.ext = ".text",
 	.mime = str_textplain,
 	.next =
-&(mime_entry_t){
+(mime_entry_t *)&(const mime_entry_t){
 	.ext = ".html,.xhtml,.htm",
 	.mime = str_texthtml,
 	.next =
-&(mime_entry_t){
+(mime_entry_t *)&(const mime_entry_t){
 	.ext = ".css",
 	.mime = str_textcss,
 	.next =
-&(mime_entry_t){
+(mime_entry_t *)&(const mime_entry_t){
 	.ext = ".json",
 	.mime = str_textjson,
 	.next =
-&(mime_entry_t){
+(mime_entry_t *)&(const mime_entry_t){
 	.ext = ".js",
 	.mime = str_applicationjavascript,
 	.next =
-&(mime_entry_t){
+(mime_entry_t *)&(const mime_entry_t){
 	.ext = ".png",
 	.mime = str_imagepng,
 	.next =
-&(mime_entry_t){
+(mime_entry_t *)&(const mime_entry_t){
 	.ext = ".jpg",
 	.mime = str_imagejpeg,
 	.next = NULL
-}}}}}}};
-
-static const mime_entry_t *mime_default =
-&(mime_entry_t){
-	.ext = "*",
-	.mime = str_applicationoctetstream,
-	.next = NULL
-};
+}}}}}}}};
 
 static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case);
 
@@ -99,7 +98,7 @@ void utils_addmime(const char *ext, const char*mime)
 	mime_entry_t *entry = calloc(1, sizeof(*entry));
 	entry->ext = ext;
 	entry->mime = mime;
-	mime_entry_t *last = (mime_entry_t *)mime_entry;
+	mime_entry_t *last = mime_entry;
 	if (last)
 	{
 		while (last->next) last = last->next;
@@ -107,21 +106,28 @@ void utils_addmime(const char *ext, const char*mime)
 	}
 	else
 	{
-		mime_entry = last;
+		mime_entry = entry;
 	}
+}
+
+static const mime_entry_t *_utils_getmime(const mime_entry_t *entry, const char *filepath)
+{
+	while (entry)
+	{
+		if (_utils_searchexp(filepath, entry->ext, 1) == ESUCCESS)
+		{
+			break;
+		}
+		entry = entry->next;
+	}
+	return entry;
 }
 
 const char *utils_getmime(const char *filepath)
 {
-	mime_entry_t *mime = (mime_entry_t *)mime_entry;
-	while (mime)
-	{
-		if (_utils_searchexp(filepath, mime->ext, 1) == ESUCCESS)
-		{
-			break;
-		}
-		mime = mime->next;
-	}
+	const mime_entry_t *mime = _utils_getmime(mime_default->next, filepath);
+	if (mime == NULL)
+		mime = _utils_getmime(mime_entry, filepath);
 	if (mime)
 		return mime->mime;
 	return mime_default->mime;
