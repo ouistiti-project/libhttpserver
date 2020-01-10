@@ -1828,26 +1828,26 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
 	if ((buffer != NULL) && (buffer->length > 0))
 	{
 		buffer->offset = buffer->data;
+		int size = 0;
 		while (buffer->length > 0)
 		{
-			int size;
 			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
-			if (size == EINCOMPLETE)
-			{
-				ret = EINCOMPLETE;
+			if (size < 0)
 				break;
-			}
-			else if (size < 0)
-			{
-				err("client %p rest %d send error %s", client, buffer->length, strerror(errno));
-				/**
-				 * error on sending the communication is broken and the thread must die
-				 */
-				ret = ESUCCESS;
-				break;
-			}
 			buffer->length -= size;
 			buffer->offset += size;
+		}
+		if (size == EINCOMPLETE)
+		{
+			ret = EINCOMPLETE;
+		}
+		else if (size < 0)
+		{
+			err("client %p rest %d send error %s", client, buffer->length, strerror(errno));
+			/**
+			 * error on sending the communication is broken and the thread must die
+			 */
+			ret = ESUCCESS;
 		}
 	}
 	else
