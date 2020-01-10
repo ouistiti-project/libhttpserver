@@ -332,13 +332,14 @@ HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
 	return value;
 }
 
-HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *entry, char separator, char fieldsep)
+HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep)
 {
+	dbentry_revert_t *entry = (dbentry_revert_t *)constentry;
 	while (entry != NULL)
 	{
 		int i = 0;
 		while ((entry->key[i]) != '\0') i++;
-		((char *)entry->key)[i] = separator;
+		(entry->key)[i] = separator;
 
 		if (entry->key < entry->value)
 		{
@@ -346,18 +347,18 @@ HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *entry, char separator, char fiel
 			while ((entry->value[i]) != '\0') i++;
 			if ((fieldsep == '\r' || fieldsep == '\n') && entry->value[i + 1] == '\0')
 			{
-				((char *)entry->value)[i] = '\r';
-				((char *)entry->value)[i + 1] = '\n';
+				(entry->value)[i] = '\r';
+				(entry->value)[i + 1] = '\n';
 			}
 			else
-				((char *)entry->value)[i] = fieldsep;
+				(entry->value)[i] = fieldsep;
 		}
 		else
 		{
 			if ((fieldsep == '\r' || fieldsep == '\n') && entry->key[i + 1] == '\0')
 			{
-				((char *)entry->key)[i] = '\r';
-				((char *)entry->key)[i + 1] = '\n';
+				(entry->key)[i] = '\r';
+				(entry->key)[i + 1] = '\n';
 			}
 		}
 
