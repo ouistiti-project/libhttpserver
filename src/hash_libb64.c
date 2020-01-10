@@ -48,14 +48,14 @@ static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
 static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
 const base64_t *base64 = &(const base64_t)
 {
-	.encode = BASE64_encode1,
-	.decode = BASE64_decode,
+	.encode = &BASE64_encode1,
+	.decode = &BASE64_decode,
 };
 
 const base64_t *base64_urlencoding = &(const base64_t)
 {
-	.encode = BASE64_encode2,
-	.decode = BASE64_decode,
+	.encode = &BASE64_encode2,
+	.decode = &BASE64_decode,
 };
 
 static int BASE64_encode1(const char *in, int inlen, char *out, int outlen)
