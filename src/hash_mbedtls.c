@@ -263,10 +263,12 @@ static void HMAC_update(void *ctx, const char *input, size_t len)
 };
 static int HMAC_finish(void *ctx, char *output)
 {
+	int count;
 	mbedtls_md_context_t *pctx = (mbedtls_md_context_t *)ctx;
 	mbedtls_md_hmac_finish(pctx, output);
+	count = mbedtls_md_get_size(pctx->md_info);
 	free(pctx);
-	return mbedtls_md_get_size(pctx->md_info);
+	return count;
 }
 
 #ifndef LIBB64
