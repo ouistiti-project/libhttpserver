@@ -50,6 +50,7 @@ struct hash_s
 {
 	const int size;
 	const char *name;
+	const int nameid;
 	void *(*init)();
 	void *(*initkey)(const char *key, int keylen);
 	void (*update)(void *ctx, const char *in, size_t len);

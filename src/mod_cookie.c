@@ -251,13 +251,15 @@ void cookie_set(http_message_t *response, const char *key, const char *value)
 	char *keyvalue = NULL;
 	if (domain != NULL)
 	{
-		keyvalue = malloc(strlen(key) + 1 + strlen(value) + 18 + strlen(domain) + 1);
-		sprintf(keyvalue, "%s=%s; Path=/; Domain=.%s", key, value, domain);
+		int length = strlen(key) + 1 + strlen(value) + 18 + strlen(domain) + 1;
+		keyvalue = malloc(length);
+		snprintf(keyvalue, length, "%s=%s; Path=/; Domain=.%s", key, value, domain);
 	}
 	else
 	{
-		keyvalue = malloc(strlen(key) + 1 + strlen(value) + 8 + 1);
-		sprintf(keyvalue, "%s=%s; Path=/", key, value);
+		int length = strlen(key) + 1 + strlen(value) + 8 + 1;
+		keyvalue = malloc(length);
+		snprintf(keyvalue, length, "%s=%s; Path=/", key, value);
 	}
 	httpmessage_addheader(response, str_SetCookie, keyvalue);
 	dbg("cookie: new %s", keyvalue);

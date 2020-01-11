@@ -41,6 +41,16 @@ struct dbentry_s
 
 typedef struct dbentry_s dbentry_t;
 
+struct dbentry_revert_s
+{
+	char *storage;
+	char *key;
+	char *value;
+	struct dbentry_revert_s *next;
+};
+
+typedef struct dbentry_revert_s dbentry_revert_t;
+
 HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key);
 HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry);
 

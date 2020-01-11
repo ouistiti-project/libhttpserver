@@ -66,48 +66,52 @@ static int HMAC_finish(void *ctx, char *out);
 #ifndef LIBB64
 const base64_t *base64 = &(const base64_t)
 {
-	.encode = BASE64_encode1,
-	.decode = BASE64_decode,
+	.encode = &BASE64_encode1,
+	.decode = &BASE64_decode,
 };
 const base64_t *base64_urlencoding = &(const base64_t)
 {
-	.encode = BASE64_encode2,
-	.decode = BASE64_decode,
+	.encode = &BASE64_encode2,
+	.decode = &BASE64_decode,
 };
 #endif
 const hash_t *hash_md5 = &(const hash_t)
 {
 	.size = 16,
 	.name = "MD5",
-	.init = MD5_init,
-	.update = MD5_update,
-	.finish = MD5_finish,
+	.nameid = '1',
+	.init = &MD5_init,
+	.update = &MD5_update,
+	.finish = &MD5_finish,
 };
 const hash_t *hash_sha1 = &(const hash_t)
 {
 	.size = 20,
 	.name = "SHA1",
-	.init = SHA1_init,
-	.update = SHA1_update,
-	.finish = SHA1_finish,
+	.nameid = '2',
+	.init = &SHA1_init,
+	.update = &SHA1_update,
+	.finish = &SHA1_finish,
 };
 const hash_t *hash_sha224 = NULL;
 const hash_t *hash_sha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "SHA-256",
-	.init = SHA256_init,
-	.update = SHA256_update,
-	.finish = SHA256_finish,
+	.nameid = '5',
+	.init = &SHA256_init,
+	.update = &SHA256_update,
+	.finish = &SHA256_finish,
 };
 const hash_t *hash_sha512 = NULL;
 const hash_t *hash_macsha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "HMACSHA256",
-	.initkey = HMAC_initkey,
-	.update = HMAC_update,
-	.finish = HMAC_finish,
+	.nameid = '5',
+	.initkey = &HMAC_initkey,
+	.update = &HMAC_update,
+	.finish = &HMAC_finish,
 };
 
 static void *MD5_init()
@@ -259,10 +263,12 @@ static void HMAC_update(void *ctx, const char *input, size_t len)
 };
 static int HMAC_finish(void *ctx, char *output)
 {
+	int count;
 	mbedtls_md_context_t *pctx = (mbedtls_md_context_t *)ctx;
 	mbedtls_md_hmac_finish(pctx, output);
+	count = mbedtls_md_get_size(pctx->md_info);
 	free(pctx);
-	return mbedtls_md_get_size(pctx->md_info);
+	return count;
 }
 
 #ifndef LIBB64

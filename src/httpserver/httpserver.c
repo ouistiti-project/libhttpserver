@@ -95,7 +95,7 @@ struct http_message_method_s
 	const char *key;
 	short id;
 	short properties;
-	http_message_method_t *next;
+	const http_message_method_t *next;
 };
 
 struct http_server_session_s
@@ -133,8 +133,8 @@ const char str_post[] = "POST";
 const char str_head[] = "HEAD";
 
 static const http_message_method_t default_methods[] = {
-	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (http_message_method_t*)&default_methods[1]},
-	{ .key = str_post, .id = MESSAGE_TYPE_POST, .next = (http_message_method_t*)&default_methods[2]},
+	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (const http_message_method_t*)&default_methods[1]},
+	{ .key = str_post, .id = MESSAGE_TYPE_POST, .next = (const http_message_method_t*)&default_methods[2]},
 	{ .key = str_head, .id = MESSAGE_TYPE_HEAD, .next = NULL},
 #ifdef HTTPCLIENT_FEATURES
 	{ .key = NULL, .id = -1, .next = NULL},
@@ -247,6 +247,29 @@ static void _buffer_reset(buffer_t *buffer)
 	buffer->length = 0;
 }
 
+static int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value)
+{
+	if (key[0] != 0)
+	{
+		if (value == NULL)
+		{
+			value = str_true;
+		}
+		dbentry_t *entry;
+		entry = vcalloc(1, sizeof(dbentry_t));
+		if (entry == NULL)
+			return -1;
+		while (*key == ' ')
+			key++;
+		entry->key = key;
+		entry->value = value;
+		entry->next = *db;
+		*db = entry;
+		buffer_dbg("fill \t%s\t%s", key, value);
+	}
+	return 0;
+}
+
 static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep)
 {
 	int i;
@@ -269,48 +292,18 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 				(storage->data[i] == fieldsep))
 		{
 			storage->data[i] = '\0';
-			if (key[0] != 0)
-			{
-				if (value == NULL)
-				{
-					value = str_true;
-				}
-				dbentry_t *entry;
-				entry = vcalloc(1, sizeof(dbentry_t));
-				if (entry == NULL)
-					return -1;
-				while (*key == ' ')
-					key++;
-				entry->key = key;
-				entry->value = value;
-				entry->next = *db;
-				*db = entry;
+			if (_buffer_dbentry(storage, db, key, value) < 0)
+				return -1;
+			else
 				count++;
-				buffer_dbg("fill %d\t%s\t%s", count, key, value);
-			}
 			key = storage->data + i + 1;
 			value = NULL;
 		}
 	}
-	if (key[0] != 0)
-	{
-		if (value == NULL)
-		{
-			value = str_true;
-		}
-		dbentry_t *entry;
-		entry = vcalloc(1, sizeof(dbentry_t));
-		if (entry == NULL)
-			return -1;
-		while (*key == ' ')
-			key++;
-		entry->key = key;
-		entry->value = value;
-		entry->next = *db;
-		*db = entry;
+	if (_buffer_dbentry(storage, db, key, value) < 0)
+		return -1;
+	else
 		count++;
-		buffer_dbg("fill %d\t%s\t%s", count, key, value);
-	}
 	return count;
 }
 
@@ -339,13 +332,14 @@ HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
 	return value;
 }
 
-HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *entry, char separator, char fieldsep)
+HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep)
 {
+	dbentry_revert_t *entry = (dbentry_revert_t *)constentry;
 	while (entry != NULL)
 	{
 		int i = 0;
 		while ((entry->key[i]) != '\0') i++;
-		((char *)entry->key)[i] = separator;
+		(entry->key)[i] = separator;
 
 		if (entry->key < entry->value)
 		{
@@ -353,18 +347,18 @@ HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *entry, char separator, char fiel
 			while ((entry->value[i]) != '\0') i++;
 			if ((fieldsep == '\r' || fieldsep == '\n') && entry->value[i + 1] == '\0')
 			{
-				((char *)entry->value)[i] = '\r';
-				((char *)entry->value)[i + 1] = '\n';
+				(entry->value)[i] = '\r';
+				(entry->value)[i + 1] = '\n';
 			}
 			else
-				((char *)entry->value)[i] = fieldsep;
+				(entry->value)[i] = fieldsep;
 		}
 		else
 		{
 			if ((fieldsep == '\r' || fieldsep == '\n') && entry->key[i + 1] == '\0')
 			{
-				((char *)entry->key)[i] = '\r';
-				((char *)entry->key)[i + 1] = '\n';
+				(entry->key)[i] = '\r';
+				(entry->key)[i + 1] = '\n';
 			}
 		}
 
@@ -584,7 +578,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 		{
 			case PARSE_INIT:
 			{
-				http_message_method_t *method = message->client->server->methods;
+				const http_message_method_t *method = message->client->server->methods;
 				while (method != NULL)
 				{
 					int length = strlen(method->key);
@@ -951,6 +945,9 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 					ret = EREJECT;
 			}
 			break;
+			default:
+				err("httpmessage: bad state internal error");
+			break;
 		}
 		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
 		{
@@ -1110,7 +1107,7 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message)
 		i++;
 	}
 	static char status[] = " XXX ";
-	sprintf(status, " %.3d", message->result);
+	snprintf(status, 6, " %.3d", message->result);
 	return status;
 }
 
@@ -1121,6 +1118,11 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	value = dbentry_search(message->headers, str_connection);
 	if (value != NULL && strcasestr(value, "Keep-Alive") != NULL)
 		message->mode |= HTTPMESSAGE_KEEPALIVE;
+	if (value != NULL && strcasestr(value, "Upgrade") != NULL)
+	{
+		warn("Connection upgrading");
+		message->mode |= HTTPMESSAGE_LOCKED;
+	}
 	value = dbentry_search(message->headers, str_contentlength);
 	if (value != NULL)
 		message->content_length = atoi(value);
@@ -1142,7 +1144,7 @@ HTTPMESSAGE_DECL int _httpmessage_runconnector(http_message_t *request, http_mes
 	http_connector_list_t *connector = request->connector;
 	if (connector && connector->func)
 	{
-		message_dbg("message %p connector \"%s\"", client, iterator->name);
+		message_dbg("message %p connector \"%s\"", request->client, connector->name);
 		ret = connector->func(connector->arg, request, response);
 	}
 	return ret;
@@ -1195,7 +1197,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 	return 0;
 }
 
-int httpmessage_appendcontent(http_message_t *message, char *content, int length)
+int httpmessage_appendcontent(http_message_t *message, const char *content, int length)
 {
 	if (message->content == NULL && content != NULL)
 	{
@@ -1542,6 +1544,7 @@ static int _httpclient_connect(http_client_t *client)
 	 * TODO : dispatch close and destroy from tcpserver.
 	 */
 	close(client->server->sock);
+	client->server->sock = -1;
 #endif
 	do
 	{
@@ -1712,6 +1715,9 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 			size = ESUCCESS;
 		}
 		break;
+		default:
+			err("client: parserequest error");
+		break;
 		}
 		/**
 		 * the request is not fully received.
@@ -1796,6 +1802,11 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 					request->response->state = PARSE_POSTHEADER | (request->response->state & ~PARSE_MASK);
 				request->response->state = GENERATE_INIT | (request->response->state & ~GENERATE_MASK);
 				request->response->state |= PARSE_CONTINUE;
+				if ((request->mode & HTTPMESSAGE_LOCKED) ||
+					(request->response->mode & HTTPMESSAGE_LOCKED))
+				{
+					client->state |= CLIENT_LOCKED;
+				}
 			break;
 			case EINCOMPLETE:
 				return EINCOMPLETE;
@@ -1808,6 +1819,9 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 				// The response is an error and it is ready to be sent
 				ret = ESUCCESS;
 			}
+			break;
+			default:
+				err("client: connector error");
 			break;
 			}
 		}
@@ -1824,26 +1838,26 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
 	if ((buffer != NULL) && (buffer->length > 0))
 	{
 		buffer->offset = buffer->data;
+		int size = 0;
 		while (buffer->length > 0)
 		{
-			int size;
 			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
-			if (size == EINCOMPLETE)
-			{
-				ret = EINCOMPLETE;
+			if (size < 0)
 				break;
-			}
-			else if (size < 0)
-			{
-				err("client %p rest %d send error %s", client, buffer->length, strerror(errno));
-				/**
-				 * error on sending the communication is broken and the thread must die
-				 */
-				ret = ESUCCESS;
-				break;
-			}
 			buffer->length -= size;
 			buffer->offset += size;
+		}
+		if (size == EINCOMPLETE)
+		{
+			ret = EINCOMPLETE;
+		}
+		else if (size < 0)
+		{
+			err("client %p rest %d send error %s", client, buffer->length, strerror(errno));
+			/**
+			 * error on sending the communication is broken and the thread must die
+			 */
+			ret = ESUCCESS;
 		}
 	}
 	else
@@ -1902,11 +1916,18 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		case ECONTINUE:
 		{
 			response->state |= PARSE_CONTINUE;
+			if (response->mode & HTTPMESSAGE_LOCKED)
+			{
+				client->state |= CLIENT_LOCKED;
+			}
 		}
 		break;
 		case EINCOMPLETE:
 		{
 		}
+		break;
+		default:
+			err("client: connector error");
 		break;
 		}
 	}
@@ -1968,8 +1989,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				(response->content == NULL))
 			{
 				const char *value = _httpmessage_status(response);
-				httpmessage_addcontent(response, "text/plain", (char *)value, strlen(value));
-				httpmessage_appendcontent(response, (char *)"\n\r", 2);
+				httpmessage_addcontent(response, "text/plain", value, strlen(value));
+				httpmessage_appendcontent(response, "\n\r", 2);
 			}
 
 			response->state = GENERATE_HEADER | (response->state & ~GENERATE_MASK);
@@ -2069,6 +2090,9 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			warn("response to %p from connector \"%s\" result %d", client, name, request->response->result);
 			ret = ESUCCESS;
 		}
+		break;
+		default:
+			err("client: bad state %d", response->state & GENERATE_MASK);
 		break;
 	}
 	return ret;
@@ -2299,7 +2323,8 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_SENDING:
 		{
 			send_ret = _httpclient_wait(client, WAIT_SEND);
-			recv_ret = client->ops->status(client->opsctx);
+			if (!(client->state & CLIENT_LOCKED))
+				recv_ret = client->ops->status(client->opsctx);
 		}
 		break;
 		case CLIENT_EXIT:
@@ -2662,6 +2687,9 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	int ret = ESUCCESS;
 	int count = 0;
 
+	if (server->sock == -1)
+		return EREJECT;
+
 	count = _httpserver_checkclients(server, prfds, pwfds, pefds);
 #ifdef DEBUG
 	_debug_maxclients = (_debug_maxclients > count)? _debug_maxclients: count;
@@ -2760,10 +2788,16 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 	return ret;
 }
 
+#ifndef VTHREAD
 static int _httpserver_connect(http_server_t *server)
 {
+	/**
+	 * TODO: this function will be use
+	 * to connect all server socket on the same loop
+	 */
 	return ESUCCESS;
 }
+#endif
 
 static int _httpserver_run(http_server_t *server)
 {
@@ -2930,7 +2964,11 @@ static int _httpserver_run(http_server_t *server)
 		}
 		else if (nbselect > 0)
 		{
-			_httpserver_checkserver(server, prfds, pwfds, pefds);
+			ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+			if (ret == EREJECT)
+			{
+				server->run = 0;
+			}
 #ifdef VTHREAD
 			vthread_yield(server->thread);
 #endif
@@ -2941,6 +2979,7 @@ static int _httpserver_run(http_server_t *server)
 			server->ops->close(server);
 		}
 	}
+	warn("server end");
 	return ret;
 }
 
@@ -2966,7 +3005,8 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	server->protocol = server;
 
 	_maxclients += server->config->maxclients;
-	nice(-4);
+	if (nice(-4) <0)
+		warn("not enought rights to change the process priority");
 #ifdef USE_POLL
 	server->poll_set =
 #ifndef VTHREAD
@@ -3017,7 +3057,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		{
 			break;
 		}
-		method = method->next;
+		method = (http_message_method_t *)method->next;
 	}
 	if (method == NULL)
 	{
@@ -3026,7 +3066,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 			return;
 		method->key = key;
 		method->id = id + 1;
-		method->next = server->methods;
+		method->next = (const http_message_method_t *)server->methods;
 		server->methods = method;
 	}
 	if (properties > method->properties)
@@ -3178,11 +3218,15 @@ void httpserver_destroy(http_server_t *server)
 		vfree(mod);
 		mod = next;
 	}
-	http_message_method_t *method = server->methods;
+	http_message_method_t *method = (http_message_method_t *)server->methods;
 	while (method)
 	{
-		http_message_method_t *next = method->next;
-		vfree(method);
+		http_message_method_t *next = (http_message_method_t *) method->next;
+		/**
+		 * default_method must not be freed
+		 * prefere to have memory leaks
+		 */
+		/*vfree(method);*/
 		method = next;
 	}
 	vfree(server);
@@ -3208,7 +3252,10 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	else if (!strcasecmp(key, "domain"))
 	{
 		value = strchr(server->config->hostname, '.');
-		value ++;
+		if (value)
+			value ++;
+		else
+			value = default_value;
 	}
 	else if (!strcasecmp(key, "software"))
 	{

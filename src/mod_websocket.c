@@ -350,8 +350,9 @@ static void *_websocket_main(void *arg)
 					websocket_dbg("%s: ws => u: recv %d bytes", str_websocket, ret);
 					char *out = calloc(1, length);
 					ret = websocket_unframed(buffer, ret, out, arg);
-					websocket_dbg("%S: ws => u: send %d bytes\n\t%s", str_websocket, ret, out);
-					ret = send(client, out, ret, MSG_NOSIGNAL);
+					websocket_dbg("%s: ws => u: send %d bytes\n\t%s", str_websocket, ret, out);
+					if (ret > 0)
+						ret = send(client, out, ret, MSG_NOSIGNAL);
 					fsync(client);
 					free(out);
 				}
@@ -405,7 +406,8 @@ static void *_websocket_main(void *arg)
 								}
 							}
 							length = websocket_framed(info->type, (char *)buffer + size, length - size, out, &outlength, arg);
-							outlength = info->sendresp(info->ctx, (char *)out, outlength);
+							if (outlength > 0)
+								outlength = info->sendresp(info->ctx, (char *)out, outlength);
 							websocket_dbg("%s: u => ws: send %d bytes\n\t%.*s", str_websocket, outlength, (int)length, buffer + size);
 							if (outlength == EINCOMPLETE)
 								continue;

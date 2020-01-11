@@ -47,9 +47,6 @@ struct vthread_s
 };
 
 #include <signal.h>
-static void handler(int sig, siginfo_t *si, void *arg)
-{
-}
 
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
@@ -63,7 +60,6 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	struct sigaction action;
 	action.sa_flags = SA_SIGINFO;
 	sigemptyset(&action.sa_mask);
-	//action.sa_sigaction = handler;
 	/**
 	 * ignore SIGCHLD allows the child to die without to create a zombie.
 	 * But the parent doesn't receive information.
@@ -74,13 +70,18 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 
 	vthread = vcalloc(1, sizeof(struct vthread_s));
 
-	if (vthread && (vthread->pid = fork()) == 0)
+	if (vthread == NULL)
+	{
+		err("vhtread: memory allocation %s", strerror(errno));
+		ret = EREJECT;
+	}
+	else if ((vthread->pid = fork()) == 0)
 	{
 #ifdef TIME_PROFILER
 		struct timeval date1, date2;
 		gettimeofday(&date1, NULL);
 #endif
-		ret = (int)start_routine(arg);
+		void *value = start_routine(arg);
 #ifdef TIME_PROFILER
 		gettimeofday(&date2, NULL);
 		date2.tv_sec -= date1.tv_sec;
@@ -93,9 +94,9 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 		}
 		printf("time %d:%d\n", date2.tv_sec, date2.tv_usec);
 #endif
- 		exit(ret);
+		exit(0);
 	}
-	else if ( (vthread == NULL) || (vthread->pid == -1))
+	else if (vthread->pid == -1)
 	{
 		err("fork error %s", strerror(errno));
 		ret = EREJECT;
@@ -156,7 +157,7 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 {
 	int ret = 0;
 	int i;
-	for (i = 0; i < nbthreads; i++) 
+	for (i = 0; i < nbthreads; i++)
 	{
 		vthread_join(threads[i], NULL);
 	}

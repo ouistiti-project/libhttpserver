@@ -49,6 +49,7 @@ const hash_t *hash_md5 = &(const hash_t)
 {
 	.size = 16,
 	.name = "MD5",
+	.nameid = '1',
 	.init = MD5_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
@@ -57,6 +58,7 @@ const hash_t *hash_sha1 = &(const hash_t)
 {
 	.size = 20,
 	.name = "SHA1",
+	.nameid = '2',
 	.init = SHA1_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
@@ -66,6 +68,7 @@ const hash_t *hash_sha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "SHA-256",
+	.nameid = '5',
 	.init = SHA256_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
@@ -74,6 +77,7 @@ const hash_t *hash_sha512 = &(const hash_t)
 {
 	.size = 64,
 	.name = "SHA-512",
+	.nameid = '6',
 	.init = SHA512_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
@@ -82,6 +86,7 @@ const hash_t *hash_macsha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "HMACSHA256",
+	.nameid = '5',
 	.initkey = HMAC_initkey,
 	.update = HMAC_update,
 	.finish = HMAC_finish,
