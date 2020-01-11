@@ -179,6 +179,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 					httpmessage_addcontent(response, "none", NULL, -1);
 					httpmessage_result(response, RESULT_101);
 					websocket_dbg("%s: result 101", str_websocket);
+					ctx->socket = httpmessage_lock(response);
 					ret = ECONTINUE;
 				}
 				else
@@ -192,7 +193,6 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 	}
 	else
 	{
-		ctx->socket = httpmessage_lock(response);
 		ctx->pid = ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->filepath, request);
 		free(ctx->filepath);
 		ctx->filepath = NULL;
