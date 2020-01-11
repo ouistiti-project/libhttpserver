@@ -264,6 +264,7 @@ static int _tls_handshake(_mod_mbedtls_t *ctx)
 	return ret;
 }
 
+#ifdef HTTPCLIENT_FEATURES
 static void *_tlsclient_create(void *arg, http_client_t *clt)
 {
 	_mod_mbedtls_t *ctx = calloc(1, sizeof(*ctx));
@@ -342,6 +343,7 @@ static void *_tlsclient_create(void *arg, http_client_t *clt)
 
 	return ctx;
 }
+#endif
 
 static void *_tlsserver_create(void *arg, http_client_t *clt)
 {
@@ -474,6 +476,7 @@ static const httpclient_ops_t *_tlsserver_ops = &(httpclient_ops_t)
 	.destroy = _tls_destroy,
 };
 
+#ifdef HTTPCLIENT_FEATURES
 static const httpclient_ops_t *_tlsclient_ops = &(httpclient_ops_t)
 {
 	.scheme = str_https,
@@ -487,6 +490,7 @@ static const httpclient_ops_t *_tlsclient_ops = &(httpclient_ops_t)
 	.disconnect = _tls_disconnect,
 	.destroy = _tls_destroy,
 };
+#endif
 
 const module_t mod_tls =
 {
