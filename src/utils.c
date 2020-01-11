@@ -343,56 +343,6 @@ char *utils_buildpath(const char *docroot, const char *path_info,
 	return filepath;
 }
 
-#ifdef TEST
-int main()
-{
-	int ret = 0;
-	ret = utils_searchexp("toto.js", ".txt,.js,.css");
-	warn(" 1 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.js", ".txt,.json,.css");
-	warn(" 2 ret %d/EREJECT", ret);
-	ret = utils_searchexp("toto.json", ".txt,.js,.css");
-	warn(" 3 ret %d/EREJECT", ret);
-	ret = utils_searchexp("toto.json", ".txt,.json,.css");
-	warn(" 4 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.json", ".txt,.css,.json");
-	warn(" 5 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.json", ".txt,.css,.js*");
-	warn(" 6 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.js", ".txt,.css,.js*");
-	warn(" 7 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.json", "^.json,.css");
-	warn(" 8 ret %d/EREJECT", ret);
-	ret = utils_searchexp("public/toto.json", ".json,.css");
-	warn(" 9 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/toto.json", "public/*.json,public/*.css");
-	warn("10 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.json", "public/*.json,public/*.css");
-	warn("11 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/toto.json", "^public/*.json,^public/*.css");
-	warn("12 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.json", "^public/*.json,^public/*.css");
-	warn("13 ret %d/EREJECT", ret);
-	ret = utils_searchexp("public/", "public/*,public/*.css");
-	warn("14 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/", ".json,.css");
-	warn("15 ret %d/EREJECT", ret);
-	ret = utils_searchexp("public/", ".json,.css,*");
-	warn("16 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/toto.jpg", ".json,.css,*");
-	warn("17 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/to.to.jpg", ".json,.css,*");
-	warn("18 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.min.js", "public/*.js,public/*.css");
-	warn("19 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.min.css", "public/*.js,public/*.css");
-	warn("20 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.css.none", "public/*.js,public/*.css");
-	warn("21 ret %d/EREJECT", ret);
-	return 0;
-}
-#endif
-
 #ifndef COOKIE
 static const char str_Cookie[] = "Cookie";
 static const char str_SetCookie[] = "Set-Cookie";
