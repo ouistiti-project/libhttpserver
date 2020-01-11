@@ -1118,6 +1118,11 @@ HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message)
 	value = dbentry_search(message->headers, str_connection);
 	if (value != NULL && strcasestr(value, "Keep-Alive") != NULL)
 		message->mode |= HTTPMESSAGE_KEEPALIVE;
+	if (value != NULL && strcasestr(value, "Upgrade") != NULL)
+	{
+		warn("Connection upgrading");
+		message->mode |= HTTPMESSAGE_LOCKED;
+	}
 	value = dbentry_search(message->headers, str_contentlength);
 	if (value != NULL)
 		message->content_length = atoi(value);
@@ -1797,6 +1802,11 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 					request->response->state = PARSE_POSTHEADER | (request->response->state & ~PARSE_MASK);
 				request->response->state = GENERATE_INIT | (request->response->state & ~GENERATE_MASK);
 				request->response->state |= PARSE_CONTINUE;
+				if ((request->mode & HTTPMESSAGE_LOCKED) ||
+					(request->response->mode & HTTPMESSAGE_LOCKED))
+				{
+					client->state |= CLIENT_LOCKED;
+				}
 			break;
 			case EINCOMPLETE:
 				return EINCOMPLETE;
@@ -1906,6 +1916,10 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		case ECONTINUE:
 		{
 			response->state |= PARSE_CONTINUE;
+			if (response->mode & HTTPMESSAGE_LOCKED)
+			{
+				client->state |= CLIENT_LOCKED;
+			}
 		}
 		break;
 		case EINCOMPLETE:
@@ -2309,7 +2323,8 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_SENDING:
 		{
 			send_ret = _httpclient_wait(client, WAIT_SEND);
-			recv_ret = client->ops->status(client->opsctx);
+			if (!(client->state & CLIENT_LOCKED))
+				recv_ret = client->ops->status(client->opsctx);
 		}
 		break;
 		case CLIENT_EXIT:
