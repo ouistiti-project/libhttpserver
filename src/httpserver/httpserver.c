@@ -546,6 +546,85 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 	vfree(message);
 }
 
+static int _httpmessage_parseuri(buffer_t *data, http_message_t *message)
+{
+	int next = PARSE_URI;
+	char *uri = data->offset;
+	int length = 0;
+	if (message->uri == NULL)
+	{
+		/**
+		 * to use parse_cgi from a module, the functions
+		 * has to run on message without client attached.
+		 */
+		message->uri = _buffer_create(MAXCHUNKS_URI);
+	}
+	while (data->offset < (data->data + data->length) && next == PARSE_URI)
+	{
+		switch (*data->offset)
+		{
+			case ' ':
+			{
+				next = PARSE_VERSION;
+			}
+			break;
+			case '\r':
+			case '\n':
+			{
+				next = PARSE_HEADER;
+				if (*(data->offset + 1) == '\n')
+					data->offset++;
+			}
+			break;
+			default:
+			{
+				length++;
+			}
+		}
+		data->offset++;
+	}
+
+	if (length > 0)
+	{
+		uri = _buffer_append(message->uri, uri, length);
+		if (uri == NULL && message->query == NULL)
+		{
+			message->version = message->client->server->config->version;
+#ifdef RESULT_414
+			message->result = RESULT_414;
+#else
+			message->result = RESULT_400;
+#endif
+			next = PARSE_END;
+			err("parse reject uri too long 2: %s %s", message->uri->data, data->data);
+		}
+	}
+	if (next != PARSE_URI)
+	{
+		if (message->uri->length > 0)
+		{
+			/**
+			 * query must be set qt the end of the uri loading
+			 * uri buffer may be change during an extension
+			 */
+			message->query = strchr(message->uri->data, '?');
+			if (message->query == NULL)
+				message->query = message->uri->data + message->uri->length;
+			else
+				message->query++;
+			warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
+		}
+		else
+		{
+			message->version = message->client->server->config->version;
+			message->result = RESULT_400;
+			next = PARSE_END;
+			err("parse reject uri too short");
+		}
+	}
+	return next;
+}
+
 /**
  * @brief this function parse several data chunk to extract elements of the request.
  *
@@ -612,79 +691,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_URI:
 			{
-				char *uri = data->offset;
-				int length = 0;
-				if (message->uri == NULL)
-				{
-					/**
-					 * to use parse_cgi from a module, the functions
-					 * has to run on message without client attached.
-					 */
-					message->uri = _buffer_create(MAXCHUNKS_URI);
-				}
-				while (data->offset < (data->data + data->length) && next == PARSE_URI)
-				{
-					switch (*data->offset)
-					{
-						case ' ':
-						{
-							next = PARSE_VERSION;
-						}
-						break;
-						case '\r':
-						case '\n':
-						{
-							next = PARSE_HEADER;
-							if (*(data->offset + 1) == '\n')
-								data->offset++;
-						}
-						break;
-						default:
-						{
-							length++;
-						}
-					}
-					data->offset++;
-				}
-
-				if (length > 0)
-				{
-					uri = _buffer_append(message->uri, uri, length);
-					if (uri == NULL && message->query == NULL)
-					{
-						message->version = message->client->server->config->version;
-#ifdef RESULT_414
-						message->result = RESULT_414;
-#else
-						message->result = RESULT_400;
-#endif
-						next = PARSE_END;
-						err("parse reject uri too long 2: %s %s", message->uri->data, data->data);
-					}
-				}
-				if (next != PARSE_URI)
-				{
-					if (message->uri->length > 0)
-					{
-						/**
-						 * query must be set qt the end of the uri loading
-						 * uri buffer may be change during an extension
-						 */
-						message->query = strchr(message->uri->data, '?');
-						if (message->query == NULL)
-							message->query = message->uri->data + message->uri->length;
-						else
-							message->query++;
-						warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
-					}
-					else
-					{
-						message->version = message->client->server->config->version;
-						message->result = RESULT_400;
-						next = PARSE_END;
-						err("parse reject uri too short");
-					}
-				}
+				next = _httpmessage_parseuri(data, message);
 			}
 			break;
 			case PARSE_STATUS:
