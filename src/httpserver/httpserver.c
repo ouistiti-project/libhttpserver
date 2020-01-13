@@ -906,6 +906,27 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 	return next;
 }
 
+static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_POSTCONTENT;
+	char *query = data->offset;
+	int length = data->length -(data->offset - data->data);
+	_buffer_append(message->query_storage, query, length);
+	if (message->content_length <= length)
+	{
+		data->offset += message->content_length;
+		message->content_length = 0;
+		next = PARSE_END;
+	}
+	else
+	{
+		data->offset += length;
+		message->content_length -= length;
+		message->state |= PARSE_CONTINUE;
+	}
+	return next;
+}
+
 /**
  * @brief this function parse several data chunk to extract elements of the request.
  *
@@ -978,21 +999,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_POSTCONTENT:
 			{
-				char *query = data->offset;
-				int length = data->length -(data->offset - data->data);
-				_buffer_append(message->query_storage, query, length);
-				if (message->content_length <= length)
-				{
-					data->offset += message->content_length;
-					message->content_length = 0;
-					next = PARSE_END;
-				}
-				else
-				{
-					data->offset += length;
-					message->content_length -= length;
-					message->state |= PARSE_CONTINUE;
-				}
+				next = _httpmessage_parsepostcontent(message, data);
 			}
 			break;
 			case PARSE_END:
