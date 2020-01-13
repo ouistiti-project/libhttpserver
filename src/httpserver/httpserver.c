@@ -546,6 +546,42 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 	vfree(message);
 }
 
+static int _httpmessage_parseinit(buffer_t *data, http_message_t *message)
+{
+	int next = PARSE_INIT;
+	const http_message_method_t *method = message->client->server->methods;
+	while (method != NULL)
+	{
+		int length = strlen(method->key);
+		if (!strncasecmp(data->offset, method->key, length) &&
+			data->offset[length] == ' ')
+		{
+			message->method = method;
+			data->offset += length + 1;
+			next = PARSE_URI;
+			/**
+			 * to parse a request the default value of content_length MUST be 0
+			 * otherwise the parser continue to wait content.
+			 * for GET method, there isn't any content and content_length is not set
+		 */
+			message->content_length = 0;
+			break;
+		}
+		method = method->next;
+	}
+	message->client->state &= ~CLIENT_KEEPALIVE;
+
+	if (method == NULL)
+	{
+		err("parse reject method %s", data->offset);
+		data->offset++;
+		message->version = message->client->server->config->version;
+		message->result = RESULT_405;
+		next = PARSE_END;
+	}
+	return next;
+}
+
 static int _httpmessage_parseuri(buffer_t *data, http_message_t *message)
 {
 	int next = PARSE_URI;
@@ -657,36 +693,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 		{
 			case PARSE_INIT:
 			{
-				const http_message_method_t *method = message->client->server->methods;
-				while (method != NULL)
-				{
-					int length = strlen(method->key);
-					if (!strncasecmp(data->offset, method->key, length) &&
-						data->offset[length] == ' ')
-					{
-						message->method = method;
-						data->offset += length + 1;
-						next = PARSE_URI;
-						/**
-						 * to parse a request the default value of content_length MUST be 0
-						 * otherwise the parser continue to wait content.
-						 * for GET method, there isn't any content and content_length is not set
-					 */
-						message->content_length = 0;
-						break;
-					}
-					method = method->next;
-				}
-				message->client->state &= ~CLIENT_KEEPALIVE;
-
-				if (method == NULL)
-				{
-					err("parse reject method %s", data->offset);
-					data->offset++;
-					message->version = message->client->server->config->version;
-					message->result = RESULT_405;
-					next = PARSE_END;
-				}
+				next = _httpmessage_parseinit(data, message);
 			}
 			break;
 			case PARSE_URI:
