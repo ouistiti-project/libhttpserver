@@ -661,6 +661,54 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	return next;
 }
 
+static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_VERSION;
+
+	/**
+	 * There is not enougth data to parse the version.
+	 * Move the rest to the beginning and request
+	 * more data.
+	 **/
+	if (data->offset + 10 > data->data + data->length)
+	{
+		//_buffer_shrink(data);
+		return next;
+	}
+	char *version = data->offset;
+	int i;
+	for (i = HTTP09; i < HTTPVERSIONS; i++)
+	{
+		int length = strlen(httpversion[i]);
+		if (!strncasecmp(version, httpversion[i], length))
+		{
+			data->offset += length;
+			if (*data->offset == '\r')
+				data->offset++;
+			if (*data->offset == '\n')
+			{
+				data->offset++;
+				next = PARSE_HEADER;
+			}
+			else
+			{
+				next = PARSE_END;
+				message->result = RESULT_400;
+				err("bad request %s", data->data);
+			}
+			message->version = i;
+			break;
+		}
+	}
+	if (i == HTTPVERSIONS)
+	{
+		next = PARSE_END;
+		message->result = RESULT_400;
+		err("request bad protocol version %s", version);
+	}
+	return next;
+}
+
 /**
  * @brief this function parse several data chunk to extract elements of the request.
  *
@@ -728,53 +776,14 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_VERSION:
 			{
-				/**
-				 * There is not enougth data to parse the version.
-				 * Move the rest to the beginning and request
-				 * more data.
-				 **/
-				if (data->offset + 10 > data->data + data->length)
-				{
-					//_buffer_shrink(data);
-					break;
-				}
-				char *version = data->offset;
-				int i;
-				for (i = HTTP09; i < HTTPVERSIONS; i++)
-				{
-					int length = strlen(httpversion[i]);
-					if (!strncasecmp(version, httpversion[i], length))
-					{
-						data->offset += length;
-						if (*data->offset == '\r')
-							data->offset++;
-						if (*data->offset == '\n')
-						{
-							data->offset++;
-							next = PARSE_HEADER;
-						}
-						else
-						{
-							next = PARSE_END;
-							message->result = RESULT_400;
-							err("bad request %s", data->data);
-						}
-						message->version = i;
-						break;
-					}
-				}
-				if (i == HTTPVERSIONS)
-				{
-					next = PARSE_END;
-					message->result = RESULT_400;
-					err("request bad protocol version %s", version);
-				}
+				next = _httpmessage_parseversion(message, data);
 			}
 			break;
 			case PARSE_HEADER:
 			{
 				char *header = data->offset;
 				int length = 0;
+
 				if (message->headers_storage == NULL)
 				{
 					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
