@@ -546,7 +546,7 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 	vfree(message);
 }
 
-static int _httpmessage_parseinit(buffer_t *data, http_message_t *message)
+static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_INIT;
 	const http_message_method_t *method = message->client->server->methods;
@@ -582,7 +582,7 @@ static int _httpmessage_parseinit(buffer_t *data, http_message_t *message)
 	return next;
 }
 
-static int _httpmessage_parseuri(buffer_t *data, http_message_t *message)
+static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_URI;
 	char *uri = data->offset;
@@ -693,12 +693,12 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 		{
 			case PARSE_INIT:
 			{
-				next = _httpmessage_parseinit(data, message);
+				next = _httpmessage_parseinit(message, data);
 			}
 			break;
 			case PARSE_URI:
 			{
-				next = _httpmessage_parseuri(data, message);
+				next = _httpmessage_parseuri(message, data);
 			}
 			break;
 			case PARSE_STATUS:
