@@ -787,6 +787,31 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 	return next;
 }
 
+static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_POSTHEADER;
+	/**
+	 * If the client send headers with only \n at end of each line
+	 * it is impossible to rebuild the header correctly.
+	 * This null character allows to add \r\n at the end of the headers.
+	 */
+	_buffer_append(message->headers_storage, "\0", 1);
+	if (_httpmessage_fillheaderdb(message) != ESUCCESS)
+	{
+		next = PARSE_END;
+		message->result = RESULT_400;
+		err("request bad header %s", message->headers_storage->data);
+	}
+//				else if (!(message->state & PARSE_CONTINUE))
+//					message->state |= PARSE_CONTINUE;
+	else
+	{
+		next = PARSE_PRECONTENT;
+		message->state &= ~PARSE_CONTINUE;
+	}
+	return next;
+}
+
 static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_CONTENT;
@@ -891,25 +916,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_POSTHEADER:
 			{
-				/**
-				 * If the client send headers with only \n at end of each line
-				 * it is impossible to rebuild the header correctly.
-				 * This null character allows to add \r\n at the end of the headers.
-				 */
-				_buffer_append(message->headers_storage, "\0", 1);
-				if (_httpmessage_fillheaderdb(message) != ESUCCESS)
-				{
-					next = PARSE_END;
-					message->result = RESULT_400;
-					err("request bad header %s", message->headers_storage->data);
-				}
-//				else if (!(message->state & PARSE_CONTINUE))
-//					message->state |= PARSE_CONTINUE;
-				else
-				{
-					next = PARSE_PRECONTENT;
-					message->state &= ~PARSE_CONTINUE;
-				}
+				next = _httpmessage_parsepostheader(message, data);
 			}
 			break;
 			case PARSE_PRECONTENT:
