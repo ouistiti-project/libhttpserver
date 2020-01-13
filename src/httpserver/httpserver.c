@@ -812,6 +812,53 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 	return next;
 }
 
+static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_PRECONTENT;
+	int length = 0;
+	if (message->query)
+		length = strlen(message->query);
+
+	if (message->method->id == MESSAGE_TYPE_POST &&
+		message->content_type != NULL &&
+		!strcmp(message->content_type, str_form_urlencoded))
+	{
+		next = PARSE_POSTCONTENT;
+		message->state &= ~PARSE_CONTINUE;
+		length += message->content_length;
+	}
+	else if (message->content_length == 0)
+	{
+		next = PARSE_END;
+		dbg("no content inside request");
+	}
+	else
+	/**
+	 * data may contain some first bytes from the content
+	 * We need to get out from this function use them by
+	 * the connector
+	 */
+	if (!(message->state & PARSE_CONTINUE))
+		message->state |= PARSE_CONTINUE;
+	else
+	{
+		next = PARSE_CONTENT;
+		message->state &= ~PARSE_CONTINUE;
+	}
+
+	if (message->query_storage == NULL)
+	{
+		int nbchunks = (length / ChunkSize ) + 1;
+		message->query_storage = _buffer_create(nbchunks);
+		if (message->query != NULL)
+		{
+			_buffer_append(message->query_storage, message->query, length);
+			_buffer_append(message->query_storage, "&", 1);
+		}
+	}
+	return next;
+}
+
 static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_CONTENT;
@@ -921,47 +968,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_PRECONTENT:
 			{
-				int length = 0;
-				if (message->query)
-					length = strlen(message->query);
-
-				if (message->method->id == MESSAGE_TYPE_POST &&
-					message->content_type != NULL &&
-					!strcmp(message->content_type, str_form_urlencoded))
-				{
-					next = PARSE_POSTCONTENT;
-					message->state &= ~PARSE_CONTINUE;
-					length += message->content_length;
-				}
-				else if (message->content_length == 0)
-				{
-					next = PARSE_END;
-					dbg("no content inside request");
-				}
-				else
-				/**
-				 * data may contain some first bytes from the content
-				 * We need to get out from this function use them by
-				 * the connector
-				 */
-				if (!(message->state & PARSE_CONTINUE))
-					message->state |= PARSE_CONTINUE;
-				else
-				{
-					next = PARSE_CONTENT;
-					message->state &= ~PARSE_CONTINUE;
-				}
-
-				if (message->query_storage == NULL)
-				{
-					int nbchunks = (length / ChunkSize ) + 1;
-					message->query_storage = _buffer_create(nbchunks);
-					if (message->query != NULL)
-					{
-						_buffer_append(message->query_storage, message->query, length);
-						_buffer_append(message->query_storage, "&", 1);
-					}
-				}
+				next = _httpmessage_parseprecontent(message, data);
 			}
 			break;
 			case PARSE_CONTENT:
