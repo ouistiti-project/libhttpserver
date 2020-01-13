@@ -709,6 +709,57 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 	return next;
 }
 
+static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_HEADER;
+	char *header = data->offset;
+	int length = 0;
+
+	if (message->headers_storage == NULL)
+	{
+		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
+	}
+	/* store header line as "<key>:<value>\0" */
+	while (data->offset < (data->data + data->length) && next == PARSE_HEADER)
+	{
+		switch (*data->offset)
+		{
+			case '\n':
+			{
+			/**
+			 * Empty Header line defines the end of the header and
+			 * the beginning fo the content.
+			 **/
+			if (length == 0 && !(message->state & PARSE_CONTINUE))
+			{
+				next = PARSE_POSTHEADER;
+			}
+			else
+			{
+				header[length] = '\0';
+				_buffer_append(message->headers_storage, header, length + 1);
+				header = data->offset + 1;
+				length = 0;
+				message->state &= ~PARSE_CONTINUE;
+			}
+			}
+			break;
+			case '\r':
+			break;
+			default:
+				length++;
+		}
+		data->offset++;
+	}
+	/* not enougth data to complete the line */
+	if (next == PARSE_HEADER && length > 0)
+	{
+		_buffer_append(message->headers_storage, header, length);
+		message->state |= PARSE_CONTINUE;
+	}
+	return next;
+}
+
 /**
  * @brief this function parse several data chunk to extract elements of the request.
  *
@@ -781,51 +832,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_HEADER:
 			{
-				char *header = data->offset;
-				int length = 0;
-
-				if (message->headers_storage == NULL)
-				{
-					message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
-				}
-				/* store header line as "<key>:<value>\0" */
-				while (data->offset < (data->data + data->length) && next == PARSE_HEADER)
-				{
-					switch (*data->offset)
-					{
-						case '\n':
-						{
-						/**
-						 * Empty Header line defines the end of the header and
-						 * the beginning fo the content.
-						 **/
-						if (length == 0 && !(message->state & PARSE_CONTINUE))
-						{
-							next = PARSE_POSTHEADER;
-						}
-						else
-						{
-							header[length] = '\0';
-							_buffer_append(message->headers_storage, header, length + 1);
-							header = data->offset + 1;
-							length = 0;
-							message->state &= ~PARSE_CONTINUE;
-						}
-						}
-						break;
-						case '\r':
-						break;
-						default:
-							length++;
-					}
-					data->offset++;
-				}
-				/* not enougth data to complete the line */
-				if (next == PARSE_HEADER && length > 0)
-				{
-					_buffer_append(message->headers_storage, header, length);
-					message->state |= PARSE_CONTINUE;
-				}
+				next = _httpmessage_parseheader(message, data);
 			}
 			break;
 			case PARSE_POSTHEADER:
