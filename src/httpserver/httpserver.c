@@ -661,6 +661,33 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	return next;
 }
 
+static int _httpmessage_parsestatus(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_STATUS;
+	int i;
+	for (i = HTTP09; i < HTTPVERSIONS; i++)
+	{
+		int length = strlen(httpversion[i]);
+		if (!strncasecmp(data->offset, httpversion[i], length))
+		{
+			message->version = i;
+			data->offset += length;
+			break;
+		}
+	}
+	if (i < HTTPVERSIONS)
+	{
+		/** pass the next space character */
+		data->offset++;
+		char status[4] = {data->offset[0], data->offset[1], data->offset[2], 0};
+		message->result = atoi(status);
+		httpmessage_addheader(message, "Status", status);
+		data->offset = strchr(data->offset, '\n') + 1;
+	}
+	next = PARSE_HEADER;
+	return next;
+}
+
 static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_VERSION;
@@ -849,27 +876,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			break;
 			case PARSE_STATUS:
 			{
-				int i;
-				for (i = HTTP09; i < HTTPVERSIONS; i++)
-				{
-					int length = strlen(httpversion[i]);
-					if (!strncasecmp(data->offset, httpversion[i], length))
-					{
-						message->version = i;
-						data->offset += length;
-						break;
-					}
-				}
-				if (i < HTTPVERSIONS)
-				{
-					/** pass the next space character */
-					data->offset++;
-					char status[4] = {data->offset[0], data->offset[1], data->offset[2], 0};
-					message->result = atoi(status);
-					httpmessage_addheader(message, "Status", status);
-					data->offset = strchr(data->offset, '\n') + 1;
-				}
-				next = PARSE_HEADER;
+				next = _httpmessage_parsestatus(message, data);
 			}
 			break;
 			case PARSE_VERSION:
