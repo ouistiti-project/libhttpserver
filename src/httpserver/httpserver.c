@@ -599,6 +599,11 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	{
 		switch (*data->offset)
 		{
+			case '%':
+			{
+				next = PARSE_URIENCODED;
+			}
+			break;
 			case ' ':
 			{
 				next = PARSE_VERSION;
@@ -657,6 +662,44 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			next = PARSE_END;
 			err("parse reject uri too short");
 		}
+	}
+	return next;
+}
+
+static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_URIENCODED;
+	char *encoded = data->offset;
+	char decodeval = 0;
+	int i;
+	for (i = 0; i < 2; i++)
+	{
+		decodeval = decodeval << 4;
+		if (*encoded < 0x40)
+			decodeval += (*encoded - 0x30);
+		else if (*encoded < 0x47)
+			decodeval += (*encoded - 0x41 + 10);
+		else if (*encoded < 0x67)
+			decodeval += (*encoded - 0x61 + 10);
+		encoded ++;
+	}
+	_buffer_append(message->uri, &decodeval, 1);
+	encoded = strchr(data->offset, ';');
+	if (encoded == NULL)
+	{
+		message->version = message->client->server->config->version;
+#ifdef RESULT_414
+		message->result = RESULT_414;
+#else
+		message->result = RESULT_400;
+#endif
+		next = PARSE_END;
+		err("parse reject uri too long 2: %s %s", message->uri->data, data->data);
+	}
+	else
+	{
+		data->offset = encoded + 1;
+		next = PARSE_URI;
 	}
 	return next;
 }
@@ -965,6 +1008,11 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			case PARSE_URI:
 			{
 				next = _httpmessage_parseuri(message, data);
+			}
+			break;
+			case PARSE_URIENCODED:
+			{
+				next = _httpmessage_parseuriencoded(message, data);
 			}
 			break;
 			case PARSE_STATUS:
