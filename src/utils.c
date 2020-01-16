@@ -317,17 +317,23 @@ char *utils_buildpath(const char *docroot, const char *path_info,
 	char *filepath;
 	int length;
 	int path_info_length;
+	if (path_info[0] == '/')
+		path_info++;
+	const char *query = strchr(path_info, '?');
+	if (query != NULL)
+		path_info_length = query - path_info;
+	else
+		path_info_length = strlen(path_info);
 
-	path_info_length = strlen(path_info);
-	length = strlen(docroot) + 1;
+	length = strlen(docroot);
 	length += path_info_length + 1;
 	length += strlen(filename);
 	length += strlen(ext);
 	filepath = calloc(1, length + 1);
 	if (filename[0] != '\0' && path_info[path_info_length -1] != '/')
-		snprintf(filepath, length + 1, "%s/%s/%s%s", docroot, path_info, filename, ext);
+		snprintf(filepath, length + 1, "%s/%.*s/%s%s", docroot, path_info_length, path_info, filename, ext);
 	else
-		snprintf(filepath, length + 1, "%s/%s%s%s", docroot, path_info, filename, ext);
+		snprintf(filepath, length + 1, "%s/%.*s%s%s", docroot, path_info_length, path_info, filename, ext);
 
 	filepath[length] = '\0';
 	if (filestat)
