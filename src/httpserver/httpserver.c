@@ -649,18 +649,16 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			 * uri buffer may be change during an extension
 			 */
 			message->query = strchr(message->uri->data, '?');
-			if (message->query == NULL)
-				message->query = message->uri->data + message->uri->length;
-			else
+			if (message->query != NULL)
+			{
+				*message->query = '\0';
 				message->query++;
+			}
 			warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 		}
 		else
 		{
-			message->version = message->client->server->config->version;
-			message->result = RESULT_400;
-			next = PARSE_END;
-			err("parse reject uri too short");
+			_buffer_append(message->uri, "", -1);
 		}
 	}
 	return next;
@@ -896,7 +894,6 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 		if (message->query != NULL)
 		{
 			_buffer_append(message->query_storage, message->query, length);
-			_buffer_append(message->query_storage, "&", 1);
 		}
 	}
 	return next;
@@ -954,6 +951,11 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	int next = PARSE_POSTCONTENT;
 	char *query = data->offset;
 	int length = data->length -(data->offset - data->data);
+	/**
+	 * message mix query data inside the URI and Content
+	 */
+	if (message->query != NULL)
+		_buffer_append(message->query_storage, "&", 1);
 	_buffer_append(message->query_storage, query, length);
 	if (message->content_length <= length)
 	{
