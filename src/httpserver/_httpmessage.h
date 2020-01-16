@@ -110,6 +110,7 @@ struct http_message_s
 	dbentry_t *cookies;
 	void *private;
 	http_message_t *next;
+	char decodeval;
 };
 
 struct _http_message_result_s

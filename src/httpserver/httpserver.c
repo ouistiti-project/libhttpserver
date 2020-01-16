@@ -563,7 +563,7 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 			 * to parse a request the default value of content_length MUST be 0
 			 * otherwise the parser continue to wait content.
 			 * for GET method, there isn't any content and content_length is not set
-		 */
+			 */
 			message->content_length = 0;
 			break;
 		}
@@ -590,6 +590,23 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	if (message->uri == NULL)
 	{
 		/**
+		 * check the rules on URI:
+		 *  - abs_path
+		 *  - empty who is equivalent to /
+		 *  - *
+		 *  - absolute URI
+		 *  - %2f who is /
+		 * This check must be done only once
+		 */
+		if (strchr("/ *%", uri[0]) == NULL && (strstr(uri, "://") == NULL) && strncasecmp(uri, "%2f", 3))
+		{
+			message->version = message->client->server->config->version;
+			message->result = RESULT_400;
+			next = PARSE_END;
+			err("parse reject uri missing leading /: %s", uri);
+			return next;
+		}
+		/**
 		 * to use parse_cgi from a module, the functions
 		 * has to run on message without client attached.
 		 */
@@ -607,6 +624,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			case ' ':
 			{
 				next = PARSE_VERSION;
+				warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 			}
 			break;
 			case '\r':
@@ -615,6 +633,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 				next = PARSE_HEADER;
 				if (*(data->offset + 1) == '\n')
 					data->offset++;
+				warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 			}
 			break;
 			default:
@@ -637,7 +656,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			message->result = RESULT_400;
 #endif
 			next = PARSE_END;
-			err("parse reject uri too long 2: %s %s", message->uri->data, data->data);
+			err("parse reject uri too long : %s %s", message->uri->data, data->data);
 		}
 	}
 	if (next != PARSE_URI)
@@ -654,11 +673,10 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 				*message->query = '\0';
 				message->query++;
 			}
-			warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 		}
 		else
 		{
-			_buffer_append(message->uri, "", -1);
+			_buffer_append(message->uri, "/", -1);
 		}
 	}
 	return next;
@@ -668,37 +686,45 @@ static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_URIENCODED;
 	char *encoded = data->offset;
-	char decodeval = 0;
-	int i;
-	for (i = 0; i < 2; i++)
+	if (*encoded == '%')
+		encoded ++;
+	char decodeval = message->decodeval;
+	int i = (decodeval == 0)? 0 : 1;
+	next = PARSE_URI;
+	for (; i < 2; i++)
 	{
 		decodeval = decodeval << 4;
-		if (*encoded < 0x40)
+		if (*encoded > 0x29 && *encoded < 0x40)
 			decodeval += (*encoded - 0x30);
-		else if (*encoded < 0x47)
+		else if (*encoded > 0x40 && *encoded < 0x47)
 			decodeval += (*encoded - 0x41 + 10);
-		else if (*encoded < 0x67)
+		else if (*encoded > 0x60 && *encoded < 0x67)
 			decodeval += (*encoded - 0x61 + 10);
+		else if (*encoded == '\0')
+		{
+			/**
+			 * not enought data to read the character
+			 */
+			decodeval = decodeval >> 4;
+			next = PARSE_URIENCODED;
+			message->decodeval = decodeval;
+			break;
+		}
+		else
+		{
+			message->result = RESULT_400;
+			next = PARSE_END;
+			err("parse reject uri : %s %s", message->uri->data, data->data);
+		}
 		encoded ++;
 	}
-	_buffer_append(message->uri, &decodeval, 1);
-	encoded = strchr(data->offset, ';');
-	if (encoded == NULL)
+	if (next == PARSE_URI)
 	{
-		message->version = message->client->server->config->version;
-#ifdef RESULT_414
-		message->result = RESULT_414;
-#else
-		message->result = RESULT_400;
-#endif
-		next = PARSE_END;
-		err("parse reject uri too long 2: %s %s", message->uri->data, data->data);
+		dbg("character: %c", decodeval);
+		_buffer_append(message->uri, &decodeval, 1);
+		message->decodeval = 0;
 	}
-	else
-	{
-		data->offset = encoded + 1;
-		next = PARSE_URI;
-	}
+	data->offset = encoded;
 	return next;
 }
 
