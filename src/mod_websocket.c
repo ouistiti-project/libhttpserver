@@ -139,7 +139,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 				if (_checkname(ctx->mod->config, uri) == ESUCCESS)
 				{
 					struct stat filestat;
-					char *filepath = utils_buildpath(ctx->mod->config->docroot, uri, "", "", &filestat);
+					char *filepath = utils_buildpath(ctx->mod->config->docroot,"", uri, "", &filestat);
 					const char *pathname = NULL;
 
 					protocol = httpmessage_REQUEST(request, str_protocol);
@@ -154,11 +154,11 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 					}
 					if (filepath == NULL)
 					{
-						filepath = utils_buildpath(ctx->mod->config->docroot, pathname, "", "", &filestat);
+						filepath = utils_buildpath(ctx->mod->config->docroot, "", pathname, "", &filestat);
 					}
 					else if (S_ISDIR(filestat.st_mode))
 					{
-						filepath = utils_buildpath(ctx->mod->config->docroot, uri, pathname, "", &filestat);
+						filepath = utils_buildpath(ctx->mod->config->docroot, "", uri, pathname, &filestat);
 					}
 					if (filepath && S_ISSOCK(filestat.st_mode))
 						ctx->filepath = filepath;
