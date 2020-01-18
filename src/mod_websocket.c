@@ -105,7 +105,7 @@ static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *
 	}
 }
 
-static int _checkname(mod_websocket_t *config, char *pathname)
+static int _checkname(mod_websocket_t *config, const char *pathname)
 {
 	if (pathname[0] == '.')
 	{
@@ -135,7 +135,7 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 			if (strcasestr(upgrade, str_websocket))
 			{
 				const char *protocol = NULL;
-				char *uri = utils_urldecode(httpmessage_REQUEST(request, "uri"));
+				const char *uri = httpmessage_REQUEST(request, "uri");
 				if (_checkname(ctx->mod->config, uri) == ESUCCESS)
 				{
 					struct stat filestat;
@@ -187,7 +187,6 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 					httpmessage_result(response, RESULT_404);
 					ret = ESUCCESS;
 				}
-				free(uri);
 			}
 		}
 	}
