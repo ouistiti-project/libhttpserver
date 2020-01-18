@@ -177,7 +177,7 @@ char *utils_urldecode(const char *encoded)
 		{
 			// back into previous directory
 			encoded+=3;
-			if ((offset > decoded) && (offset < decoded + length - 1) && (*(offset - 1) == '/'))
+			if ((offset > decoded) && (offset < decoded + length) && (*(offset - 1) == '/'))
 			{
 				offset--;
 				*offset = '\0';
