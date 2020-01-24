@@ -664,7 +664,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 		if (message->uri->length > 0)
 		{
 			/**
-			 * query must be set qt the end of the uri loading
+			 * query must be set at the end of the uri loading
 			 * uri buffer may be change during an extension
 			 */
 			message->query = strchr(message->uri->data, '?');
@@ -919,7 +919,7 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 		message->query_storage = _buffer_create(nbchunks);
 		if (message->query != NULL)
 		{
-			_buffer_append(message->query_storage, message->query, length);
+			_buffer_append(message->query_storage, message->query, -1);
 		}
 	}
 	return next;
@@ -981,7 +981,10 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	 * message mix query data inside the URI and Content
 	 */
 	if (message->query != NULL)
+	{
 		_buffer_append(message->query_storage, "&", 1);
+		message->query = NULL;
+	}
 	_buffer_append(message->query_storage, query, length);
 	if (message->content_length <= length)
 	{
@@ -2509,6 +2512,8 @@ static int _httpclient_run(http_client_t *client)
 			return ESUCCESS;
 		}
 		break;
+		default:
+		break;
 	}
 
 	if (recv_ret == ESUCCESS)
@@ -3409,7 +3414,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = (char *)httpversion[(server->config->version & HTTPVERSION_MASK)];
+		value = httpversion[(server->config->version & HTTPVERSION_MASK)];
 	}
 	else if (!strcasecmp(key, "service"))
 	{
@@ -3499,10 +3504,9 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	{
 		value = httpversion[(message->version & HTTPVERSION_MASK)];
 	}
-	else if (!strcasecmp(key, "method"))
+	else if (!strcasecmp(key, "method") && (message->method))
 	{
-		if (message->method)
-			value = (char *)message->method->key;
+		value = message->method->key;
 	}
 	else if (!strcasecmp(key, "result"))
 	{
