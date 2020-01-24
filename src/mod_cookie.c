@@ -249,7 +249,7 @@ void cookie_set(http_message_t *response, const char *key, const char *value)
 {
 	const char *domain = httpmessage_SERVER(response, "domain");
 	char *keyvalue = NULL;
-	if (domain != NULL)
+	if (domain != NULL && strncmp(domain, "local", 5))
 	{
 		int length = strlen(key) + 1 + strlen(value) + 18 + strlen(domain) + 1;
 		keyvalue = malloc(length);
