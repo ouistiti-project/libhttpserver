@@ -91,7 +91,7 @@ static const mime_entry_t *mime_default =
 	.next = NULL
 }}}}}}}};
 
-static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case);
+static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case, const char **rest);
 
 void utils_addmime(const char *ext, const char*mime)
 {
@@ -114,7 +114,7 @@ static const mime_entry_t *_utils_getmime(const mime_entry_t *entry, const char 
 {
 	while (entry)
 	{
-		if (_utils_searchexp(filepath, entry->ext, 1) == ESUCCESS)
+		if (_utils_searchexp(filepath, entry->ext, 1, NULL) == ESUCCESS)
 		{
 			break;
 		}
@@ -209,12 +209,12 @@ char *utils_urldecode(const char *encoded)
 	return decoded;
 }
 
-int utils_searchexp(const char *haystack, const char *needleslist)
+int utils_searchexp(const char *haystack, const char *needleslist, const char **rest)
 {
-	return _utils_searchexp(haystack, needleslist, 0);
+	return _utils_searchexp(haystack, needleslist, 0, rest);
 }
 
-static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case)
+static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case, const char **rest)
 {
 	int ret = EREJECT;
 	if (haystack != NULL)
@@ -284,7 +284,6 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 					}
 					else if (*needle == ',' || *needle == '\0')
 					{
-						wildcard = 0;
 						break;
 					}
 				}
@@ -299,13 +298,18 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 			if (ret == ESUCCESS)
 			{
 				if (*needle == ',' || *needle == '\0')
+				{
+					if (wildcard && (rest != NULL))
+						*rest = &haystack[i - 1];
 					break;
+				}
 				else
 					ret = EREJECT;
 			}
 			needle = strchr(needle, ',');
 			if (needle != NULL)
 				needle++;
+			wildcard = 0;
 		}
 	}
 	return ret;

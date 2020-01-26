@@ -44,7 +44,7 @@ const char *utils_getmime(const char *path);
 void utils_addmime(const char *ext, const char*mime);
 
 char *utils_urldecode(const char *encoded);
-int utils_searchexp(const char *haystack, const char *needleslist);
+int utils_searchexp(const char *haystack, const char *needleslist, const char **rest);
 char *utils_buildpath(const char *docroot, const char *other, const char *path_info,
 			const char *filename, struct stat *filestat);
 
