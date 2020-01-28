@@ -371,9 +371,7 @@ const char *cookie_get(http_message_t *request, const char *key)
 
 void cookie_set(http_message_t *response, const char *key, const char *value)
 {
-	char *keyvalue = malloc(strlen(key) + 1 + strlen(value) + 1);
-	sprintf(keyvalue, "%s=%s", key, value);
-	httpmessage_addheader(response, str_SetCookie, keyvalue);
-	free(keyvalue);
+	httpmessage_addheader(response, str_SetCookie, key);
+	httpmessage_appendheader(response, str_SetCookie, "=", value, NULL);
 }
 #endif

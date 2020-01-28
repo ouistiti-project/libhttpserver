@@ -248,22 +248,11 @@ const char *cookie_get(http_message_t *request, const char *key)
 void cookie_set(http_message_t *response, const char *key, const char *value)
 {
 	const char *domain = httpmessage_SERVER(response, "domain");
-	char *keyvalue = NULL;
+	httpmessage_addheader(response, str_SetCookie, key);
+	const char *path = "/";
+	httpmessage_appendheader(response, str_SetCookie, "=", value, "; Path=", path, NULL);
 	if (domain != NULL && strncmp(domain, "local", 5))
-	{
-		int length = strlen(key) + 1 + strlen(value) + 18 + strlen(domain) + 1;
-		keyvalue = malloc(length);
-		snprintf(keyvalue, length, "%s=%s; Path=/; Domain=.%s", key, value, domain);
-	}
-	else
-	{
-		int length = strlen(key) + 1 + strlen(value) + 8 + 1;
-		keyvalue = malloc(length);
-		snprintf(keyvalue, length, "%s=%s; Path=/", key, value);
-	}
-	httpmessage_addheader(response, str_SetCookie, keyvalue);
-	dbg("cookie: new %s", keyvalue);
-	free(keyvalue);
+		httpmessage_appendheader(response, str_SetCookie, "; Domain=.", domain, NULL);
 }
 
 const module_t mod_cookie =
