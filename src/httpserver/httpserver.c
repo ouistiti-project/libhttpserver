@@ -42,6 +42,11 @@
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <signal.h>
+
+#ifdef USE_STDARG
+#include <stdarg.h>
+#endif
+
 #include <poll.h>
 #include <netdb.h>
 
@@ -226,6 +231,15 @@ static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 	}
 	else
 		return NULL;
+}
+
+static char *_buffer_pop(buffer_t *buffer, int length)
+{
+	length = (length < buffer->length)? length: buffer->length;
+	buffer->length -= length;
+	buffer->offset -= length;
+	*buffer->offset = '\0';
+	return buffer->offset;
 }
 
 static void _buffer_shrink(buffer_t *buffer)
@@ -1305,6 +1319,34 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 	_buffer_append(message->headers_storage, ": ", 2);
 	_buffer_append(message->headers_storage, value, strlen(value));
 	_buffer_append(message->headers_storage, "\r\n", 2);
+}
+
+int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...)
+{
+	if (message->headers_storage == NULL)
+	{
+		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
+	}
+	const char *end = message->headers_storage->offset - 2;
+	while (*end != '\n') end--;
+	int length = strlen(key);
+	if (strncmp(end + 1, key, length))
+		return EREJECT;
+	_buffer_pop(message->headers_storage, 2);
+#ifdef USE_STDARG
+	va_list ap;
+	va_start(ap, value);
+	while (value != NULL)
+	{
+#endif
+		_buffer_append(message->headers_storage, value, strlen(value));
+#ifdef USE_STDARG
+		value = va_arg(ap, const char *);
+	}
+#endif
+	va_end(ap);
+	_buffer_append(message->headers_storage, "\r\n", 2);
+	return ESUCCESS;
 }
 
 int httpmessage_addcontent(http_message_t *message, const char *type, const char *content, int length)
