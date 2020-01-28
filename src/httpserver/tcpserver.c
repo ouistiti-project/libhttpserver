@@ -166,6 +166,9 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	int ret = recv(client->sock, data, length, MSG_NOSIGNAL);
+#ifdef TCPDUMP
+	ret = write(1, data, ret);
+#endif
 	if (ret < 0)
 	{
 		if (errno == EAGAIN)
