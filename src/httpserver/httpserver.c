@@ -734,7 +734,6 @@ static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
 	}
 	if (next == PARSE_URI)
 	{
-		dbg("character: %c", decodeval);
 		_buffer_append(message->uri, &decodeval, 1);
 		message->decodeval = 0;
 	}
@@ -1343,8 +1342,8 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 #ifdef USE_STDARG
 		value = va_arg(ap, const char *);
 	}
-#endif
 	va_end(ap);
+#endif
 	_buffer_append(message->headers_storage, "\r\n", 2);
 	return ESUCCESS;
 }
@@ -1674,38 +1673,36 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 	case GENERATE_END:
 		if (client->sockdata == NULL)
 			client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
+
 		data = client->sockdata;
-		if (data)
+		_buffer_reset(data);
+		*(data->offset) = '\0';
+
+		size = httpclient_wait(request->client, 1);
+		if (size < 0)
+			ret = EREJECT;
+		if (response->content_length != 0 && size > 0)
 		{
-			_buffer_reset(data);
-			*(data->offset) = '\0';
+			size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
 
-			size = httpclient_wait(request->client, 1);
-			if (size < 0)
-				ret = EREJECT;
-			if (response->content_length != 0 && size > 0)
+		}
+		if (size > 0)
+		{
+			data->length += size;
+			data->data[data->length] = 0;
+
+			data->offset = data->data;
+			ret = _httpmessage_parserequest(response, data);
+			while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
 			{
-				size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
-
-			}
-			if (size > 0)
-			{
-				data->length += size;
-				data->data[data->length] = 0;
-
+				_buffer_shrink(data);
 				data->offset = data->data;
 				ret = _httpmessage_parserequest(response, data);
-				while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
-				{
-					_buffer_shrink(data);
-					data->offset = data->data;
-					ret = _httpmessage_parserequest(response, data);
-				}
 			}
-			if ((response->state & PARSE_MASK) == PARSE_END)
-			{
-				request->state = GENERATE_ERROR;
-			}
+		}
+		if ((response->state & PARSE_MASK) == PARSE_END)
+		{
+			request->state = GENERATE_ERROR;
 		}
 	break;
 	case GENERATE_ERROR:
@@ -1880,6 +1877,7 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 			if (((*prequest)->mode & HTTPMESSAGE_KEEPALIVE) &&
 				((*prequest)->version > HTTP10))
 			{
+				dbg("request: set keep-alive");
 				client->state |= CLIENT_KEEPALIVE;
 				size = ESUCCESS;
 			}
@@ -1976,7 +1974,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 			{
 			case ESUCCESS:
 			{
-				client->state = CLIENT_WAITING | (client->state & CLIENT_MACHINEMASK);
+				client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
 				request->response->state = PARSE_END | GENERATE_INIT | (request->response->state & ~PARSE_MASK);
 				if (request->mode & HTTPMESSAGE_LOCKED)
 				{
@@ -2613,20 +2611,24 @@ static int _httpclient_run(http_client_t *client)
 				client->request_queue = request->next;
 				if ((request->state & PARSE_MASK) < PARSE_END)
 				{
+					dbg("client: uncomplete");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
 				}
 				else if (client->state & CLIENT_LOCKED)
 				{
+					dbg("client: locked");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else if (!(client->state & CLIENT_KEEPALIVE))
 				{
+					dbg("client: exit %X", client->state);
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
 				}
 				else
 				{
+					dbg("client: keep alive");
 					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				/**
