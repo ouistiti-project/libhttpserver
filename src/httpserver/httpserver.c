@@ -1327,7 +1327,7 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 	}
 	const char *end = message->headers_storage->offset - 2;
-	while (*end != '\n') end--;
+	while (*end != '\n' && end >= message->headers_storage->data ) end--;
 	int length = strlen(key);
 	if (strncmp(end + 1, key, length))
 		return EREJECT;
@@ -1893,9 +1893,13 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 			if ((*prequest)->response == NULL)
 				(*prequest)->response = _httpmessage_create(client, *prequest);
 
-			warn("bad resquest");
+			/**
+			 * The format of the request is bad. It may be an attack.
+			 */
+			warn("bad request");
 			(*prequest)->response->state = PARSE_END | GENERATE_ERROR;
 			(*prequest)->state = PARSE_END;
+			client->state = CLIENT_EXIT | CLIENT_ERROR;
 			// The response is an error and it is ready to be sent
 			size = ESUCCESS;
 		}
@@ -2622,7 +2626,7 @@ static int _httpclient_run(http_client_t *client)
 				}
 				else if (!(client->state & CLIENT_KEEPALIVE))
 				{
-					dbg("client: exit %X", client->state);
+					dbg("client: exit");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
 				}
