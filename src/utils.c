@@ -369,9 +369,9 @@ const char *cookie_get(http_message_t *request, const char *key)
 	return value;
 }
 
-void cookie_set(http_message_t *response, const char *key, const char *value)
+int cookie_set(http_message_t *response, const char *key, const char *value, ...)
 {
 	httpmessage_addheader(response, str_SetCookie, key);
-	httpmessage_appendheader(response, str_SetCookie, "=", value, NULL);
+	return httpmessage_appendheader(response, str_SetCookie, "=", value, NULL);
 }
 #endif
