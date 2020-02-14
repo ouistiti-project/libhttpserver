@@ -315,44 +315,6 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	return ret;
 }
 
-char *utils_buildpath(const char *docroot, const char *other, const char *path_info,
-			const char *filename, struct stat *filestat)
-{
-	char *filepath;
-	int length;
-	int path_info_length;
-	if (path_info[0] == '/')
-		path_info++;
-	const char *query = strchr(path_info, '?');
-	if (query != NULL)
-		path_info_length = query - path_info;
-	else
-		path_info_length = strlen(path_info);
-
-	length = strlen(docroot);
-	length += strlen(other);
-	length += path_info_length + 1;
-	length += strlen(filename) + 1;
-	filepath = calloc(1, length + 1);
-	if (filename[0] != '\0' && path_info[path_info_length -1] != '/')
-		snprintf(filepath, length + 1, "%s%s/%.*s/%s", docroot, other, path_info_length, path_info, filename);
-	else
-		snprintf(filepath, length + 1, "%s%s/%.*s%s", docroot, other, path_info_length, path_info, filename);
-
-	filepath[length] = '\0';
-	if (filestat)
-	{
-		memset(filestat, 0, sizeof(*filestat));
-		if (stat(filepath, filestat))
-		{
-			dbg("stat error on %s : %s", filepath, strerror(errno));
-			free(filepath);
-			return NULL;
-		}
-	}
-	return filepath;
-}
-
 #ifndef COOKIE
 static const char str_Cookie[] = "Cookie";
 static const char str_SetCookie[] = "Set-Cookie";
