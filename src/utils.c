@@ -91,7 +91,7 @@ static const mime_entry_t *mime_default =
 	.next = NULL
 }}}}}}}};
 
-static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case);
+static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case, const char **rest);
 
 void utils_addmime(const char *ext, const char*mime)
 {
@@ -114,7 +114,7 @@ static const mime_entry_t *_utils_getmime(const mime_entry_t *entry, const char 
 {
 	while (entry)
 	{
-		if (_utils_searchexp(filepath, entry->ext, 1) == ESUCCESS)
+		if (_utils_searchexp(filepath, entry->ext, 1, NULL) == ESUCCESS)
 		{
 			break;
 		}
@@ -177,7 +177,7 @@ char *utils_urldecode(const char *encoded)
 		{
 			// back into previous directory
 			encoded+=3;
-			if ((offset > decoded) && (offset < decoded + length - 1) && (*(offset - 1) == '/'))
+			if ((offset > decoded) && (offset < decoded + length) && (*(offset - 1) == '/'))
 			{
 				offset--;
 				*offset = '\0';
@@ -209,12 +209,12 @@ char *utils_urldecode(const char *encoded)
 	return decoded;
 }
 
-int utils_searchexp(const char *haystack, const char *needleslist)
+int utils_searchexp(const char *haystack, const char *needleslist, const char **rest)
 {
-	return _utils_searchexp(haystack, needleslist, 0);
+	return _utils_searchexp(haystack, needleslist, 0, rest);
 }
 
-static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case)
+static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case, const char **rest)
 {
 	int ret = EREJECT;
 	if (haystack != NULL)
@@ -284,7 +284,6 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 					}
 					else if (*needle == ',' || *needle == '\0')
 					{
-						wildcard = 0;
 						break;
 					}
 				}
@@ -299,99 +298,105 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 			if (ret == ESUCCESS)
 			{
 				if (*needle == ',' || *needle == '\0')
+				{
+					if (wildcard && (rest != NULL))
+						*rest = &haystack[i - 1];
 					break;
+				}
 				else
 					ret = EREJECT;
 			}
 			needle = strchr(needle, ',');
 			if (needle != NULL)
 				needle++;
+			wildcard = 0;
 		}
 	}
 	return ret;
 }
 
-char *utils_buildpath(const char *docroot, const char *path_info,
-			const char *filename, const char *ext, struct stat *filestat)
+static int utils_searchstring(const char **result, const char *haystack, const char *needle, int *length)
 {
-	char *filepath;
-	int length;
-	int path_info_length;
+	if (*length != 0)
+		return 0;
 
-	path_info_length = strlen(path_info);
-	length = strlen(docroot) + 1;
-	length += path_info_length + 1;
-	length += strlen(filename);
-	length += strlen(ext);
-	filepath = calloc(1, length + 1);
-	if (filename[0] != '\0' && path_info[path_info_length -1] != '/')
-		snprintf(filepath, length + 1, "%s/%s/%s%s", docroot, path_info, filename, ext);
-	else
-		snprintf(filepath, length + 1, "%s/%s%s%s", docroot, path_info, filename, ext);
+	int needlelen = strlen(needle);
 
-	filepath[length] = '\0';
-	if (filestat)
+	if ((*result == NULL || *result[0] == '\0') &&
+		!strncmp(haystack, needle, needlelen) && haystack[needlelen] == '=')
 	{
-		memset(filestat, 0, sizeof(*filestat));
-		if (stat(filepath, filestat))
+		const char *end = NULL;
+		*result = strchr(haystack, '=');
+		if (*result == NULL)
+			return 0;
+		*result += 1;
+		if (**result == '"')
 		{
-			dbg("stat error on %s : %s", filepath, strerror(errno));
-			free(filepath);
-			return NULL;
+			*result = *result + 1;
+			end = strchr(*result, '"');
+			if (end != NULL)
+				*length = end - *result;
 		}
+		end = *result;
+		while(*end != 0 && *end != ' ' && *end != ',')
+		{
+			end++;
+		}
+		if (*length == 0)
+			*length = end - *result;
+		return needlelen + sizeof("=") + end - *result;
 	}
-	return filepath;
-}
-
-#ifdef TEST
-int main()
-{
-	int ret = 0;
-	ret = utils_searchexp("toto.js", ".txt,.js,.css");
-	warn(" 1 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.js", ".txt,.json,.css");
-	warn(" 2 ret %d/EREJECT", ret);
-	ret = utils_searchexp("toto.json", ".txt,.js,.css");
-	warn(" 3 ret %d/EREJECT", ret);
-	ret = utils_searchexp("toto.json", ".txt,.json,.css");
-	warn(" 4 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.json", ".txt,.css,.json");
-	warn(" 5 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.json", ".txt,.css,.js*");
-	warn(" 6 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.js", ".txt,.css,.js*");
-	warn(" 7 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("toto.json", "^.json,.css");
-	warn(" 8 ret %d/EREJECT", ret);
-	ret = utils_searchexp("public/toto.json", ".json,.css");
-	warn(" 9 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/toto.json", "public/*.json,public/*.css");
-	warn("10 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.json", "public/*.json,public/*.css");
-	warn("11 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/toto.json", "^public/*.json,^public/*.css");
-	warn("12 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.json", "^public/*.json,^public/*.css");
-	warn("13 ret %d/EREJECT", ret);
-	ret = utils_searchexp("public/", "public/*,public/*.css");
-	warn("14 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/", ".json,.css");
-	warn("15 ret %d/EREJECT", ret);
-	ret = utils_searchexp("public/", ".json,.css,*");
-	warn("16 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/toto.jpg", ".json,.css,*");
-	warn("17 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("public/to.to.jpg", ".json,.css,*");
-	warn("18 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.min.js", "public/*.js,public/*.css");
-	warn("19 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.min.css", "public/*.js,public/*.css");
-	warn("20 ret %d/ESUCCESS", ret);
-	ret = utils_searchexp("test/public/toto.css.none", "public/*.js,public/*.css");
-	warn("21 ret %d/EREJECT", ret);
 	return 0;
 }
-#endif
+
+static int utils_runentry(utils_parsestring_t *entry, const char *value, int valuelen)
+{
+	if (entry->result == EINCOMPLETE)
+	{
+		entry->result = entry->cb(entry->cbdata, value, valuelen);
+	}
+	return entry->result;
+}
+
+int utils_parsestring(const char *string, int listlength, utils_parsestring_t list[])
+{
+	int ret = ESUCCESS;
+	int listit;
+
+	for (listit = 0; listit < listlength; listit++)
+	{
+		list[listit].result = EINCOMPLETE;
+	}
+
+	int length, i;
+	length = strlen(string);
+	for (i = 0; i < length; i++)
+	{
+		//dbg("search %s", string + i);
+		for (listit = 0; listit < listlength; listit++)
+		{
+			const char *value = NULL;
+			int valuelen = 0;
+			int ret = utils_searchstring(&value, string + i, list[listit].field, &valuelen);
+			i += ret;
+			if (ret > 0)
+			{
+				ret = utils_runentry(&list[listit], value, valuelen);
+				break;
+			}
+		}
+		if (ret == EREJECT)
+			break;
+	}
+	for (listit = 0; listit < listlength; listit++)
+	{
+		if ((ret = utils_runentry(&list[listit], NULL, 0)) == EREJECT)
+		{
+			break;
+		}
+	}
+	return ret;
+}
 
 #ifndef COOKIE
 static const char str_Cookie[] = "Cookie";
@@ -409,11 +414,9 @@ const char *cookie_get(http_message_t *request, const char *key)
 	return value;
 }
 
-void cookie_set(http_message_t *response, const char *key, const char *value)
+int cookie_set(http_message_t *response, const char *key, const char *value, ...)
 {
-	char *keyvalue = malloc(strlen(key) + 1 + strlen(value) + 1);
-	sprintf(keyvalue, "%s=%s", key, value);
-	httpmessage_addheader(response, str_SetCookie, keyvalue);
-	free(keyvalue);
+	httpmessage_addheader(response, str_SetCookie, key);
+	return httpmessage_appendheader(response, str_SetCookie, "=", value, NULL);
 }
 #endif

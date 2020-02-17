@@ -34,68 +34,32 @@
 #include "httpserver.h"
 #include "mod_date.h"
 
-typedef struct _mod_date_config_s _mod_date_config_t;
-typedef struct _mod_date_s _mod_date_t;
-
-static http_server_config_t mod_date_config;
-
-static void *_mod_date_getctx(void *arg, http_client_t *ctl, struct sockaddr *addr, int addrsize);
-static void _mod_date_freectx(void *vctx);
-static int _mod_date_recv(void *vctx, char *data, int size);
-static int _mod_date_send(void *vctx, char *data, int size);
 static int _date_connector(void *arg, http_message_t *request, http_message_t *response);
 
-static const char str_date[] = "date";
-
-struct _mod_date_s
-{
-	_mod_date_config_t *config;
-	http_client_t *ctl;
-};
-
-struct _mod_date_config_s
-{
-	char *header_key;
-	char *header_value;
-};
+static const char str_date[] = "Date";
 
 void *mod_date_create(http_server_t *server)
 {
-	_mod_date_config_t *config;
+	httpserver_addconnector(server, _date_connector, NULL, CONNECTOR_DOCFILTER, str_date);
 
-	config = calloc(1, sizeof(*config));
-
-	config->header_key = calloc(1, sizeof("Date") + 1);
-	strcpy(config->header_key, "Date");
-
-	config->header_value = calloc(1, 30);
-
-	httpserver_addconnector(server, _date_connector, config, CONNECTOR_DOCFILTER, str_date);
-
-	return config;
+	return -1;
 }
 
 void mod_date_destroy(void *mod)
 {
-	_mod_date_config_t *config = (_mod_date_config_t *)mod;
-	free(config->header_key);
-	free(config->header_value);
-	free(config);
 }
 
 static int _date_connector(void *arg, http_message_t *request, http_message_t *response)
 {
-	_mod_date_t *ctx = (_mod_date_t *)arg;
-	_mod_date_config_t *config = ctx->config;
-
 	time_t t;
 	struct tm *tmp;
 
 	t = time(NULL);
 	tmp = gmtime(&t);
-	strftime(config->header_value, 30, "%a, %d %b %Y %T GMT", tmp);
+	char timestring[32]
+	strftime(timestring, 30, "%a, %d %b %Y %T GMT", tmp);
 
-	httpmessage_addheader(response, config->header_key, config->header_value);
+	httpmessage_addheader(response, str_date, timestring);
 	/* reject the request to allow other connectors to set the response */
 	return EREJECT;
 }

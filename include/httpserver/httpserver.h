@@ -440,6 +440,15 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 void httpmessage_addheader(http_message_t *message, const char *key, const char *value);
 
 /**
+ * @brief apend the last header of the response message
+ *
+ * @param message the response message to update
+ * @param key the name of the last header to set
+ * @param value several const char * string terminate with a NULL pointer
+ */
+int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...);
+
+/**
  * @brief add the content to the response message
  *
  * @param message the response message to update

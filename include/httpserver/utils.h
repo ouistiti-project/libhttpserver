@@ -44,9 +44,17 @@ const char *utils_getmime(const char *path);
 void utils_addmime(const char *ext, const char*mime);
 
 char *utils_urldecode(const char *encoded);
-int utils_searchexp(const char *haystack, const char *needleslist);
-char *utils_buildpath(const char *docroot, const char *path_info,
-					const char *filename, const char *ext, struct stat *filestat);
+int utils_searchexp(const char *haystack, const char *needleslist, const char **rest);
+
+struct utils_parsestring_s
+{
+	const char *field;
+	int (*cb)(void *data, const char *string, int length);
+	void *cbdata;
+	int result;
+};
+typedef struct utils_parsestring_s utils_parsestring_t;
+int utils_parsestring(const char *string, int listlength, utils_parsestring_t list[]);
 
 /**
  * @brief get value of each cookie of the request
@@ -67,6 +75,6 @@ char *utils_buildpath(const char *docroot, const char *path_info,
  */
 const char *cookie_get(http_message_t *request, const char *key);
 
-void cookie_set(http_message_t *response, const char *key, const char *value);
+int cookie_set(http_message_t *response, const char *key, const char *value, ...);
 
 #endif

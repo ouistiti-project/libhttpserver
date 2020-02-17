@@ -33,6 +33,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#ifdef USE_STDARG
+#include <stdarg.h>
+#endif
 
 #include "httpserver/log.h"
 #include "httpserver/httpserver.h"
@@ -245,25 +248,30 @@ const char *cookie_get(http_message_t *request, const char *key)
 }
 #endif
 
-void cookie_set(http_message_t *response, const char *key, const char *value)
+int cookie_set(http_message_t *response, const char *key, const char *value, ...)
 {
+	int ret = 0;
 	const char *domain = httpmessage_SERVER(response, "domain");
-	char *keyvalue = NULL;
-	if (domain != NULL)
+	httpmessage_addheader(response, str_SetCookie, key);
+	httpmessage_appendheader(response, str_SetCookie, "=", NULL);
+#ifdef USE_STDARG
+	va_list ap;
+	va_start(ap, value);
+	while (value != NULL)
 	{
-		int length = strlen(key) + 1 + strlen(value) + 18 + strlen(domain) + 1;
-		keyvalue = malloc(length);
-		snprintf(keyvalue, length, "%s=%s; Path=/; Domain=.%s", key, value, domain);
+#endif
+		ret = httpmessage_appendheader(response, str_SetCookie, value, NULL);
+#ifdef USE_STDARG
+		value = va_arg(ap, const char *);
 	}
-	else
-	{
-		int length = strlen(key) + 1 + strlen(value) + 8 + 1;
-		keyvalue = malloc(length);
-		snprintf(keyvalue, length, "%s=%s; Path=/", key, value);
-	}
-	httpmessage_addheader(response, str_SetCookie, keyvalue);
-	dbg("cookie: new %s", keyvalue);
-	free(keyvalue);
+	va_end(ap);
+#endif
+	const char *path = "/";
+	ret = httpmessage_appendheader(response, str_SetCookie, "; Path=", path, NULL);
+
+	if (domain != NULL && strncmp(domain, "local", 5))
+		ret = httpmessage_appendheader(response, str_SetCookie, "; Domain=.", domain, NULL);
+	return ret;
 }
 
 const module_t mod_cookie =

@@ -68,12 +68,13 @@ struct _mod_websocket_s
 	mod_websocket_t *config;
 	mod_websocket_run_t run;
 	void *runarg;
+	int fdroot;
 };
 
 struct _mod_websocket_ctx_s
 {
 	_mod_websocket_t *mod;
-	char *filepath;
+	int fddir;
 	int socket;
 	pid_t pid;
 };
@@ -105,14 +106,14 @@ static void _mod_websocket_handshake(_mod_websocket_ctx_t *ctx, http_message_t *
 	}
 }
 
-static int _checkname(mod_websocket_t *config, char *pathname)
+static int _checkname(mod_websocket_t *config, const char *pathname)
 {
 	if (pathname[0] == '.')
 	{
 		return  EREJECT;
 	}
-	if (utils_searchexp(pathname, config->deny) == ESUCCESS &&
-		utils_searchexp(pathname, config->allow) != ESUCCESS)
+	if (utils_searchexp(pathname, config->deny, NULL) == ESUCCESS &&
+		utils_searchexp(pathname, config->allow, NULL) != ESUCCESS)
 	{
 		return  EREJECT;
 	}
@@ -123,80 +124,87 @@ static int websocket_connector(void *arg, http_message_t *request, http_message_
 {
 	int ret = EREJECT;
 	_mod_websocket_ctx_t *ctx = (_mod_websocket_ctx_t *)arg;
+	const char *connection = httpmessage_REQUEST(request, str_connection);
+	const char *upgrade = httpmessage_REQUEST(request, str_upgrade);
+	const char *uri = httpmessage_REQUEST(request, "uri");
+	if (uri[0] == '/')
+		uri++;
 
-	if (ctx->filepath == NULL)
+	if (ctx->socket == 0 &&
+		connection != NULL && (strcasestr(connection, str_upgrade) != NULL) &&
+		upgrade != NULL && (strcasestr(upgrade, str_websocket) != NULL))
 	{
-		const char *connection = httpmessage_REQUEST(request, str_connection);
 
-		if (strcasestr(connection, str_upgrade))
+		if (_checkname(ctx->mod->config, uri) != ESUCCESS)
 		{
-			const char *upgrade = httpmessage_REQUEST(request, str_upgrade);
-
-			if (strcasestr(upgrade, str_websocket))
-			{
-				const char *protocol = NULL;
-				char *uri = utils_urldecode(httpmessage_REQUEST(request, "uri"));
-				if (_checkname(ctx->mod->config, uri) == ESUCCESS)
-				{
-					struct stat filestat;
-					char *filepath = utils_buildpath(ctx->mod->config->docroot, uri, "", "", &filestat);
-					const char *pathname = NULL;
-
-					protocol = httpmessage_REQUEST(request, str_protocol);
-					if (protocol && protocol[0] != '\0')
-					{
-						pathname = protocol;
-					}
-					else
-					{
-						pathname = basename(uri);
-						protocol = NULL;
-					}
-					if (filepath == NULL)
-					{
-						filepath = utils_buildpath(ctx->mod->config->docroot, pathname, "", "", &filestat);
-					}
-					else if (S_ISDIR(filestat.st_mode))
-					{
-						filepath = utils_buildpath(ctx->mod->config->docroot, uri, pathname, "", &filestat);
-					}
-					if (filepath && S_ISSOCK(filestat.st_mode))
-						ctx->filepath = filepath;
-					else if (filepath)
-					{
-						free(filepath);
-					}
-				}
-				if (ctx->filepath)
-				{
-					if (protocol != NULL)
-						httpmessage_addheader(response, str_protocol, protocol);
-
-					_mod_websocket_handshake(ctx, request, response);
-					httpmessage_addheader(response, str_connection, (char *)str_upgrade);
-					httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
-					/** disable Content-Type and Content-Length inside the headers **/
-					httpmessage_addcontent(response, "none", NULL, -1);
-					httpmessage_result(response, RESULT_101);
-					websocket_dbg("%s: result 101", str_websocket);
-					ret = ECONTINUE;
-				}
-				else
-				{
-					httpmessage_result(response, RESULT_404);
-					ret = ESUCCESS;
-				}
-				free(uri);
-			}
+			warn("websocket: %s forbidden", uri);
+			httpmessage_result(response, RESULT_403);
+			return ESUCCESS;
 		}
-	}
-	else
-	{
-		ctx->socket = httpmessage_lock(response);
-		ctx->pid = ctx->mod->run(ctx->mod->runarg, ctx->socket, ctx->filepath, request);
-		free(ctx->filepath);
-		ctx->filepath = NULL;
+		const char *protocol = httpmessage_REQUEST(request, str_protocol);
 
+		int fdfile = openat(ctx->mod->fdroot, uri, O_PATH);
+		if (fdfile == -1 && protocol != NULL && protocol[0] != '\0')
+		{
+			fdfile = openat(ctx->mod->fdroot, protocol, O_PATH);
+		}
+		if (fdfile == -1)
+		{
+			warn("websocket: uri %s not found", uri);
+			httpmessage_result(response, RESULT_403);
+			return ESUCCESS;
+		}
+
+		struct stat filestat;
+		fstat(fdfile, &filestat);
+		if (S_ISDIR(filestat.st_mode))
+		{
+			int fdroot = fdfile;
+			if (protocol != NULL)
+				fdfile = openat(fdroot, protocol, O_PATH);
+			else
+				fdfile = -1;
+			if (fdfile == -1)
+			{
+				warn("websocket: protocol %s not found", protocol);
+				httpmessage_result(response, RESULT_403);
+				close(fdroot);
+				return ESUCCESS;
+			}
+			fstat(fdfile, &filestat);
+			ctx->fddir = dup(fdroot);
+		}
+		else
+			ctx->fddir = dup(ctx->mod->fdroot);
+		close(fdfile);
+
+		if (!S_ISSOCK(filestat.st_mode))
+		{
+			close(ctx->fddir);
+			httpmessage_result(response, RESULT_403);
+			return ESUCCESS;
+		}
+		if (protocol != NULL)
+			httpmessage_addheader(response, str_protocol, protocol);
+
+		_mod_websocket_handshake(ctx, request, response);
+		httpmessage_addheader(response, str_connection, (char *)str_upgrade);
+		httpmessage_addheader(response, str_upgrade, (char *)str_websocket);
+		/** disable Content-Type and Content-Length inside the headers **/
+		httpmessage_addcontent(response, "none", NULL, -1);
+		httpmessage_result(response, RESULT_101);
+		websocket_dbg("%s: result 101", str_websocket);
+		ctx->socket = httpmessage_lock(response);
+		ret = ECONTINUE;
+	}
+	else if (ctx->socket > 0)
+	{
+		if (fchdir(ctx->fddir) == -1)
+		{
+			err("websocket: ");
+		}
+		else
+			ctx->pid = ctx->mod->run(ctx->mod->runarg, ctx->socket, uri, request);
 		ret = ESUCCESS;
 	}
 	return ret;
@@ -247,6 +255,7 @@ void *mod_websocket_create(http_server_t *server, mod_websocket_t *config)
 	mod->config = config;
 	mod->run = run;
 	mod->runarg = config;
+	mod->fdroot = open(config->docroot, O_DIRECTORY);
 	httpserver_addmod(server, _mod_websocket_getctx, _mod_websocket_freectx, mod, str_websocket);
 	warn("%s: support %s", str_websocket, mod->config->docroot);
 	return mod;
@@ -257,7 +266,7 @@ void mod_websocket_destroy(void *data)
 	free(data);
 }
 
-static int _websocket_socket(char *filepath)
+static int _websocket_socket(const char *filepath)
 {
 	int sock;
 	struct sockaddr_un addr;
@@ -458,7 +467,7 @@ static websocket_t _wsdefaul_config =
 	.onping = websocket_pong,
 	.type = WS_TEXT,
 };
-int default_websocket_run(void *arg, int socket, char *filepath, http_message_t *request)
+int default_websocket_run(void *arg, int socket, const char *filepath, http_message_t *request)
 {
 	pid_t pid;
 	int wssock = _websocket_socket(filepath);
