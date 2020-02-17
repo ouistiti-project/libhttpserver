@@ -1,7 +1,7 @@
 include scripts.mk
 
 package?=httpserver
-version=2.3
+version=2.5
 
 LIBHASH=y
 
