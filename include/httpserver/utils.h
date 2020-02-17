@@ -46,6 +46,16 @@ void utils_addmime(const char *ext, const char*mime);
 char *utils_urldecode(const char *encoded);
 int utils_searchexp(const char *haystack, const char *needleslist, const char **rest);
 
+struct utils_parsestring_s
+{
+	const char *field;
+	int (*cb)(void *data, const char *string, int length);
+	void *cbdata;
+	int result;
+};
+typedef struct utils_parsestring_s utils_parsestring_t;
+int utils_parsestring(const char *string, int listlength, utils_parsestring_t list[]);
+
 /**
  * @brief get value of each cookie of the request
  *

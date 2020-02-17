@@ -315,6 +315,89 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	return ret;
 }
 
+static int utils_searchstring(const char **result, const char *haystack, const char *needle, int *length)
+{
+	if (*length != 0)
+		return 0;
+
+	int needlelen = strlen(needle);
+
+	if ((*result == NULL || *result[0] == '\0') &&
+		!strncmp(haystack, needle, needlelen) && haystack[needlelen] == '=')
+	{
+		const char *end = NULL;
+		*result = strchr(haystack, '=');
+		if (*result == NULL)
+			return 0;
+		*result += 1;
+		if (**result == '"')
+		{
+			*result = *result + 1;
+			end = strchr(*result, '"');
+			if (end != NULL)
+				*length = end - *result;
+		}
+		end = *result;
+		while(*end != 0 && *end != ' ' && *end != ',')
+		{
+			end++;
+		}
+		if (*length == 0)
+			*length = end - *result;
+		return needlelen + sizeof("=") + end - *result;
+	}
+	return 0;
+}
+
+static int utils_runentry(utils_parsestring_t *entry, const char *value, int valuelen)
+{
+	if (entry->result == EINCOMPLETE)
+	{
+		entry->result = entry->cb(entry->cbdata, value, valuelen);
+	}
+	return entry->result;
+}
+
+int utils_parsestring(const char *string, int listlength, utils_parsestring_t list[])
+{
+	int ret = ESUCCESS;
+	int listit;
+
+	for (listit = 0; listit < listlength; listit++)
+	{
+		list[listit].result = EINCOMPLETE;
+	}
+
+	int length, i;
+	length = strlen(string);
+	for (i = 0; i < length; i++)
+	{
+		//dbg("search %s", string + i);
+		for (listit = 0; listit < listlength; listit++)
+		{
+			const char *value = NULL;
+			int valuelen = 0;
+			int ret = utils_searchstring(&value, string + i, list[listit].field, &valuelen);
+			i += ret;
+			if (ret > 0)
+			{
+				ret = utils_runentry(&list[listit], value, valuelen);
+				break;
+			}
+		}
+		if (ret == EREJECT)
+			break;
+	}
+	for (listit = 0; listit < listlength; listit++)
+	{
+		if ((ret = utils_runentry(&list[listit], NULL, 0)) == EREJECT)
+		{
+			break;
+		}
+	}
+	return ret;
+}
+
 #ifndef COOKIE
 static const char str_Cookie[] = "Cookie";
 static const char str_SetCookie[] = "Set-Cookie";
