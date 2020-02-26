@@ -40,14 +40,19 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/resource.h>
-#include <sys/time.h>
+#include <time.h>
 #include <signal.h>
 
 #ifdef USE_STDARG
 #include <stdarg.h>
 #endif
 
+#ifdef USE_POLL
 #include <poll.h>
+#else
+#include <sys/select.h>
+#endif
+
 #include <netdb.h>
 
 #include "valloc.h"
@@ -998,11 +1003,15 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 		_buffer_append(message->query_storage, "&", 1);
 		message->query = NULL;
 	}
+	while (length > 0 && query[length - 1] == '\n' || query[length - 1] == '\r')
+		length--;
 	_buffer_append(message->query_storage, query, length);
 	if (message->content_length <= length)
 	{
 		data->offset += message->content_length;
-		message->content_length = 0;
+		message->content = message->query_storage;
+		message->content_packet = message->query_storage->length;
+		message->content_length = message->query_storage->length;
 		next = PARSE_END;
 	}
 	else

@@ -20,12 +20,7 @@ $(TARGET)_SOURCES+=httpserver.c tcpserver.c
 $(TARGET)_CFLAGS+=-I../../include/httpserver
 # SERVER_DEFER_ACCEPT may protect the client connection from some exceptions.
 # But it still decrease the speed of the answers.
-$(TARGET)_CFLAGS-$(IPV6)+=-DIPV6
 $(TARGET)_CFLAGS+=-DSERVER_DEFER_ACCEPT
-$(TARGET)_CFLAGS+=-DUSE_POLL
-$(TARGET)_CFLAGS-$(MBEDTLS)+=-DTLS
-$(TARGET)_CFLAGS-$(WOLFSSL)+=-DTLS
-$(TARGET)_CFLAGS-$(OPENSSL)+=-DTLS
 
 ifneq ($(MAX_SERVERS),)
 $(TARGET)_CFLAGS+=-DMAXSERVERS=$(MAX_SERVERS)
