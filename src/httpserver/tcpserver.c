@@ -120,7 +120,7 @@ static int tcpclient_connect(void *ctl, const char *addr, int port)
 {
 	http_client_t *client = (http_client_t *)ctl;
 	int family = AF_INET;
-#ifdef IPV6
+#ifdef USE_IPV6
 	family = AF_INET6;
 	struct sockaddr_in6 *saddr;
 	saddr = (struct sockaddr_in6 *)&client->addr;
@@ -312,7 +312,7 @@ static int _tcpserver_start(http_server_t *server)
 	struct addrinfo *result, *rp;
 
 	memset(&hints, 0, sizeof(struct addrinfo));
-#ifdef IPV6
+#ifdef USE_IPV6
 	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
 #else
 	hints.ai_family = AF_INET;
@@ -349,7 +349,7 @@ static int _tcpserver_start(http_server_t *server)
 		{
 			struct sockaddr *saddr;
 			int saddrlen;
-#ifdef IPV6
+#ifdef USE_IPV6
 			if (rp->ai_family == AF_INET6)
 			{
 				struct sockaddr_in6 saddr_in6;
@@ -374,7 +374,7 @@ static int _tcpserver_start(http_server_t *server)
 		}
 		else
 		{
-#ifdef IPV6
+#ifdef USE_IPV6
 			if (rp->ai_family == AF_INET6)
 			{
 				((struct sockaddr_in6 *)rp->ai_addr)->sin6_port = htons(server->config->port);

@@ -40,14 +40,19 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/resource.h>
-#include <sys/time.h>
+#include <time.h>
 #include <signal.h>
 
 #ifdef USE_STDARG
 #include <stdarg.h>
 #endif
 
+#ifdef USE_POLL
 #include <poll.h>
+#else
+#include <sys/select.h>
+#endif
+
 #include <netdb.h>
 
 #include "valloc.h"
