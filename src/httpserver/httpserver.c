@@ -1004,7 +1004,9 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	if (message->content_length <= length)
 	{
 		data->offset += message->content_length;
-		message->content_length = 0;
+		message->content = message->query_storage;
+		message->content_packet = message->query_storage->length;
+		message->content_length = message->query_storage->length;
 		next = PARSE_END;
 	}
 	else
