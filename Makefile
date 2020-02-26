@@ -3,6 +3,10 @@ include scripts.mk
 package?=httpserver
 version=2.5
 
+ifeq ($(VTHREAD_TYPE),pthread)
+USE_PTHREAD=y
+endif
+
 LIBHASH=y
 
 LIBHTTPSERVER_NAME?=$(package)
