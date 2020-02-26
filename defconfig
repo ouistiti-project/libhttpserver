@@ -22,3 +22,6 @@ LIBMD5_DIR=$(srcdir)md5-c
 LIBSHA1_DIR=$(srcdir)libsha1
 
 USE_STDARG=y
+USE_POLL=y
+USE_PTHREAD=y
+USE_REENTRANT=y
