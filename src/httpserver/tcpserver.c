@@ -328,6 +328,7 @@ static int _tcpserver_start(http_server_t *server)
 	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
 #endif
 	if (status != 0) {
+		warn("socket interface not found");
 		result = &hints;
 	}
 
@@ -349,10 +350,11 @@ static int _tcpserver_start(http_server_t *server)
 		{
 			struct sockaddr *saddr;
 			int saddrlen;
+			struct sockaddr_in saddr_in = {0};
 #ifdef USE_IPV6
+			struct sockaddr_in6 saddr_in6 = {0};
 			if (rp->ai_family == AF_INET6)
 			{
-				struct sockaddr_in6 saddr_in6;
 				saddr_in6.sin6_port = htons(server->config->port);
 				saddr_in6.sin6_flowinfo = 0;
 				saddr_in6.sin6_addr = in6addr_any;
@@ -362,14 +364,13 @@ static int _tcpserver_start(http_server_t *server)
 			else if (rp->ai_family == AF_INET)
 #endif
 			{
-				struct sockaddr_in saddr_in;
+				memset(&saddr_in, 0, sizeof(saddr_in));
 				saddr_in.sin_family = AF_INET;
-				saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
 				saddr_in.sin_port = htons(server->config->port);
+				saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
 				saddr = (struct sockaddr *)&saddr_in;
 				saddrlen = sizeof(saddr_in);
 			}
-
 			status = bind(server->sock, saddr, saddrlen);
 		}
 		else
@@ -413,9 +414,9 @@ static int _tcpserver_start(http_server_t *server)
 	if (status)
 	{
 		if (server->config->addr)
-			err("Error bind/listen %s port %d", server->config->addr, server->config->port);
+			err("Error bind/listen %s port %d : %s", server->config->addr, server->config->port, strerror(errno));
 		else
-			err("Error bind/listen port %d", server->config->port);
+			err("Error bind/listen port %d : %s", server->config->port, strerror(errno));
 		return -1;
 	}
 	return 0;
