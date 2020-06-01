@@ -40,8 +40,10 @@
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #ifdef DEBUG
 # define dbg(format, ...) fprintf(stderr, "\x1B[32m"format"\x1B[0m\n",  ##__VA_ARGS__)
+# define dbg_caller(format, ...) fprintf(stderr, "\x1B[32m"format <= %p"\x1B[0m\n",  ##__VA_ARGS__, __builtin_return_address(0))
 #else
 # define dbg(...)
+# define dbg_caller(...)
 #endif
 
 #endif
