@@ -308,6 +308,11 @@ static int _tcpserver_start(http_server_t *server)
 	sigaction(SIGPIPE, &action, NULL);
 #endif
 
+	struct sockaddr_in saddr_in = {0};
+#ifdef USE_IPV6
+	struct sockaddr_in6 saddr_in6 = {0};
+#endif
+
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
 
@@ -328,7 +333,25 @@ static int _tcpserver_start(http_server_t *server)
 	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
 #endif
 	if (status != 0) {
+		warn("socket interface not found");
 		result = &hints;
+#ifdef USE_IPV6
+		if (result->ai_family == AF_INET6)
+		{
+			saddr_in6.sin6_flowinfo = 0;
+			saddr_in6.sin6_addr = in6addr_any;
+			result->ai_addr = (struct sockaddr *)&saddr_in6;
+			result->ai_addrlen = sizeof(saddr_in6);
+		}
+		else if (result->ai_family == AF_INET)
+#endif
+		{
+			memset(&saddr_in, 0, sizeof(saddr_in));
+			saddr_in.sin_family = AF_INET;
+			saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
+			result->ai_addr = (struct sockaddr *)&saddr_in;
+			result->ai_addrlen = sizeof(saddr_in);
+		}
 	}
 
 	for (rp = result; rp != NULL; rp = rp->ai_next)
@@ -345,47 +368,17 @@ static int _tcpserver_start(http_server_t *server)
 #endif
 
 		int ret;
-		if (!rp->ai_addr)
-		{
-			struct sockaddr *saddr;
-			int saddrlen;
 #ifdef USE_IPV6
-			if (rp->ai_family == AF_INET6)
-			{
-				struct sockaddr_in6 saddr_in6;
-				saddr_in6.sin6_port = htons(server->config->port);
-				saddr_in6.sin6_flowinfo = 0;
-				saddr_in6.sin6_addr = in6addr_any;
-				saddr = (struct sockaddr *)&saddr_in6;
-				saddrlen = sizeof(saddr_in6);
-			}
-			else if (rp->ai_family == AF_INET)
-#endif
-			{
-				struct sockaddr_in saddr_in;
-				saddr_in.sin_family = AF_INET;
-				saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
-				saddr_in.sin_port = htons(server->config->port);
-				saddr = (struct sockaddr *)&saddr_in;
-				saddrlen = sizeof(saddr_in);
-			}
-
-			status = bind(server->sock, saddr, saddrlen);
-		}
-		else
+		if (rp->ai_family == AF_INET6)
 		{
-#ifdef USE_IPV6
-			if (rp->ai_family == AF_INET6)
-			{
-				((struct sockaddr_in6 *)rp->ai_addr)->sin6_port = htons(server->config->port);
-			}
-			else if (rp->ai_family == AF_INET)
-#endif
-			{
-				((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
-			}
-			status = bind(server->sock, rp->ai_addr, rp->ai_addrlen);
+			((struct sockaddr_in6 *)rp->ai_addr)->sin6_port = htons(server->config->port);
 		}
+		else if (rp->ai_family == AF_INET)
+#endif
+		{
+			((struct sockaddr_in *)rp->ai_addr)->sin_port = htons(server->config->port);
+		}
+		status = bind(server->sock, rp->ai_addr, rp->ai_addrlen);
 		server->type = rp->ai_family;
 		if (status == 0)
 			/* Success */
@@ -413,9 +406,9 @@ static int _tcpserver_start(http_server_t *server)
 	if (status)
 	{
 		if (server->config->addr)
-			err("Error bind/listen %s port %d", server->config->addr, server->config->port);
+			err("Error bind/listen %s port %d : %s", server->config->addr, server->config->port, strerror(errno));
 		else
-			err("Error bind/listen port %d", server->config->port);
+			err("Error bind/listen port %d : %s", server->config->port, strerror(errno));
 		return -1;
 	}
 	return 0;
