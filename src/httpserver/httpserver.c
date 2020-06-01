@@ -2183,7 +2183,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			 * for error the content must be set before the header
 			 * generation to set the ContentLength
 			 */
-			if ((response->result > 399) &&
+			if ((response->result != 200) &&
 				(response->content == NULL))
 			{
 				const char *value = _httpmessage_status(response);
