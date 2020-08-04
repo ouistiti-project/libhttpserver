@@ -349,7 +349,7 @@ static int utils_searchstring(const char **result, const char *haystack, const c
 	return 0;
 }
 
-static int utils_runentry(utils_parsestring_t *entry, const char *value, int valuelen)
+static int utils_runentry(utils_parsestring_t *entry, const char *value, size_t valuelen)
 {
 	if (entry->result == EINCOMPLETE)
 	{

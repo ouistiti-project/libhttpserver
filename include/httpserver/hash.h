@@ -32,8 +32,8 @@
 typedef struct base64_s base64_t;
 struct base64_s
 {
-	int (*encode)(const char *in, int inlen, char *out, int outlen);
-	int (*decode)(const char *in, int inlen, char *out, int outlen);
+	int (*encode)(const char *in, size_t inlen, char *out, size_t outlen);
+	int (*decode)(const char *in, size_t inlen, char *out, size_t outlen);
 };
 
 #ifdef SHA512
@@ -52,7 +52,7 @@ struct hash_s
 	const char *name;
 	const int nameid;
 	void *(*init)();
-	void *(*initkey)(const char *key, int keylen);
+	void *(*initkey)(const char *key, size_t keylen);
 	void (*update)(void *ctx, const char *in, size_t len);
 	int (*finish)(void *ctx, char *out);
 };

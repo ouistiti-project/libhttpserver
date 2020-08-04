@@ -404,15 +404,15 @@ int httpmessage_chunksize()
 
 #ifdef HTTPCLIENT_FEATURES
 
-static httpclient_ops_t *httpclient_ops;
+static const httpclient_ops_t *httpclient_ops;
 
-void httpclient_appendops(httpclient_ops_t *ops)
+void httpclient_appendops(const httpclient_ops_t *ops)
 {
 	if (httpclient_ops == NULL)
 		httpclient_ops = ops;
 	else
 	{
-		ops->next = httpclient_ops;
+		((httpclient_ops_t *)ops)->next = httpclient_ops;
 		httpclient_ops = ops;
 	}
 }
@@ -431,7 +431,7 @@ void httpmessage_destroy(http_message_t *message)
 http_client_t *httpmessage_request(http_message_t *message, const char *method, char *url)
 {
 	http_client_t *client = NULL;
-	http_message_method_t *method_it = (http_message_method_t *)&default_methods[0];
+	const http_message_method_t *method_it = &default_methods[0];
 	while (method_it != NULL)
 	{
 		if (!strcmp(method_it->key, method))
@@ -440,8 +440,8 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 	}
 	if (method_it == NULL)
 	{
-		method_it = (http_message_method_t *)&default_methods[3];
-		method_it->key = method;
+		method_it = &default_methods[3];
+		((http_message_method_t *)method_it)->key = method;
 	}
 	message->method = method_it;
 	message->version = HTTP11;

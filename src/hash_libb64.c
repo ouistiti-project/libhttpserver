@@ -42,10 +42,10 @@
 #define dbg(...)
 #endif
 
-static int BASE64_encode1(const char *in, int inlen, char *out, int outlen);
-static int BASE64_encode2(const char *in, int inlen, char *out, int outlen);
-static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
-static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen);
+static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen);
+static int BASE64_encode(const char *in, size_t inlen, char *out, size_t outlen);
+static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen);
 const base64_t *base64 = &(const base64_t)
 {
 	.encode = &BASE64_encode1,
@@ -58,7 +58,7 @@ const base64_t *base64_urlencoding = &(const base64_t)
 	.decode = &BASE64_decode,
 };
 
-static int BASE64_encode1(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen)
 {
 #ifdef __LIBB64_URLENCODING
 	LIBB64_URLENCODING=0;
@@ -84,7 +84,7 @@ static int BASE64_encode1(const char *in, int inlen, char *out, int outlen)
 	return ret;
 }
 
-static int BASE64_encode2(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen)
 {
 #ifdef __LIBB64_URLENCODING
 	LIBB64_URLENCODING=1;
@@ -117,7 +117,7 @@ static int BASE64_encode2(const char *in, int inlen, char *out, int outlen)
 	return ret;
 }
 
-static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode(const char *in, size_t inlen, char *out, size_t outlen)
 {
 	base64_encodestate state;
 	base64_init_encodestate(&state);
@@ -128,7 +128,7 @@ static int BASE64_encode(const char *in, int inlen, char *out, int outlen)
 	return cnt;
 }
 
-static int BASE64_decode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen)
 {
 	base64_decodestate decoder;
 	base64_init_decodestate(&decoder);
