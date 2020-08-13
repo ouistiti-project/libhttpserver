@@ -266,6 +266,22 @@ static void _buffer_reset(buffer_t *buffer)
 	buffer->length = 0;
 }
 
+static int _buffer_rewindto(buffer_t *buffer, char needle)
+{
+	int ret = EINCOMPLETE;
+	while (buffer->offset > buffer->data && *(buffer->offset) != needle)
+	{
+		buffer->offset--;
+		buffer->length--;
+	}
+	if (*(buffer->offset) == needle)
+	{
+		*buffer->offset = '\0';
+		ret = ESUCCESS;
+	}
+	return ret;
+}
+
 static int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value)
 {
 	if (key[0] != 0)
@@ -635,6 +651,12 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	{
 		switch (*data->offset)
 		{
+#ifndef HTTPMESSAGE_NODOUBLEDOT
+			case '.':
+				length++;
+				next = PARSE_URIDOUBLEDOT;
+			break;
+#endif
 			case '%':
 			{
 				next = PARSE_URIENCODED;
@@ -693,10 +715,6 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 				message->query++;
 			}
 		}
-		else
-		{
-			_buffer_append(message->uri, "/", -1);
-		}
 	}
 	return next;
 }
@@ -745,6 +763,44 @@ static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
 	data->offset = encoded;
 	return next;
 }
+
+#ifndef HTTPMESSAGE_NODOUBLEDOT
+static int _httpmessage_parseuridoubledot(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_URI;
+	char *uri = data->offset;
+	ssize_t length = 1;
+	switch (*(data->offset))
+	{
+		case '.':
+			length = -1;
+			data->offset++;
+		break;
+		case '%':
+			next = PARSE_URIENCODED;
+			data->offset++;
+		case ' ':
+		case '\0':
+		case '\r':
+		case '\n':
+			length = 0;
+		break;
+		default:
+			data->offset++;
+		break;
+	}
+	if (length > 0)
+		_buffer_append(message->uri, uri, length);
+	else if (length == -1)
+	{
+		/// remove the first last '/'
+		_buffer_rewindto(message->uri, '/');
+		/// remove the first directory
+		_buffer_rewindto(message->uri, '/');
+	}
+	return next;
+}
+#endif
 
 static int _httpmessage_parsestatus(http_message_t *message, buffer_t *data)
 {
@@ -1068,6 +1124,13 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				next = _httpmessage_parseuriencoded(message, data);
 			}
 			break;
+#ifndef HTTPMESSAGE_NODOUBLEDOT
+			case PARSE_URIDOUBLEDOT:
+			{
+				next = _httpmessage_parseuridoubledot(message, data);
+			}
+			break;
+#endif
 			case PARSE_STATUS:
 			{
 				next = _httpmessage_parsestatus(message, data);
