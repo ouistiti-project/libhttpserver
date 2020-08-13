@@ -36,6 +36,8 @@
 #include "httpserver/httpserver.h"
 #include "httpserver/utils.h"
 
+#define utils_dbg(...)
+
 const char str_location[] = "Location";
 const char str_textplain[] = "text/plain";
 const char str_texthtml[] = "text/html";
@@ -243,22 +245,21 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 				// lowercase
 				if (ignore_case && hay > 0x40 && hay < 0x5b)
 					hay += 0x20;
+				utils_dbg("wildcard %d, needle %s, haystack %s", wildcard, needle, &haystack[i]);
 				if (!wildcard)
 				{
 					needle++;
 					char lneedle = *needle;
 					if (ignore_case && lneedle > 0x40 && lneedle < 0x5b)
 						lneedle += 0x20;
-					if (*needle == ',' || *needle == '\0')
+					if (*needle == ',' || *needle == '\0' || *needle == '$')
 					{
-						if (hay != '\0')
-							ret = EREJECT;
-						else
-							ret = ESUCCESS;
+						utils_dbg("end of needle, hay %c", hay);
 						break;
 					}
 					else if (lneedle != hay && *needle != '*')
 					{
+						utils_dbg("end of needle %c, hay %c",lneedle, hay);
 						needle = needle_entry;
 						ret = EREJECT;
 						if (*needle == '^')
@@ -289,21 +290,26 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 				}
 			}
 			while(haystack[i] != '\0');
-			if (*needle == '*')
+			if (*needle == '*' && haystack[i] != '\0')
 			{
 				ret = ESUCCESS;
 				needle++;
 			}
-			//dbg("searchexp %d %c %c", ret, *needle, haystack[i]);
+			else if (*needle == '$' && haystack[i] != '\0')
+			{
+				ret = EREJECT;
+				needle++;
+			}
+			utils_dbg("searchexp %d %c %c", ret, *needle, haystack[i]);
 			if (ret == ESUCCESS)
 			{
-				if (*needle == ',' || *needle == '\0')
+				if (*needle == ',' || *needle == '\0' || *needle == '$')
 				{
 					if (wildcard && (rest != NULL))
 						*rest = &haystack[i - 1];
 					break;
 				}
-				else
+				else if (*needle != '*')
 					ret = EREJECT;
 			}
 			needle = strchr(needle, ',');
