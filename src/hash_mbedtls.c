@@ -46,10 +46,10 @@
 #define dbg(...)
 #endif
 
-static int BASE64_encode1(const char *in, int inlen, char *out, int outlen);
-static int BASE64_encode2(const char *in, int inlen, char *out, int outlen);
-static int BASE64_encode(const char *in, int inlen, char *out, int outlen);
-static int BASE64_decode(const char *in, int inlen, char *out, int outlen);
+static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen);
+static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen);
+static int BASE64_encode(const char *in, size_t inlen, char *out, size_t outlen);
+static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen);
 static void *MD5_init();
 static void MD5_update(void *ctx, const char *in, size_t len);
 static int MD5_finish(void *ctx, char *out);
@@ -59,7 +59,7 @@ static int SHA1_finish(void *ctx, char *out);
 static void *SHA256_init();
 static void SHA256_update(void *ctx, const char *in, size_t len);
 static int SHA256_finish(void *ctx, char *out);
-static void *HMAC_initkey(const char *key, int keylen);
+static void *HMAC_initkey(const char *key, size_t keylen);
 static void HMAC_update(void *ctx, const char *in, size_t len);
 static int HMAC_finish(void *ctx, char *out);
 
@@ -244,7 +244,7 @@ static int SHA256_finish(void *ctx, char *out)
 	return 0;
 }
 
-static void *HMAC_initkey(const char *key, int keylen)
+static void *HMAC_initkey(const char *key, size_t keylen)
 {
 	mbedtls_md_context_t *pctx;
 	pctx = calloc(1, sizeof(*pctx));
@@ -272,14 +272,14 @@ static int HMAC_finish(void *ctx, char *output)
 }
 
 #ifndef LIBB64
-static int BASE64_encode1(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
 	return cnt;
 }
 
-static int BASE64_encode2(const char *in, int inlen, char *out, int outlen)
+static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_encode(out, outlen, &cnt, in, inlen);
@@ -307,7 +307,7 @@ static int BASE64_encode2(const char *in, int inlen, char *out, int outlen)
 	return cnt;
 }
 
-static int BASE64_decode(const char *in, int inlen, char *out, int outlen)
+static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen)
 {
 	size_t cnt = 0;
 	mbedtls_base64_decode(out, outlen, &cnt, in, inlen);

@@ -180,10 +180,10 @@ struct httpclient_ops_s
 	http_disconnect_t disconnect; /* callback to close the socket */
 	http_destroy_t destroy; /* callback to close the socket */
 
-	httpclient_ops_t *next;
+	const httpclient_ops_t *next;
 };
 
-void httpclient_appendops(httpclient_ops_t *ops);
+void httpclient_appendops(const httpclient_ops_t *ops);
 
 /**
  * @brief callback to manage a request

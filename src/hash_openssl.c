@@ -41,7 +41,7 @@ static void *SHA512_init();
 static void HASH_update(void *ctx, const char *in, size_t len);
 static int HASH_finish(void *ctx, char *out);
 
-static void *HMAC_initkey(const char *key, int keylen);
+static void *HMAC_initkey(const char *key, size_t keylen);
 static void HMAC_update(void *ctx, const char *in, size_t len);
 static int HMAC_finish(void *ctx, char *out);
 
@@ -138,7 +138,7 @@ static int HASH_finish(void *ctx, char *out)
 	EVP_MD_CTX_destroy(pctx);
 }
 
-static void *HMAC_initkey(const char *key, int keylen)
+static void *HMAC_initkey(const char *key, size_t keylen)
 {
 	HMAC_CTX *pctx = HMAC_CTX_new();
 	HMAC_Init_ex(pctx, key, keylen, EVP_sha256(), NULL);

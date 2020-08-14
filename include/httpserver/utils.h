@@ -49,7 +49,7 @@ int utils_searchexp(const char *haystack, const char *needleslist, const char **
 struct utils_parsestring_s
 {
 	const char *field;
-	int (*cb)(void *data, const char *string, int length);
+	int (*cb)(void *data, const char *string, size_t length);
 	void *cbdata;
 	int result;
 };
