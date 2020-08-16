@@ -1960,11 +1960,9 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 			}
 		break;
 		case ECONTINUE:
-			return EINCOMPLETE;
-		break;
+		return EINCOMPLETE;
 		case EINCOMPLETE:
-			return EINCOMPLETE;
-		break;
+		return EINCOMPLETE;
 		case EREJECT:
 		{
 			if ((*prequest)->response == NULL)
@@ -2075,8 +2073,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 				}
 			break;
 			case EINCOMPLETE:
-				return EINCOMPLETE;
-			break;
+			return EINCOMPLETE;
 			case EREJECT:
 			{
 				if (request->response->result == RESULT_200)
