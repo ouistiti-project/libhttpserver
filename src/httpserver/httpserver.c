@@ -206,11 +206,16 @@ static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 		if (nbchunks > 0)
 		{
 			buffer->maxchunks -= nbchunks;
+			if (buffer->size + chunksize) > BUFFERMAX)
+			{
+				warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
+				return NULL;
+			}
 			data = vrealloc(buffer->data, buffer->size + chunksize);
-			if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > BUFFERMAX)
+			if (data == NULL)
 			{
 				buffer->maxchunks = 0;
-				warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
+				warn("buffer out memory: %d / %d", buffer->size + chunksize, BUFFERMAX);
 				return NULL;
 			}
 			buffer->size += chunksize;
