@@ -94,6 +94,7 @@ static int MD5_finish(void *ctx, char *out)
 	Md5 *pctx = (Md5 *)ctx;
 	wc_Md5Final(pctx, out);
 	free(pctx);
+	return 0;
 }
 
 static void *SHA1_init()
@@ -113,6 +114,7 @@ static int SHA1_finish(void *ctx, char *out)
 	Sha *pctx = (Sha *)ctx;
 	wc_ShaFinal(pctx, out);
 	free(pctx);
+	return 0;
 }
 
 static void *SHA256_init()
@@ -132,4 +134,5 @@ static int SHA256_finish(void *ctx, char *out)
 	Sha256 *pctx = (Sha256 *)ctx;
 	wc_Sha256Final(pctx, out);
 	free(pctx);
+	return 0;
 }

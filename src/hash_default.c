@@ -80,6 +80,7 @@ static int MD5_finish(void *ctx, char *out)
 	MD5_CTX *pctx = (MD5_CTX *)ctx;
 	MD5Final(out, pctx);
 	free(pctx);
+	return 0;
 }
 
 #else
@@ -103,6 +104,7 @@ static int MD5_finish(void *ctx, char *out)
 	md5_state_t *pctx = (md5_state_t *)ctx;
 	md5_finish(pctx, out);
 	free(pctx);
+	return 0;
 }
 #endif
 
@@ -125,6 +127,7 @@ static int SHA1_finish(void *ctx, char *out)
 	sha1_ctx *pctx = (sha1_ctx *)ctx;
 	sha1_end(out, pctx);
 	free(pctx);
+	return 0;
 }
 #else
 static void *SHA1_init()
@@ -136,6 +139,7 @@ static void SHA1_update(void *ctx, const char *in, size_t len)
 }
 static int SHA1_finish(void *ctx, char *out)
 {
+	return 0;
 }
 #endif
 
