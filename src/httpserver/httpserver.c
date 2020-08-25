@@ -3841,7 +3841,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			if (sessioninfo == NULL)
 				return  NULL;
 			sessioninfo->key =
-				_buffer_append(message->client->session->storage, key, strlen(key) + 1);
+				_buffer_append(message->client->session->storage, key, -1);
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
 		}
