@@ -76,6 +76,7 @@ struct http_message_s
 		PARSE_URIDOUBLEDOT,
 		PARSE_VERSION,
 		PARSE_STATUS,
+		PARSE_PREHEADER,
 		PARSE_HEADER,
 		PARSE_POSTCONTENT, /**POSTCONTENT is hear to allow to parse all the content of POST request  see _httpclient_request*/
 		PARSE_POSTHEADER,

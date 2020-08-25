@@ -896,7 +896,7 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 			if (*data->offset == '\n')
 			{
 				data->offset++;
-				next = PARSE_HEADER;
+				next = PARSE_PREHEADER;
 			}
 			else
 			{
@@ -914,6 +914,38 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 		message->result = RESULT_400;
 		err("request bad protocol version %s", version);
 	}
+	return next;
+}
+
+static int _httpmessage_parsepreheader(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_HEADER;
+	/**
+	 * keep the query to the end of the URI first.
+	 * When the URI is completed, remove the '?'
+	 * and update the query pointer
+	 **/
+	if (message->uri != NULL && message->uri->length > 0)
+	{
+		/**
+		 * query must be set at the end of the uri loading
+		 * uri buffer may be change during an extension
+		 */
+		message->query = strchr(message->uri->data, '?');
+		warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
+	}
+	else if (message->uri == NULL)
+	{
+		message->result = RESULT_400;
+		next = PARSE_END;
+		err("parse reject URI bad formatting: %s", data->data);
+	}
+	if (message->query != NULL)
+	{
+		*message->query = '\0';
+		message->query++;
+	}
+
 	return next;
 }
 
@@ -1179,6 +1211,11 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			case PARSE_VERSION:
 			{
 				next = _httpmessage_parseversion(message, data);
+			}
+			break;
+			case PARSE_PREHEADER:
+			{
+				next = _httpmessage_parsepreheader(message, data);
 			}
 			break;
 			case PARSE_HEADER:
