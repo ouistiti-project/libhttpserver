@@ -196,51 +196,50 @@ static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
 	if (length == -1)
 		length = strlen(data);
+	if (length == 0)
+		return buffer->offset;
+
 	if (buffer->data + buffer->size < buffer->offset + length + 1)
 	{
-		char *data = buffer->data;
-		int nbchunks = length / ChunkSize + 1;
+		int nbchunks = (length / ChunkSize) + 1;
 		if (buffer->maxchunks - nbchunks < 0)
 			nbchunks = buffer->maxchunks;
 		int chunksize = ChunkSize * nbchunks;
-		if (nbchunks > 0)
+
+		if (chunksize == 0)
 		{
-			buffer->maxchunks -= nbchunks;
-			if (buffer->size + chunksize) > BUFFERMAX)
-			{
-				warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
-				return NULL;
-			}
-			data = vrealloc(buffer->data, buffer->size + chunksize);
-			if (data == NULL)
-			{
-				buffer->maxchunks = 0;
-				warn("buffer out memory: %d / %d", buffer->size + chunksize, BUFFERMAX);
-				return NULL;
-			}
-			buffer->size += chunksize;
-			if (data != buffer->data)
-			{
-				char *offset = buffer->offset;
-				buffer->offset = data + (offset - buffer->data);
-				buffer->data = data;
-			}
+			warn("buffer max chunk: %d", buffer->size / ChunkSize);
+			return NULL;
 		}
-		else
-			length = 0;
-		length = (length > chunksize)? chunksize: length;
+
+		buffer->maxchunks -= nbchunks;
+		if ((buffer->size + chunksize) > BUFFERMAX)
+		{
+			warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
+			return NULL;
+		}
+		char *newptr = vrealloc(buffer->data, buffer->size + chunksize);
+		if (newptr == NULL)
+		{
+			buffer->maxchunks = 0;
+			warn("buffer out memory: %d", buffer->size + chunksize);
+			return NULL;
+		}
+		buffer->size += chunksize;
+		if (newptr != buffer->data)
+		{
+			char *offset = buffer->offset;
+			buffer->offset = newptr + (offset - buffer->data);
+			buffer->data = newptr;
+		}
+
+		length = (length > chunksize)? (chunksize - 1): length;
 	}
-	char *offset = buffer->offset;
-	if (length > 0)
-	{
-		memcpy(buffer->offset, data, length);
-		buffer->length += length;
-		buffer->offset += length;
-		*buffer->offset = '\0';
-		return offset;
-	}
-	else
-		return NULL;
+	char *offset = memcpy(buffer->offset, data, length);
+	buffer->length += length;
+	buffer->offset += length;
+	buffer->data[buffer->length] = '\0';
+	return offset;
 }
 
 static char *_buffer_pop(buffer_t *buffer, int length)
@@ -795,13 +794,21 @@ static int _httpmessage_parseuridoubledot(http_message_t *message, buffer_t *dat
 		break;
 	}
 	if (length > 0)
+	{
+		_buffer_append(message->uri, ".", 1);
 		_buffer_append(message->uri, uri, length);
+	}
 	else if (length == -1)
 	{
 		/// remove the first last '/'
 		_buffer_rewindto(message->uri, '/');
 		/// remove the first directory
 		_buffer_rewindto(message->uri, '/');
+		if (_buffer_empty(message->uri))
+		{
+			_buffer_destroy(message->uri);
+			message->uri = NULL;
+		}
 	}
 	return next;
 }
