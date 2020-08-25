@@ -346,6 +346,19 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 	return count;
 }
 
+static int _buffer_empty(buffer_t *buffer)
+{
+	return (buffer->length == 0);
+}
+
+static char _buffer_last(buffer_t *buffer)
+{
+	if (buffer->length > 0)
+		return *(buffer->offset - 1);
+	else
+		return 0;
+}
+
 static void _buffer_destroy(buffer_t *buffer)
 {
 	vfree(buffer->data);
