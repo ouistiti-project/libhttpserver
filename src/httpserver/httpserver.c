@@ -144,7 +144,7 @@ const char str_head[] = "HEAD";
 
 static const http_message_method_t default_methods[] = {
 	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (const http_message_method_t*)&default_methods[1]},
-	{ .key = str_post, .id = MESSAGE_TYPE_POST, .next = (const http_message_method_t*)&default_methods[2]},
+	{ .key = str_post, .id = MESSAGE_TYPE_POST, .properties = MESSAGE_ALLOW_CONTENT, .next = (const http_message_method_t*)&default_methods[2]},
 	{ .key = str_head, .id = MESSAGE_TYPE_HEAD, .next = NULL},
 #ifdef HTTPCLIENT_FEATURES
 	{ .key = NULL, .id = -1, .next = NULL},
@@ -1032,7 +1032,7 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	if (message->query)
 		length = strlen(message->query);
 
-	if (message->method->id == MESSAGE_TYPE_POST &&
+	if (message->method->properties == MESSAGE_ALLOW_CONTENT &&
 		message->content_type != NULL &&
 		!strcmp(message->content_type, str_form_urlencoded))
 	{
@@ -1568,7 +1568,7 @@ int httpmessage_isprotected(http_message_t *message)
 	if (message->method == NULL)
 		return -1;
 	else
-		return message->method->properties;
+		return ((message->method->properties & MESSAGE_PROTECTED) == MESSAGE_PROTECTED);
 }
 /***********************************************************************
  * http_client
@@ -3410,8 +3410,10 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		method->next = (const http_message_method_t *)server->methods;
 		server->methods = method;
 	}
-	if (properties > method->properties)
-		method->properties = properties;
+	if (properties != method->properties)
+	{
+		method->properties |= properties;
+	}
 }
 
 const httpclient_ops_t * httpserver_changeprotocol(http_server_t *server, const httpclient_ops_t *newops, void *config)
