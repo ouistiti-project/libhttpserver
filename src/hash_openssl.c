@@ -136,6 +136,7 @@ static int HASH_finish(void *ctx, char *out)
 	unsigned int len = 0;
 	EVP_DigestFinal_ex(pctx, out, &len);
 	EVP_MD_CTX_destroy(pctx);
+	return 0;
 }
 
 static void *HMAC_initkey(const char *key, size_t keylen)

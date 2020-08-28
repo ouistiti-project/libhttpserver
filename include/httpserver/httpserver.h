@@ -300,6 +300,8 @@ const char *httpserver_INFO(http_server_t *server, const char *key);
  * @param properties a value checked by some modules
  * @note by default server knows "GET", "POST" and "HEAD"
  */
+#define MESSAGE_PROTECTED 0x01
+#define MESSAGE_ALLOW_CONTENT 0x02
 void httpserver_addmethod(http_server_t *server, const char *method, short properties);
 
 /**

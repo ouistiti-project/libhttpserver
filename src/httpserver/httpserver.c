@@ -144,7 +144,7 @@ const char str_head[] = "HEAD";
 
 static const http_message_method_t default_methods[] = {
 	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (const http_message_method_t*)&default_methods[1]},
-	{ .key = str_post, .id = MESSAGE_TYPE_POST, .next = (const http_message_method_t*)&default_methods[2]},
+	{ .key = str_post, .id = MESSAGE_TYPE_POST, .properties = MESSAGE_ALLOW_CONTENT, .next = (const http_message_method_t*)&default_methods[2]},
 	{ .key = str_head, .id = MESSAGE_TYPE_HEAD, .next = NULL},
 #ifdef HTTPCLIENT_FEATURES
 	{ .key = NULL, .id = -1, .next = NULL},
@@ -196,46 +196,50 @@ static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
 	if (length == -1)
 		length = strlen(data);
+	if (length == 0)
+		return buffer->offset;
+
 	if (buffer->data + buffer->size < buffer->offset + length + 1)
 	{
-		char *data = buffer->data;
-		int nbchunks = length / ChunkSize + 1;
+		int nbchunks = (length / ChunkSize) + 1;
 		if (buffer->maxchunks - nbchunks < 0)
 			nbchunks = buffer->maxchunks;
 		int chunksize = ChunkSize * nbchunks;
-		if (nbchunks > 0)
+
+		if (chunksize == 0)
 		{
-			buffer->maxchunks -= nbchunks;
-			data = vrealloc(buffer->data, buffer->size + chunksize);
-			if ((data == NULL && errno == ENOMEM) || (buffer->size + chunksize) > BUFFERMAX)
-			{
-				buffer->maxchunks = 0;
-				warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
-				return NULL;
-			}
-			buffer->size += chunksize;
-			if (data != buffer->data)
-			{
-				char *offset = buffer->offset;
-				buffer->offset = data + (offset - buffer->data);
-				buffer->data = data;
-			}
+			warn("buffer max chunk: %d", buffer->size / ChunkSize);
+			return NULL;
 		}
-		else
-			length = 0;
-		length = (length > chunksize)? chunksize: length;
+
+		buffer->maxchunks -= nbchunks;
+		if ((buffer->size + chunksize) > BUFFERMAX)
+		{
+			warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
+			return NULL;
+		}
+		char *newptr = vrealloc(buffer->data, buffer->size + chunksize);
+		if (newptr == NULL)
+		{
+			buffer->maxchunks = 0;
+			warn("buffer out memory: %d", buffer->size + chunksize);
+			return NULL;
+		}
+		buffer->size += chunksize;
+		if (newptr != buffer->data)
+		{
+			char *offset = buffer->offset;
+			buffer->offset = newptr + (offset - buffer->data);
+			buffer->data = newptr;
+		}
+
+		length = (length > chunksize)? (chunksize - 1): length;
 	}
-	char *offset = buffer->offset;
-	if (length > 0)
-	{
-		memcpy(buffer->offset, data, length);
-		buffer->length += length;
-		buffer->offset += length;
-		*buffer->offset = '\0';
-		return offset;
-	}
-	else
-		return NULL;
+	char *offset = memcpy(buffer->offset, data, length);
+	buffer->length += length;
+	buffer->offset += length;
+	buffer->data[buffer->length] = '\0';
+	return offset;
 }
 
 static char *_buffer_pop(buffer_t *buffer, int length)
@@ -340,6 +344,19 @@ static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, cha
 	else
 		count++;
 	return count;
+}
+
+static int _buffer_empty(buffer_t *buffer)
+{
+	return (buffer->length == 0);
+}
+
+static char _buffer_last(buffer_t *buffer)
+{
+	if (buffer->length > 0)
+		return *(buffer->offset - 1);
+	else
+		return 0;
 }
 
 static void _buffer_destroy(buffer_t *buffer)
@@ -622,38 +639,13 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	int next = PARSE_URI;
 	char *uri = data->offset;
 	int length = 0;
-	if (message->uri == NULL)
-	{
-		/**
-		 * check the rules on URI:
-		 *  - abs_path
-		 *  - empty who is equivalent to /
-		 *  - *
-		 *  - absolute URI
-		 *  - %2f who is /
-		 * This check must be done only once
-		 */
-		if (strchr("/ *%", uri[0]) == NULL && (strstr(uri, "://") == NULL) && strncasecmp(uri, "%2f", 3))
-		{
-			message->version = message->client->server->config->version;
-			message->result = RESULT_400;
-			next = PARSE_END;
-			err("parse reject uri missing leading /: %s", uri);
-			return next;
-		}
-		/**
-		 * to use parse_cgi from a module, the functions
-		 * has to run on message without client attached.
-		 */
-		message->uri = _buffer_create(MAXCHUNKS_URI);
-	}
+	int build_uri = 0;
 	while (data->offset < (data->data + data->length) && next == PARSE_URI)
 	{
 		switch (*data->offset)
 		{
 #ifndef HTTPMESSAGE_NODOUBLEDOT
 			case '.':
-				length++;
 				next = PARSE_URIDOUBLEDOT;
 			break;
 #endif
@@ -662,19 +654,59 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 				next = PARSE_URIENCODED;
 			}
 			break;
+			case '/':
+				/**
+				 * Remove all double / inside the URI.
+				 * This may allow unsecure path with double .
+				 * But leave double // for the query part
+				 */
+				if ((data->offset > uri) &&
+					(*(data->offset - 1) == '/') &&
+					(message->query == NULL))
+				{
+					next = PARSE_URI | PARSE_CONTINUE;
+				}
+				else
+					length++;
+				/**
+				 * URI must be an absolute path
+				 */
+				build_uri = 1;
+			break;
+			case '?':
+				/** This message query is not used as it **/
+				message->query = data->offset;
+				length++;
+			break;
 			case ' ':
 			{
+				/**
+				 * empty URI is accepted
+				 */
+				if (message->uri == NULL && length == 0)
+					build_uri = 1;
 				next = PARSE_VERSION;
-				warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 			}
+			break;
+			case '*':
+				length++;
+				/**
+				 * '*' URI is accepted
+				 */
+				if (message->uri == NULL && length == 0)
+					build_uri = 1;
 			break;
 			case '\r':
 			case '\n':
 			{
-				next = PARSE_HEADER;
+				/**
+				 * empty URI is accepted
+				 */
+				if (message->uri == NULL && length == 0)
+					build_uri = 1;
+				next = PARSE_PREHEADER;
 				if (*(data->offset + 1) == '\n')
 					data->offset++;
-				warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
 			}
 			break;
 			default:
@@ -685,10 +717,15 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 		data->offset++;
 	}
 
-	if (length > 0)
+	if (build_uri && message->uri == NULL)
+	{
+		message->uri = _buffer_create(MAXCHUNKS_URI);
+	}
+
+	if (length > 0 && (message->uri != NULL))
 	{
 		uri = _buffer_append(message->uri, uri, length);
-		if (uri == NULL && message->query == NULL)
+		if (uri == NULL)
 		{
 			message->version = message->client->server->config->version;
 #ifdef RESULT_414
@@ -698,22 +735,6 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 #endif
 			next = PARSE_END;
 			err("parse reject uri too long : %s %s", message->uri->data, data->data);
-		}
-	}
-	if (next != PARSE_URI)
-	{
-		if (message->uri->length > 0)
-		{
-			/**
-			 * query must be set at the end of the uri loading
-			 * uri buffer may be change during an extension
-			 */
-			message->query = strchr(message->uri->data, '?');
-			if (message->query != NULL)
-			{
-				*message->query = '\0';
-				message->query++;
-			}
 		}
 	}
 	return next;
@@ -757,7 +778,16 @@ static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
 	}
 	if (next == PARSE_URI)
 	{
-		_buffer_append(message->uri, &decodeval, 1);
+		/**
+		 * The URI must be an absolute path.
+		 *
+		 * if message->uri == NULL and decodeval == '/'
+		 * this is the first / of the URI
+		 */
+		if (decodeval != '/' && message->uri == NULL)
+			message->uri = _buffer_create(MAXCHUNKS_URI);
+		if (message->uri != NULL)
+			_buffer_append(message->uri, &decodeval, 1);
 		message->decodeval = 0;
 	}
 	data->offset = encoded;
@@ -768,6 +798,8 @@ static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
 static int _httpmessage_parseuridoubledot(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_URI;
+	if (message->uri == NULL)
+		return next;
 	char *uri = data->offset;
 	ssize_t length = 1;
 	switch (*(data->offset))
@@ -790,13 +822,21 @@ static int _httpmessage_parseuridoubledot(http_message_t *message, buffer_t *dat
 		break;
 	}
 	if (length > 0)
+	{
+		_buffer_append(message->uri, ".", 1);
 		_buffer_append(message->uri, uri, length);
+	}
 	else if (length == -1)
 	{
 		/// remove the first last '/'
 		_buffer_rewindto(message->uri, '/');
 		/// remove the first directory
 		_buffer_rewindto(message->uri, '/');
+		if (_buffer_empty(message->uri))
+		{
+			_buffer_destroy(message->uri);
+			message->uri = NULL;
+		}
 	}
 	return next;
 }
@@ -856,7 +896,7 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 			if (*data->offset == '\n')
 			{
 				data->offset++;
-				next = PARSE_HEADER;
+				next = PARSE_PREHEADER;
 			}
 			else
 			{
@@ -874,6 +914,38 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 		message->result = RESULT_400;
 		err("request bad protocol version %s", version);
 	}
+	return next;
+}
+
+static int _httpmessage_parsepreheader(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_HEADER;
+	/**
+	 * keep the query to the end of the URI first.
+	 * When the URI is completed, remove the '?'
+	 * and update the query pointer
+	 **/
+	if (message->uri != NULL && message->uri->length > 0)
+	{
+		/**
+		 * query must be set at the end of the uri loading
+		 * uri buffer may be change during an extension
+		 */
+		message->query = strchr(message->uri->data, '?');
+		warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
+	}
+	else if (message->uri == NULL)
+	{
+		message->result = RESULT_400;
+		next = PARSE_END;
+		err("parse reject URI bad formatting: %s", data->data);
+	}
+	if (message->query != NULL)
+	{
+		*message->query = '\0';
+		message->query++;
+	}
+
 	return next;
 }
 
@@ -960,7 +1032,7 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	if (message->query)
 		length = strlen(message->query);
 
-	if (message->method->id == MESSAGE_TYPE_POST &&
+	if (message->method->properties == MESSAGE_ALLOW_CONTENT &&
 		message->content_type != NULL &&
 		!strcmp(message->content_type, str_form_urlencoded))
 	{
@@ -1141,6 +1213,11 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				next = _httpmessage_parseversion(message, data);
 			}
 			break;
+			case PARSE_PREHEADER:
+			{
+				next = _httpmessage_parsepreheader(message, data);
+			}
+			break;
 			case PARSE_HEADER:
 			{
 				next = _httpmessage_parseheader(message, data);
@@ -1179,13 +1256,13 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 				err("httpmessage: bad state internal error");
 			break;
 		}
-		if (next == (message->state & PARSE_MASK) && (ret == ECONTINUE))
+		if (((next & PARSE_MASK) == (message->state & PARSE_MASK)) && (ret == ECONTINUE))
 		{
 			if (next < PARSE_PRECONTENT)
 				ret = EINCOMPLETE;
 			break; // get out of the while (ret == ECONTINUE) loop
 		}
-		message->state = (message->state & ~PARSE_MASK) | next;
+		message->state = (message->state & ~PARSE_MASK) | (next & PARSE_MASK);
 	} while (ret == ECONTINUE);
 	return ret;
 }
@@ -1491,7 +1568,7 @@ int httpmessage_isprotected(http_message_t *message)
 	if (message->method == NULL)
 		return -1;
 	else
-		return message->method->properties;
+		return ((message->method->properties & MESSAGE_PROTECTED) == MESSAGE_PROTECTED);
 }
 /***********************************************************************
  * http_client
@@ -1955,11 +2032,9 @@ static int _httpclient_message(http_client_t *client, http_message_t **prequest)
 			}
 		break;
 		case ECONTINUE:
-			return EINCOMPLETE;
-		break;
+		return EINCOMPLETE;
 		case EINCOMPLETE:
-			return EINCOMPLETE;
-		break;
+		return EINCOMPLETE;
 		case EREJECT:
 		{
 			if ((*prequest)->response == NULL)
@@ -2070,8 +2145,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 				}
 			break;
 			case EINCOMPLETE:
-				return EINCOMPLETE;
-			break;
+			return EINCOMPLETE;
 			case EREJECT:
 			{
 				if (request->response->result == RESULT_200)
@@ -3336,8 +3410,10 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		method->next = (const http_message_method_t *)server->methods;
 		server->methods = method;
 	}
-	if (properties > method->properties)
-		method->properties = properties;
+	if (properties != method->properties)
+	{
+		method->properties |= properties;
+	}
 }
 
 const httpclient_ops_t * httpserver_changeprotocol(http_server_t *server, const httpclient_ops_t *newops, void *config)
@@ -3609,7 +3685,23 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
+		{
 			value = message->uri->data;
+			/**
+			 * For security all the first '/' (and %2f == /) are removed.
+			 * The module may use the URI as a path on the file system,
+			 * but an absolute path may be dangerous if the module doesn't
+			 * manage correctly the "root" directory.
+			 *
+			 * /%2f///%2f//etc/password translated to etc/password
+			 *
+			 */
+			/**
+			 * the full URI is necessary for authentication and filter
+			 *
+			while (*value == '/' && *value != '\0') value++;
+			 */
+		}
 	}
 	else if (!strcasecmp(key, "query"))
 	{
@@ -3751,7 +3843,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			if (sessioninfo == NULL)
 				return  NULL;
 			sessioninfo->key =
-				_buffer_append(message->client->session->storage, key, strlen(key) + 1);
+				_buffer_append(message->client->session->storage, key, -1);
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
 		}
