@@ -2777,6 +2777,12 @@ static int _httpclient_run(http_client_t *client)
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
 				}
+				else if (httpmessage_result(request->response, -1) > 299)
+				{
+					dbg("client: exit on result");
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					ret = EINCOMPLETE;
+				}
 				else
 				{
 					dbg("client: keep alive");
