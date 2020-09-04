@@ -1032,9 +1032,9 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	if (message->query)
 		length = strlen(message->query);
 
-	if (message->method->properties == MESSAGE_ALLOW_CONTENT &&
+	if ((message->method->properties & MESSAGE_ALLOW_CONTENT) &&
 		message->content_type != NULL &&
-		!strcmp(message->content_type, str_form_urlencoded))
+		!strncasecmp(message->content_type, str_form_urlencoded, sizeof(str_form_urlencoded) - 1))
 	{
 		next = PARSE_POSTCONTENT;
 		message->state &= ~PARSE_CONTINUE;
@@ -2759,6 +2759,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				ret = ECONTINUE;
 				client->request_queue = request->next;
+
 				if ((request->state & PARSE_MASK) < PARSE_END)
 				{
 					dbg("client: uncomplete");
