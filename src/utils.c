@@ -219,58 +219,52 @@ int utils_searchexp(const char *haystack, const char *needleslist, const char **
 static int _utils_searchexp(const char *haystack, const char *needleslist, int ignore_case, const char **rest)
 {
 	int ret = EREJECT;
+	if (needleslist == NULL || needleslist[0] == '\0')
+		return ret;
 	if (haystack != NULL)
 	{
 		int i = -1;
 		const char *needle = needleslist;
 		while (needle != NULL)
 		{
-			i = -1;
+			i = 0;
 			ret = ECONTINUE;
-			int wildcard = 1;
+			const char *wildcard = &(haystack[i]);
 			if (*needle == '^')
 			{
-				wildcard = 0;
+				wildcard = NULL;
+				needle++;
 			}
 			const char *needle_entry = needle;
 			do
 			{
+				utils_dbg("wildcard %s needle %s, haystack %s", wildcard, needle, &haystack[i]);
+				char hay = haystack[i];
 				if (*needle == '*')
 				{
-					wildcard = 1;
+					wildcard = &(haystack[i]);
 					needle++;
 				}
-				i++;
-				char hay = haystack[i];
 				// lowercase
 				if (ignore_case && hay > 0x40 && hay < 0x5b)
 					hay += 0x20;
-				utils_dbg("wildcard %d, needle %s, haystack %s", wildcard, needle, &haystack[i]);
-				if (!wildcard)
+				if (wildcard == NULL)
 				{
-					needle++;
 					char lneedle = *needle;
 					if (ignore_case && lneedle > 0x40 && lneedle < 0x5b)
 						lneedle += 0x20;
-					if (*needle == ',' || *needle == '\0' || *needle == '$')
-					{
-						utils_dbg("end of needle, hay %c", hay);
-						break;
-					}
-					else if (lneedle != hay && *needle != '*')
+					if (lneedle != hay)
 					{
 						utils_dbg("end of needle %c, hay %c",lneedle, hay);
 						needle = needle_entry;
 						ret = EREJECT;
-						if (*needle == '^')
-						{
-							break;
-						}
+						break;
 					}
 					else if (lneedle == hay)
 					{
 						ret = ESUCCESS;
 					}
+					needle++;
 				}
 				else
 				{
@@ -281,12 +275,15 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 					ret = ESUCCESS;
 					if (lneedle == hay)
 					{
-						wildcard = 0;
+						wildcard = NULL;
+						needle++;
 					}
-					else if (*needle == ',' || *needle == '\0')
-					{
-						break;
-					}
+				}
+				i++;
+				if (*needle == ',' || *needle == '\0' || *needle == '$')
+				{
+					utils_dbg("end of needle %c, hay %c", *needle, hay);
+					break;
 				}
 			}
 			while(haystack[i] != '\0');
@@ -305,8 +302,8 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 			{
 				if (*needle == ',' || *needle == '\0' || *needle == '$')
 				{
-					if (wildcard && (rest != NULL))
-						*rest = &haystack[i - 1];
+					if (wildcard && (*needle != '$') && (rest != NULL))
+						*rest = wildcard;
 					break;
 				}
 				else if (*needle != '*')
