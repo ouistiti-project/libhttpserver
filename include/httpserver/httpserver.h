@@ -166,11 +166,14 @@ typedef int (*http_send_t)(void *ctx, const char *data, int length);
 typedef void (*http_disconnect_t)(void *ctx);
 typedef void (*http_destroy_t)(void *ctx);
 
+#define HTTPCLIENT_TYPE_SECURE 0x0001
+
 typedef struct httpclient_ops_s httpclient_ops_t;
 struct httpclient_ops_s
 {
 	const char *scheme;
 	int default_port;
+	int type;
 	http_create_t create;
 	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */
