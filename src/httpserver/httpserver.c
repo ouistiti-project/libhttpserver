@@ -158,6 +158,7 @@ const char str_defaultscheme[] = "http";
 const char str_form_urlencoded[] = "application/x-www-form-urlencoded";
 const char str_cookie[] = "Cookie";
 const char str_true[] = "true";
+const char str_false[] = "false";
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
@@ -3623,6 +3624,13 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	{
 		snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
 		value = service;
+	}
+	else if (!strcasecmp(key, "secure"))
+	{
+		if (server->protocol_ops->type & HTTPCLIENT_TYPE_SECURE)
+			value = str_true;
+		else
+			value = str_false;
 	}
 	else if (!strcasecmp(key, "port"))
 	{
