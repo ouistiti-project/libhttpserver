@@ -728,14 +728,6 @@ void httpclient_shutdown(http_client_t *client);
 #define WAIT_ACCEPT 0x02
 int httpclient_wait(http_client_t *client, int options);
 
-typedef void *(*module_create_t)(http_server_t *server, void *config);
-typedef struct module_s
-{
-	const char *name;
-	void *(*create)(http_server_t *server, void *config);
-	void (*destroy)(void*);
-} module_t;
-
 #ifdef __cplusplus
 }
 #endif
