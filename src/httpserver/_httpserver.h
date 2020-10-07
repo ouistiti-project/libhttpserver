@@ -89,11 +89,7 @@ struct http_client_s
 	buffer_t *sockdata;
 
 	http_server_session_t *session;
-#if defined USE_IPV6
-	struct sockaddr_in6 addr;
-#else
-	struct sockaddr_in addr;
-#endif
+	struct sockaddr_storage addr;
 	unsigned int addr_size;
 	struct http_client_s *next;
 };
