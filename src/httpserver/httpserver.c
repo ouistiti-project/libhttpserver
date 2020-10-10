@@ -158,6 +158,7 @@ const char str_defaultscheme[] = "http";
 const char str_form_urlencoded[] = "application/x-www-form-urlencoded";
 const char str_cookie[] = "Cookie";
 const char str_true[] = "true";
+const char str_false[] = "false";
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
@@ -1032,9 +1033,9 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	if (message->query)
 		length = strlen(message->query);
 
-	if (message->method->properties == MESSAGE_ALLOW_CONTENT &&
+	if ((message->method->properties & MESSAGE_ALLOW_CONTENT) &&
 		message->content_type != NULL &&
-		!strcmp(message->content_type, str_form_urlencoded))
+		!strncasecmp(message->content_type, str_form_urlencoded, sizeof(str_form_urlencoded) - 1))
 	{
 		next = PARSE_POSTCONTENT;
 		message->state &= ~PARSE_CONTINUE;
@@ -2759,6 +2760,7 @@ static int _httpclient_run(http_client_t *client)
 			{
 				ret = ECONTINUE;
 				client->request_queue = request->next;
+
 				if ((request->state & PARSE_MASK) < PARSE_END)
 				{
 					dbg("client: uncomplete");
@@ -2773,6 +2775,12 @@ static int _httpclient_run(http_client_t *client)
 				else if (!(client->state & CLIENT_KEEPALIVE))
 				{
 					dbg("client: exit");
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					ret = EINCOMPLETE;
+				}
+				else if (httpmessage_result(request->response, -1) > 299)
+				{
+					dbg("client: exit on result");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
 				}
@@ -3616,6 +3624,13 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	{
 		snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
 		value = service;
+	}
+	else if (!strcasecmp(key, "secure"))
+	{
+		if (server->protocol_ops->type & HTTPCLIENT_TYPE_SECURE)
+			value = str_true;
+		else
+			value = str_false;
 	}
 	else if (!strcasecmp(key, "port"))
 	{
