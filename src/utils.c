@@ -116,7 +116,8 @@ static const mime_entry_t *_utils_getmime(const mime_entry_t *entry, const char 
 {
 	while (entry)
 	{
-		if (_utils_searchexp(filepath, entry->ext, 1, NULL) == ESUCCESS)
+		const char *ext = strrchr(filepath, '.');
+		if (_utils_searchexp(ext, entry->ext, 1, NULL) == ESUCCESS)
 		{
 			break;
 		}
