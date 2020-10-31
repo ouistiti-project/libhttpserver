@@ -454,7 +454,8 @@ static void _tcpserver_close(http_server_t *server)
 	{
 		http_client_t *next = client->next;
 		client->ops->disconnect(client->opsctx);
-		client->ops->destroy(client->opsctx);
+		httpclient_destroy(client);
+		//client->ops->destroy(client->opsctx);
 		client = next;
 	}
 	server->clients = NULL;
