@@ -1659,12 +1659,6 @@ void httpclient_destroy(http_client_t *client)
 
 void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name)
 {
-	http_connector_list_t *callback;
-
-	callback = vcalloc(1, sizeof(*callback));
-	if (callback == NULL)
-		return;
-
 	_http_addconnector(&client->callbacks, func, funcarg, priority, name);
 }
 
@@ -1891,6 +1885,7 @@ static int _httpclient_connect(http_client_t *client)
 	 */
 	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 	warn("client %p thread exit", client);
+	httpclient_destroy(client);
 #ifdef DEBUG
 	fflush(stderr);
 #endif
@@ -1911,7 +1906,7 @@ http_server_t *httpclient_server(http_client_t *client)
 static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
 {
 	int ret = ESUCCESS;
-	http_connector_list_t *iterator = request->connector;
+	http_connector_list_t *iterator;
 	iterator = client->callbacks;
 	while (iterator != NULL)
 	{
