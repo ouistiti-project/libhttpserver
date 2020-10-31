@@ -3575,6 +3575,8 @@ void httpserver_destroy(http_server_t *server)
 		/*vfree(method);*/
 		method = next;
 	}
+	if (server->poll_set)
+		vfree(server->poll_set);
 	vfree(server);
 }
 /***********************************************************************/
