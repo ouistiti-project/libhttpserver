@@ -70,6 +70,7 @@
 
 #define buffer_dbg(...)
 #define message_dbg(...)
+#define client_dbg(...)
 #define server_dbg(...)
 
 extern httpserver_ops_t *httpserver_ops;
@@ -580,16 +581,18 @@ HTTPMESSAGE_DECL void _httpmessage_reset(http_message_t *message)
 HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 {
 	if (message->response)
+	{
 		_httpmessage_destroy(message->response);
+	}
 	if (message->uri)
 		_buffer_destroy(message->uri);
-	if (message->content)
-		_buffer_destroy(message->content);
+	if (message->content_storage)
+		_buffer_destroy(message->content_storage);
 	if (message->header)
 		_buffer_destroy(message->header);
+	dbentry_destroy(message->headers);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
-	dbentry_destroy(message->headers);
 	if (message->query_storage)
 		_buffer_destroy(message->query_storage);
 	dbentry_destroy(message->queries);
@@ -1091,6 +1094,10 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 */
 		int length = data->length -(data->offset - data->data);
 		//int length = data->length;
+		/**
+		 * content is the sockdata from the client object
+		 * and haven't to be destroyed
+		 */
 		message->content = data;
 		/**
 		 * At the end of the parsing the content_length of request
@@ -1513,7 +1520,8 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 	}
 	if (message->content == NULL && content != NULL)
 	{
-		message->content = _buffer_create(MAXCHUNKS_CONTENT);
+		message->content_storage = _buffer_create(MAXCHUNKS_CONTENT);
+		message->content = message->content_storage;
 	}
 
 	if (content != NULL)
@@ -1537,7 +1545,8 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
 {
 	if (message->content == NULL && content != NULL)
 	{
-		message->content = _buffer_create(MAXCHUNKS_CONTENT);
+		message->content_storage = _buffer_create(MAXCHUNKS_CONTENT);
+		message->content = message->content_storage;
 	}
 
 	if (message->content != NULL && content != NULL)
@@ -2193,7 +2202,8 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
 	}
 	else
 	{
-		dbg("empty buffer to send");
+		client_dbg("empty buffer to send");
+		ret = ESUCCESS;
 	}
 	return ret;
 }
@@ -2325,7 +2335,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			}
 
 			response->state = GENERATE_HEADER | (response->state & ~GENERATE_MASK);
-			_buffer_reset(response->header);
+			_buffer_destroy(response->header);
+			response->header = NULL;
 			_httpmessage_buildheader(response);
 		}
 		break;
@@ -2754,43 +2765,42 @@ static int _httpclient_run(http_client_t *client)
 			if (ret == ESUCCESS)
 			{
 				ret = ECONTINUE;
-				client->request_queue = request->next;
 
 				if ((request->state & PARSE_MASK) < PARSE_END)
 				{
-					dbg("client: uncomplete");
+					client_dbg("client: uncomplete");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
 				}
 				else if (client->state & CLIENT_LOCKED)
 				{
-					dbg("client: locked");
+					client_dbg("client: locked");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				}
-				else if (!(client->state & CLIENT_KEEPALIVE))
-				{
-					dbg("client: exit");
-					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-					ret = EINCOMPLETE;
 				}
 				else if (httpmessage_result(request->response, -1) > 299)
 				{
-					dbg("client: exit on result");
+					client_dbg("client: exit on result");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
 				}
+				else if (client->state & CLIENT_KEEPALIVE)
+				{
+					client_dbg("client: keep alive");
+					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+				}
 				else
 				{
-					dbg("client: keep alive");
-					client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+					client_dbg("client: exit");
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+					ret = EINCOMPLETE;
 				}
 				/**
 				 * client->request is not null if the reception is not complete.
 				 * In this case the client keeps the request until the connection
 				 * is closed
 				 */
-				if (request != client->request)
-					_httpmessage_destroy(request);
+				client->request_queue = request->next;
+				_httpmessage_destroy(request);
 				return ret;
 			}
 			else if (ret == EREJECT)

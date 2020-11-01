@@ -96,6 +96,7 @@ struct http_message_s
 	}
 	state;
 	buffer_t *content;
+	buffer_t *content_storage;
 	buffer_t *header;
 	unsigned long long content_length;
 	unsigned int content_packet;
