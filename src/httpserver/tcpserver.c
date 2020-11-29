@@ -288,7 +288,7 @@ static void handler(int sig, siginfo_t *si, void *arg)
 
 static int _tcpserver_start(http_server_t *server)
 {
-	int status;
+	int status = -1;
 
 #ifdef WIN32
 	WSADATA wsaData = {0};
@@ -333,7 +333,7 @@ static int _tcpserver_start(http_server_t *server)
 	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
 #endif
 	if (status != 0) {
-		warn("socket interface not found");
+		warn("socket interface not found : %s", hstrerror(status));
 		result = &hints;
 #ifdef USE_IPV6
 		if (result->ai_family == AF_INET6)
@@ -381,8 +381,11 @@ static int _tcpserver_start(http_server_t *server)
 		status = bind(server->sock, rp->ai_addr, rp->ai_addrlen);
 		server->type = rp->ai_family;
 		if (status == 0)
+		{
+			warn("socket started on port %d", server->config->port);
 			/* Success */
 			break;
+		}
 		server->ops->close(server);
 	}
 #ifdef HAVE_GETNAMEINFO
@@ -411,6 +414,11 @@ static int _tcpserver_start(http_server_t *server)
 			err("Error bind/listen port %d : %s", server->config->port, strerror(errno));
 		return -1;
 	}
+	warn("socket started on port %d", server->config->port);
+	int flags;
+	flags = fcntl(server->sock, F_GETFL, 0);
+	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);
+
 	return 0;
 }
 

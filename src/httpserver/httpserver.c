@@ -3376,9 +3376,6 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		return NULL;
 	}
 	warn("new server %p on port %d", server, server->config->port);
-	int flags;
-	flags = fcntl(server->sock, F_GETFL, 0);
-	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);
 
 	return server;
 }
