@@ -605,6 +605,23 @@ HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message)
 	vfree(message);
 }
 
+static int _httpmessage_changestate(http_message_t *message, int new)
+{
+	int mask = PARSE_MASK;
+	if (new & GENERATE_MASK)
+		mask = GENERATE_MASK;
+	message->state = new | (message->state & ~mask);
+	return message->state;
+}
+
+static int _httpmessage_state(http_message_t *message, int check)
+{
+	int mask = PARSE_MASK;
+	if (check & GENERATE_MASK)
+		mask = GENERATE_MASK;
+	return ((message->state & mask) == check);
+}
+
 static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_INIT;
