@@ -140,6 +140,7 @@ typedef int http_message_result_e;
 
 typedef void *(*http_create_t)(void *config, http_client_t *clt);
 typedef int (*http_connect_t)(void *ctx, const char *addr, int port);
+typedef int (*http_wait_t)(void *ctx, int options);
 typedef int (*http_status_t)(void *ctx);
 typedef void (*http_flush_t)(void *ctx);
 /**
@@ -178,6 +179,7 @@ struct httpclient_ops_s
 	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */
+	http_wait_t wait;
 	http_status_t status; /* callback to get the socket status*/
 	http_flush_t flush; /* callback to flush the socket */
 	http_disconnect_t disconnect; /* callback to close the socket */
