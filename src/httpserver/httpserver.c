@@ -1687,6 +1687,19 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
+void httpclient_state(http_client_t *client, int new)
+{
+	client->state = new | (client->state & ~CLIENT_MACHINEMASK);
+}
+
+void httpclient_flag(http_client_t *client, int remove, int new)
+{
+	if (!remove)
+		client->state |= (new & ~CLIENT_MACHINEMASK);
+	else
+		client->state &= ~(new & ~CLIENT_MACHINEMASK);
+}
+
 void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name)
 {
 	_http_addconnector(&client->callbacks, func, funcarg, priority, name);
