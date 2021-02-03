@@ -1081,14 +1081,12 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 		message->state &= ~PARSE_CONTINUE;
 	}
 
-	if (message->query_storage == NULL)
+	if ((message->query != NULL) &&
+		(message->query_storage == NULL))
 	{
 		int nbchunks = (length / ChunkSize ) + 1;
 		message->query_storage = _buffer_create(nbchunks);
-		if (message->query != NULL)
-		{
-			_buffer_append(message->query_storage, message->query, -1);
-		}
+		_buffer_append(message->query_storage, message->query, -1);
 	}
 	return next;
 }
@@ -1152,6 +1150,11 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	/**
 	 * message mix query data inside the URI and Content
 	 */
+	if (message->query_storage == NULL)
+	{
+		int nbchunks = (data->length / ChunkSize ) + 1;
+		message->query_storage = _buffer_create(nbchunks);
+	}
 	if (message->query != NULL)
 	{
 		_buffer_append(message->query_storage, "&", 1);
