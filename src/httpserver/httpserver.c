@@ -253,7 +253,7 @@ static char *_buffer_pop(buffer_t *buffer, int length)
 	return buffer->offset;
 }
 
-static void _buffer_shrink(buffer_t *buffer)
+static void _buffer_shrink(buffer_t *buffer, int reset)
 {
 	buffer->length -= (buffer->offset - buffer->data);
 	while (buffer->length > 0 && (*(buffer->offset) == 0))
@@ -263,7 +263,10 @@ static void _buffer_shrink(buffer_t *buffer)
 	}
 	memcpy(buffer->data, buffer->offset, buffer->length);
 	buffer->data[buffer->length] = '\0';
-	buffer->offset = buffer->data + buffer->length;
+	if (!reset)
+		buffer->offset = buffer->data + buffer->length;
+	else
+		buffer->offset = buffer->data;
 }
 
 static void _buffer_reset(buffer_t *buffer)
@@ -884,7 +887,6 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 	 **/
 	if (data->offset + 10 > data->data + data->length)
 	{
-		//_buffer_shrink(data);
 		return next;
 	}
 	char *version = data->offset;
@@ -963,6 +965,7 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 	{
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 	}
+
 	/* store header line as "<key>:<value>\0" */
 	while (data->offset < (data->data + data->length) && next == PARSE_HEADER)
 	{
@@ -1019,10 +1022,9 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 		message->result = RESULT_400;
 		err("request bad header %s", message->headers_storage->data);
 	}
-//				else if (!(message->state & PARSE_CONTINUE))
-//					message->state |= PARSE_CONTINUE;
 	else
 	{
+		_buffer_shrink(data, 1);
 		next = PARSE_PRECONTENT;
 		message->state &= ~PARSE_CONTINUE;
 	}
@@ -1254,6 +1256,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 			case PARSE_END:
 			{
 				message_dbg("parse end with %d data: %s", data->length, data->offset);
+
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;
 				else
@@ -1580,6 +1583,7 @@ int httpmessage_isprotected(http_message_t *message)
 	else
 		return ((message->method->properties & MESSAGE_PROTECTED) == MESSAGE_PROTECTED);
 }
+
 /***********************************************************************
  * http_client
  */
@@ -1848,8 +1852,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			ret = _httpmessage_parserequest(response, data);
 			while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
 			{
-				_buffer_shrink(data);
-				data->offset = data->data;
+				_buffer_shrink(data, 1);
 				ret = _httpmessage_parserequest(response, data);
 			}
 		}

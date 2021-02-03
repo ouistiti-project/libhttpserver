@@ -57,7 +57,7 @@ struct buffer_s
 };
 HTTPMESSAGE_DECL buffer_t * _buffer_create(int nbchunks);
 HTTPMESSAGE_DECL char *_buffer_append(buffer_t *buffer, const char *data, int length);
-HTTPMESSAGE_DECL void _buffer_shrink(buffer_t *buffer);
+HTTPMESSAGE_DECL void _buffer_shrink(buffer_t *buffer, int reset);
 HTTPMESSAGE_DECL void _buffer_reset(buffer_t *buffer);
 HTTPMESSAGE_DECL void _buffer_destroy(buffer_t *buffer);
 
