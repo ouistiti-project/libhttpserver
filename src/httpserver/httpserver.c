@@ -645,7 +645,6 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 		}
 		method = method->next;
 	}
-	message->client->state &= ~CLIENT_KEEPALIVE;
 
 	if (method == NULL)
 	{
