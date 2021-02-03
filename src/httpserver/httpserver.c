@@ -201,7 +201,7 @@ static char *_buffer_append(buffer_t *buffer, const char *data, int length)
 	if (length == 0)
 		return buffer->offset;
 
-	if (buffer->data + buffer->size < buffer->offset + length + 1)
+	if (buffer->data + buffer->size < buffer->offset + length)
 	{
 		int nbchunks = (length / ChunkSize) + 1;
 		if (buffer->maxchunks - nbchunks < 0)
