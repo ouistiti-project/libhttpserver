@@ -1905,7 +1905,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				ret = _httpmessage_parserequest(response, data);
 			}
 		}
-		if ((response->state & PARSE_MASK) == PARSE_END)
+		if (_httpmessage_state(response, PARSE_END))
 		{
 			request->state = GENERATE_ERROR;
 		}
@@ -1926,8 +1926,8 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 static int _httpclient_connect(http_client_t *client)
 {
 	int ret;
-	client->state &= ~CLIENT_STARTED;
-	client->state |= CLIENT_RUNNING;
+	httpclient_flag(client, 1, CLIENT_STARTED);
+	httpclient_flag(client, 0, CLIENT_RUNNING);
 #ifndef SHARED_SOCKET
 	/*
 	 * TODO : dispatch close and destroy from tcpserver.
@@ -1973,13 +1973,13 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	{
 		if (iterator->func)
 		{
-			dbg("client %p connector \"%s\"", client, iterator->name);
+			client_dbg("client %p connector \"%s\"", client, iterator->name);
 			ret = iterator->func(iterator->arg, request, response);
 			if (ret != EREJECT)
 			{
 				if (ret == ESUCCESS)
 				{
-					client->state |= CLIENT_RESPONSEREADY;
+					httpclient_flag(client, 0, CLIENT_RESPONSEREADY);
 				}
 				request->connector = iterator;
 				break;
