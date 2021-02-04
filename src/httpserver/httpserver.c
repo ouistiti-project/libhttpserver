@@ -1335,19 +1335,20 @@ HTTPMESSAGE_DECL buffer_t *_httpmessage_buildheader(http_message_t *message)
 		dbentry_destroy(message->headers);
 		message->headers = NULL;
 	}
-	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
-	{
-		httpmessage_addheader(message, str_connection, "Keep-Alive");
-	}
-	else
-	{
-		//httpmessage_addheader(message, str_connection, "Close");
-	}
 	if (message->content_length != (unsigned long long)-1)
 	{
 		char content_length[32];
 		snprintf(content_length, 31, "%llu",  message->content_length);
 		httpmessage_addheader(message, str_contentlength, content_length);
+		if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
+		{
+			httpmessage_addheader(message, str_connection, "Keep-Alive");
+		}
+	}
+	else
+	{
+		message->mode &= ~HTTPMESSAGE_KEEPALIVE;
+		httpmessage_addheader(message, str_connection, "Close");
 	}
 	message->headers_storage->offset = message->headers_storage->data;
 	return message->headers_storage;
