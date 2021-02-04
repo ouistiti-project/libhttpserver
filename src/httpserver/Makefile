@@ -15,8 +15,10 @@ endif
 lib-$(DLIB_HTTPSERVER)+=$(TARGET)
 slib-$(SLIB_HTTPSERVER)+=$(TARGET)
 hostslib-y+=$(TARGET)
-$(TARGET)_SOURCES+=httpserver.c tcpserver.c
+$(TARGET)_SOURCES+=httpserver.c
+$(TARGET)_SOURCES+=tcpserver.c
 #$(TARGET)_CFLAGS+=-DTCPDUMP
+$(TARGET)_CFLAGS+=-fvisibility=hidden
 $(TARGET)_CFLAGS+=-I../../include/httpserver
 # SERVER_DEFER_ACCEPT may protect the client connection from some exceptions.
 # But it still decrease the speed of the answers.
