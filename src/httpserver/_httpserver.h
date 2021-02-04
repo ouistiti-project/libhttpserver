@@ -132,12 +132,11 @@ struct http_server_s
 	http_server_t *next;
 };
 
-typedef enum
+struct http_server_session_s
 {
-	MESSAGE_TYPE_GET,
-	MESSAGE_TYPE_POST,
-	MESSAGE_TYPE_HEAD,
-} _http_message_method_e;
+	dbentry_t *dbfirst;
+	buffer_t *storage;
+};
 
 #endif
 
