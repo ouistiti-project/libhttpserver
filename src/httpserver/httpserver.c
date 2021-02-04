@@ -687,7 +687,8 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 					(*(data->offset - 1) == '/') &&
 					(message->query == NULL))
 				{
-					next = PARSE_URI | PARSE_CONTINUE;
+					data->offset++;
+					continue;
 				}
 				else
 					length++;
