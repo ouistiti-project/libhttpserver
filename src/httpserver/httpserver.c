@@ -1303,7 +1303,7 @@ HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t
 		}
 		if (((next & PARSE_MASK) == (message->state & PARSE_MASK)) && (ret == ECONTINUE))
 		{
-			if (next < PARSE_PRECONTENT)
+			if ((next & PARSE_MASK) < PARSE_CONTENT)
 				ret = EINCOMPLETE;
 			break; // get out of the while (ret == ECONTINUE) loop
 		}
