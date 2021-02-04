@@ -1385,14 +1385,13 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 		if (data)
 		{
 			*data = message->content->data;
-			//message->content = NULL;
 		}
 	}
 	if ((message->state & GENERATE_MASK) != 0)
 		return size;
 	if (state < PARSE_CONTENT)
 		return EINCOMPLETE;
-	if (size == 0 && state > PARSE_CONTENT)
+	if (size == 0 && state >= PARSE_CONTENT)
 		return EREJECT;
 	return size;
 }
