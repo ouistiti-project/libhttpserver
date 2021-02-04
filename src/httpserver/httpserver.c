@@ -2710,6 +2710,11 @@ static int _httpclient_run(http_client_t *client)
 			if (ret == ESUCCESS)
 			{
 				ret = ECONTINUE;
+				if (_httpmessage_contentempty(response, 1))
+				{
+					warn("client: disable keep alive (Content-Length is not set)");
+					client->state &= ~CLIENT_KEEPALIVE;
+				}
 
 				if ((request->state & PARSE_MASK) < PARSE_END)
 				{
