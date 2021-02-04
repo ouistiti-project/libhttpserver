@@ -2727,7 +2727,7 @@ static int _httpclient_run(http_client_t *client)
 					client_dbg("client: locked");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				}
-				else if (httpmessage_result(request->response, -1) > 299)
+				else if (httpmessage_result(request->response, -1) > 399)
 				{
 					client_dbg("client: exit on result");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
