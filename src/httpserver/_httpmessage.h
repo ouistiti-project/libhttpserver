@@ -42,24 +42,12 @@
 
 #include "dbentry.h"
 
-#define CHUNKSIZE 64
 #define HTTPMESSAGE_KEEPALIVE 0x01
 #define HTTPMESSAGE_LOCKED 0x02
 
+extern const char str_true[];
+
 typedef struct buffer_s buffer_t;
-struct buffer_s
-{
-	char *data;
-	char *offset;
-	int size;
-	int length;
-	int maxchunks;
-};
-HTTPMESSAGE_DECL buffer_t * _buffer_create(int nbchunks);
-HTTPMESSAGE_DECL char *_buffer_append(buffer_t *buffer, const char *data, int length);
-HTTPMESSAGE_DECL void _buffer_shrink(buffer_t *buffer, int reset);
-HTTPMESSAGE_DECL void _buffer_reset(buffer_t *buffer);
-HTTPMESSAGE_DECL void _buffer_destroy(buffer_t *buffer);
 
 struct http_message_s
 {
@@ -123,7 +111,7 @@ struct _http_message_result_s
 };
 typedef struct _http_message_result_s _http_message_result_t;
 
-HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[];
+extern const _http_message_result_t *_http_message_result[];
 
 HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent);
 HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message);
@@ -136,7 +124,7 @@ HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message);
 typedef struct http_message_method_s http_message_method_t;
 
 #ifdef _HTTPMESSAGE_
-HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[] =
+const _http_message_result_t *_http_message_result[] =
 {
 #if defined(RESULT_100)
 	&(_http_message_result_t){.result = RESULT_100, .status = " 100 Continue"},

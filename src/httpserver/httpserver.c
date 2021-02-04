@@ -62,11 +62,8 @@
 #include "_httpserver.h"
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
+#include "_buffer.h"
 #include "dbentry.h"
-
-#ifndef HTTPMESSAGE_CHUNKSIZE
-#define HTTPMESSAGE_CHUNKSIZE 64
-#endif
 
 #define buffer_dbg(...)
 #define message_dbg(...)
@@ -164,280 +161,12 @@ const char str_false[] = "false";
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
 /********************************************************************/
-#define BUFFERMAX 2048
-static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
-/**
- * the chunksize has to be constant during the life of the application.
- * Two ways are available:
- *  - to store the chunksize into each buffer (takes a lot of place).
- *  - to store into a global variable (looks bad).
- */
-static buffer_t * _buffer_create(int maxchunks)
-{
-	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
-	if (buffer == NULL)
-		return NULL;
-	/**
-	 * nbchunks is unused here, because is it possible to realloc.
-	 * Embeded version may use the nbchunk with special vcalloc.
-	 * The idea is to create a pool of chunks into the stack.
-	 */
-	buffer->data = vcalloc(1, ChunkSize + 1);
-	if (buffer->data == NULL)
-	{
-		free(buffer);
-		return NULL;
-	}
-	buffer->maxchunks = maxchunks;
-	buffer->size = ChunkSize + 1;
-	buffer->offset = buffer->data;
-	return buffer;
-}
-
-static char *_buffer_append(buffer_t *buffer, const char *data, int length)
-{
-	if (length == -1)
-		length = strlen(data);
-	if (length == 0)
-		return buffer->offset;
-
-	if (buffer->data + buffer->size < buffer->offset + length)
-	{
-		int nbchunks = (length / ChunkSize) + 1;
-		if (buffer->maxchunks - nbchunks < 0)
-			nbchunks = buffer->maxchunks;
-		int chunksize = ChunkSize * nbchunks;
-
-		if (chunksize == 0)
-		{
-			warn("buffer max chunk: %d", buffer->size / ChunkSize);
-			return NULL;
-		}
-
-		buffer->maxchunks -= nbchunks;
-		if ((buffer->size + chunksize) > BUFFERMAX)
-		{
-			warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
-			return NULL;
-		}
-		char *newptr = vrealloc(buffer->data, buffer->size + chunksize);
-		if (newptr == NULL)
-		{
-			buffer->maxchunks = 0;
-			warn("buffer out memory: %d", buffer->size + chunksize);
-			return NULL;
-		}
-		buffer->size += chunksize;
-		if (newptr != buffer->data)
-		{
-			char *offset = buffer->offset;
-			buffer->offset = newptr + (offset - buffer->data);
-			buffer->data = newptr;
-		}
-
-		length = (length > chunksize)? (chunksize - 1): length;
-	}
-	char *offset = memcpy(buffer->offset, data, length);
-	buffer->length += length;
-	buffer->offset += length;
-	buffer->data[buffer->length] = '\0';
-	return offset;
-}
-
-static char *_buffer_pop(buffer_t *buffer, int length)
-{
-	length = (length < buffer->length)? length: buffer->length;
-	buffer->length -= length;
-	buffer->offset -= length;
-	*buffer->offset = '\0';
-	return buffer->offset;
-}
-
-static void _buffer_shrink(buffer_t *buffer, int reset)
-{
-	buffer->length -= (buffer->offset - buffer->data);
-	while (buffer->length > 0 && (*(buffer->offset) == 0))
-	{
-		buffer->offset++;
-		buffer->length--;
-	}
-	memcpy(buffer->data, buffer->offset, buffer->length);
-	buffer->data[buffer->length] = '\0';
-	if (!reset)
-		buffer->offset = buffer->data + buffer->length;
-	else
-		buffer->offset = buffer->data;
-}
-
-static void _buffer_reset(buffer_t *buffer)
-{
-	buffer->offset = buffer->data;
-	buffer->length = 0;
-}
-
-static int _buffer_rewindto(buffer_t *buffer, char needle)
-{
-	int ret = EINCOMPLETE;
-	while (buffer->offset > buffer->data && *(buffer->offset) != needle)
-	{
-		buffer->offset--;
-		buffer->length--;
-	}
-	if (*(buffer->offset) == needle)
-	{
-		*buffer->offset = '\0';
-		ret = ESUCCESS;
-	}
-	return ret;
-}
-
-static int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value)
-{
-	if (key[0] != 0)
-	{
-		if (value == NULL)
-		{
-			value = str_true;
-		}
-		dbentry_t *entry;
-		entry = vcalloc(1, sizeof(dbentry_t));
-		if (entry == NULL)
-			return -1;
-		while (*key == ' ')
-			key++;
-		entry->key = key;
-		entry->value = value;
-		entry->next = *db;
-		*db = entry;
-		buffer_dbg("fill \t%s\t%s", key, value);
-	}
-	return 0;
-}
-
-static int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep)
-{
-	int i;
-	char *key = storage->data;
-	const char *value = NULL;
-	int count = 0;
-
-	for (i = 0; i < storage->length; i++)
-	{
-		if (storage->data[i] == '\n')
-			storage->data[i] = '\0';
-		if (storage->data[i] == separator && value == NULL)
-		{
-			storage->data[i] = '\0';
-			value = storage->data + i + 1;
-			while (*value == ' ')
-				value++;
-		}
-		else if ((storage->data[i] == '\0') ||
-				(storage->data[i] == fieldsep))
-		{
-			storage->data[i] = '\0';
-			if (_buffer_dbentry(storage, db, key, value) < 0)
-				return -1;
-			else
-				count++;
-			key = storage->data + i + 1;
-			value = NULL;
-		}
-	}
-	if (_buffer_dbentry(storage, db, key, value) < 0)
-		return -1;
-	else
-		count++;
-	return count;
-}
-
-static int _buffer_empty(buffer_t *buffer)
-{
-	return (buffer->length <= buffer->offset - buffer->data);
-}
-
-static char _buffer_last(buffer_t *buffer)
-{
-	if (buffer->length > 0)
-		return *(buffer->offset - 1);
-	else
-		return 0;
-}
-
-static void _buffer_destroy(buffer_t *buffer)
-{
-	vfree(buffer->data);
-	vfree(buffer);
-}
-
-HTTPMESSAGE_DECL const char *dbentry_search(dbentry_t *entry, const char *key)
-{
-	const char *value = NULL;
-	while (entry != NULL)
-	{
-		if (!strcasecmp(entry->key, key))
-		{
-			value = entry->value;
-			break;
-		}
-		entry = entry->next;
-	}
-	if (entry == NULL)
-	{
-		buffer_dbg("dbentry %s not found", key);
-	}
-	return value;
-}
-
-HTTPMESSAGE_DECL void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep)
-{
-	dbentry_revert_t *entry = (dbentry_revert_t *)constentry;
-	while (entry != NULL)
-	{
-		int i = 0;
-		while ((entry->key[i]) != '\0') i++;
-		(entry->key)[i] = separator;
-
-		if (entry->key < entry->value)
-		{
-			int i = 0;
-			while ((entry->value[i]) != '\0') i++;
-			if ((fieldsep == '\r' || fieldsep == '\n') && entry->value[i + 1] == '\0')
-			{
-				(entry->value)[i] = '\r';
-				(entry->value)[i + 1] = '\n';
-			}
-			else
-				(entry->value)[i] = fieldsep;
-		}
-		else
-		{
-			if ((fieldsep == '\r' || fieldsep == '\n') && entry->key[i + 1] == '\0')
-			{
-				(entry->key)[i] = '\r';
-				(entry->key)[i + 1] = '\n';
-			}
-		}
-
-		entry = entry->next;
-	}
-}
-
-HTTPMESSAGE_DECL void dbentry_destroy(dbentry_t *entry)
-{
-	while (entry)
-	{
-		dbentry_t *next = entry->next;
-		free(entry);
-		entry = next;
-	}
-}
 /**********************************************************************
  * http_message
  */
 int httpmessage_chunksize()
 {
-	return ChunkSize;
+	return _buffer_chunksize(-1);
 }
 
 #ifdef HTTPCLIENT_FEATURES
@@ -540,7 +269,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 	if (url)
 	{
 		int length = strlen(url);
-		int nbchunks = (length / ChunkSize) + 1;
+		int nbchunks = (length / _buffer_chunksize(-1)) + 1;
 		message->uri = _buffer_create(nbchunks);
 		_buffer_append(message->uri, url, length);
 	}
@@ -1093,7 +822,7 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	if ((message->query != NULL) &&
 		(message->query_storage == NULL))
 	{
-		int nbchunks = (length / ChunkSize ) + 1;
+		int nbchunks = (length / _buffer_chunksize(-1) ) + 1;
 		message->query_storage = _buffer_create(nbchunks);
 		_buffer_append(message->query_storage, message->query, -1);
 	}
@@ -1174,7 +903,7 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	 */
 	if (message->query_storage == NULL)
 	{
-		int nbchunks = (data->length / ChunkSize ) + 1;
+		int nbchunks = (data->length / _buffer_chunksize(-1) ) + 1;
 		message->query_storage = _buffer_create(nbchunks);
 	}
 	if (message->query != NULL)
@@ -3322,7 +3051,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	http_server_t *server;
 
 	if (config->chunksize > 0)
-		ChunkSize = config->chunksize;
+		_buffer_chunksize(config->chunksize);
 
 	server = vcalloc(1, sizeof(*server));
 	if (server == NULL)
@@ -3795,7 +3524,7 @@ const char *httpmessage_cookie(http_message_t *message, const char *key)
 	{
 		if (message->cookie == NULL)
 			return NULL;
-		int nbchunks = ((strlen(message->cookie) + 1) / ChunkSize) + 1;
+		int nbchunks = ((strlen(message->cookie) + 1) / _buffer_chunksize(-1)) + 1;
 		message->cookie_storage = _buffer_create(nbchunks);
 		_buffer_append(message->cookie_storage, message->cookie, -1);
 		_buffer_filldb(message->cookie_storage, &message->cookies, '=', ';');
