@@ -1055,6 +1055,7 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	if (message->query)
 		length = strlen(message->query);
 
+	message->content_packet = 0;
 	if ((message->method->properties & MESSAGE_ALLOW_CONTENT) &&
 		message->content_type != NULL &&
 		!strncasecmp(message->content_type, str_form_urlencoded, sizeof(str_form_urlencoded) - 1))
@@ -1109,36 +1110,49 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 * Is possible to use the buffer with the function
 		 *  httpmessage_content
 		 */
-		int length = data->length -(data->offset - data->data);
-		//int length = data->length;
+		int length = data->length;
+		message_dbg("message: content (%d): %.*s", length, length, data->offset);
+
 		/**
-		 * content is the sockdata from the client object
-		 * and haven't to be destroyed
+		 * If the Content-Length header is not set,
+		 * the parser must continue while the socket is opened
 		 */
-		message->content = data;
+		if (message->content_length == (unsigned long long)-1)
+		{
+			length -= (data->offset - data->data);
+		}
 		/**
 		 * At the end of the parsing the content_length of request
 		 * is zero. But it is false, the true value is
 		 * Sum(content->length);
 		 */
-		if (message->content_length <= length)
+		else if (message->content_length <= length)
 		{
-			data->offset += message->content_length;
 			/**
-			 * the last chunk of the content may contain dat from the next request.
+			 * the last chunk of the content may contain data from the next request.
 			 * The length of the buffer "content" may be larger than the content, but
 			 * httpmessage_content must return the length of the content and not more
 			 */
-			message->content_packet = message->content_length;
-			message->content_length = 0;
+			length = message->content_length;
 			next = PARSE_END;
 		}
 		else
 		{
-			data->offset += length;
-			message->content_packet = length;
-			message->content_length -= length;
+			length -= (data->offset - data->data);
 		}
+
+		if (message->content == NULL)
+		{
+			message->content_storage = _buffer_create(1);
+			message->content = message->content_storage;
+		}
+		_buffer_reset(message->content);
+		if (message->content != data)
+			_buffer_append(message->content, data->offset, length);
+		message->content_packet = length;
+		if (message->content_length != (unsigned long long)-1)
+			message->content_length -= length;
+		data->offset += length;
 	}
 	return next;
 }
