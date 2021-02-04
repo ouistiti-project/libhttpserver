@@ -274,7 +274,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 						lneedle += 0x20;
 					needle_entry = needle;
 					ret = ESUCCESS;
-					if (lneedle == hay)
+					if (hay != '\0' && lneedle == hay)
 					{
 						wildcard = NULL;
 						needle++;
@@ -288,14 +288,12 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 				}
 			}
 			while(haystack[i] != '\0');
-			if (*needle == '*' && haystack[i] != '\0')
-			{
-				ret = ESUCCESS;
+			if (*needle == '*')
 				needle++;
-			}
-			else if (*needle == '$' && haystack[i] != '\0')
+			if (*needle == '$')
 			{
-				ret = EREJECT;
+				if (haystack[i] != '\0')
+					ret = EREJECT;
 				needle++;
 			}
 			utils_dbg("searchexp %d %c %c", ret, *needle, haystack[i]);
@@ -307,7 +305,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 						*rest = wildcard;
 					break;
 				}
-				else if (*needle != '*')
+				else
 					ret = EREJECT;
 			}
 			needle = strchr(needle, ',');
