@@ -1386,37 +1386,38 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
  */
 int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 {
+	if (_httpmessage_state(message, PARSE_END))
+	{
+		return ESUCCESS;
+	}
 	if (data == NULL)
 	{
 		message->content = NULL;
-		if ((message->state & PARSE_MASK) == PARSE_END)
-			return ESUCCESS;
-		else
-			return EINCOMPLETE;
-	}
-	if ((message->state & PARSE_MASK) == PARSE_END)
-	{
-		return ESUCCESS;
+		_httpmessage_changestate(message, PARSE_END);
+		return EINCOMPLETE;
 	}
 	static buffer_t tempo;
 	tempo.data = data;
 	tempo.offset = data;
 	tempo.length = *size;
 	tempo.size = *size;
-
-	if ((message->state & PARSE_MASK) == PARSE_INIT)
+	if (_httpmessage_state(message, PARSE_INIT))
 		message->state = PARSE_STATUS;
 	if (message->content_length == 0)
 		message->content_length = (unsigned long long)-1;
 
-	int ret = _httpmessage_parserequest(message, &tempo);
-	*size = tempo.length - (tempo.offset - tempo.data);
-	if (*size > 0)
+	int ret;
+	do
 	{
-		_buffer_shrink(&tempo);
-		message->content = &tempo;
+		ret = _httpmessage_parserequest(message, &tempo);
+	} while (_httpmessage_state(message, PARSE_PRECONTENT));
+	if ((message->state & PARSE_MASK) > PARSE_POSTHEADER)
+	{
+		*size = tempo.length;
 	}
-	if ((message->state & PARSE_MASK) == PARSE_END)
+	else
+		*size = 0;
+	if (_httpmessage_state(message, PARSE_END))
 	{
 		if (*size > 0)
 		{
