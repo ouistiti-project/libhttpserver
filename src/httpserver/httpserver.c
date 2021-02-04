@@ -2024,6 +2024,19 @@ static void _httpclient_pushrequest(http_client_t *client, http_message_t *reque
 	}
 }
 
+static int _httpclient_error_connector(void *arg, http_message_t *request, http_message_t *response)
+{
+	if (request->response->result == RESULT_200)
+		request->response->result = RESULT_404;
+	dbg("error connector");
+	return ESUCCESS;
+}
+
+static http_connector_list_t error_connector = {
+	.func = _httpclient_error_connector,
+	.arg = NULL,
+	.next = NULL,
+};
 /**
  * @brief This function receives data from the client connection and parse the request.
  *
