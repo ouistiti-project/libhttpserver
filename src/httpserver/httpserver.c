@@ -622,6 +622,13 @@ static int _httpmessage_state(http_message_t *message, int check)
 	return ((message->state & mask) == check);
 }
 
+static int _httpmessage_contentempty(http_message_t *message, int unset)
+{
+	if (unset)
+		return (message->content_length == ((unsigned long long) -1));
+	return (message->content_length == 0);
+}
+
 static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_INIT;
@@ -1064,7 +1071,7 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 		message->state &= ~PARSE_CONTINUE;
 		length += message->content_length;
 	}
-	else if (message->content_length == 0)
+	else if (_httpmessage_contentempty(message, 0))
 	{
 		next = PARSE_END;
 		dbg("no content inside request");
@@ -1097,7 +1104,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_CONTENT;
 
-	if (message->content_length == 0)
+	if (_httpmessage_contentempty(message, 0))
 	{
 		next = PARSE_END;
 	}
@@ -1117,7 +1124,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 * If the Content-Length header is not set,
 		 * the parser must continue while the socket is opened
 		 */
-		if (message->content_length == (unsigned long long)-1)
+		if (_httpmessage_contentempty(message, 1))
 		{
 			length -= (data->offset - data->data);
 		}
@@ -1150,7 +1157,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		if (message->content != data)
 			_buffer_append(message->content, data->offset, length);
 		message->content_packet = length;
-		if (message->content_length != (unsigned long long)-1)
+		if (!_httpmessage_contentempty(message, 1))
 			message->content_length -= length;
 		data->offset += length;
 	}
@@ -1335,7 +1342,7 @@ HTTPMESSAGE_DECL buffer_t *_httpmessage_buildheader(http_message_t *message)
 		dbentry_destroy(message->headers);
 		message->headers = NULL;
 	}
-	if (message->content_length != (unsigned long long)-1)
+	if (!_httpmessage_contentempty(message, 1))
 	{
 		char content_length[32];
 		snprintf(content_length, 31, "%llu",  message->content_length);
@@ -1374,7 +1381,7 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 	int state = message->state & PARSE_MASK;
 	if (content_length != NULL)
 	{
-		if (message->content_length != (unsigned long long)-1)
+		if (!_httpmessage_contentempty(message, 1))
 			*content_length = message->content_length;
 		else
 			*content_length = 0;
@@ -1418,7 +1425,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size)
 	tempo.size = *size;
 	if (_httpmessage_state(message, PARSE_INIT))
 		message->state = PARSE_STATUS;
-	if (message->content_length == 0)
+	if (_httpmessage_contentempty(message, 0))
 		message->content_length = (unsigned long long)-1;
 
 	int ret;
@@ -1570,12 +1577,14 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 		_buffer_append(message->content, content, length);
 	}
 
-	if (message->content_length == (unsigned long long)-1)
+	if (_httpmessage_contentempty(message, 1))
 	{
 		message->content_length = length;
 	}
 	if (message->content != NULL && message->content->data != NULL )
+	{
 		return message->content->length;
+	}
 	return 0;
 }
 
@@ -1591,7 +1600,7 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
 	{
 		if (length == -1)
 			length = strlen(content);
-		if (message->content_length != (unsigned long long)-1)
+		if (!_httpmessage_contentempty(message, 1))
 			message->content_length += length;
 		_buffer_append(message->content, content, length);
 		return message->content->size - message->content->length;
@@ -1861,11 +1870,12 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				break;
 			data->offset += size;
 			data->length -= size;
-			if (request->content_length > 0)
+			if (!_httpmessage_contentempty(request, 1))
 				request->content_length -= size;
 		}
 		ret = EINCOMPLETE;
-		if (request->content_length <= 0)
+		if (_httpmessage_contentempty(request, 0) ||
+			!_httpmessage_contentempty(request, 1))
 		{
 			request->state = GENERATE_END;
 
@@ -1886,7 +1896,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		size = httpclient_wait(request->client, 1);
 		if (size < 0)
 			ret = EREJECT;
-		if (response->content_length != 0 && size > 0)
+		if (!_httpmessage_contentempty(response, 1) && size > 0)
 		{
 			size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
 
