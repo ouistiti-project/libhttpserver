@@ -63,6 +63,9 @@ struct http_connector_list_s
 	const char *name;
 	int priority;
 };
+void _httpconnector_add(http_connector_list_t **first,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name);
 
 struct http_message_s
 {

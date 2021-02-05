@@ -17,6 +17,7 @@ slib-$(SLIB_HTTPSERVER)+=$(TARGET)
 hostslib-y+=$(TARGET)
 $(TARGET)_SOURCES+=buffer.c
 $(TARGET)_SOURCES+=httpmessage.c
+$(TARGET)_SOURCES+=httpclient.c
 $(TARGET)_SOURCES+=httpserver.c
 $(TARGET)_SOURCES+=tcpserver.c
 #$(TARGET)_CFLAGS+=-DTCPDUMP

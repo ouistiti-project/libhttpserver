@@ -60,6 +60,7 @@
 #include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
+#include "_httpclient.h"
 #define _HTTPMESSAGE_
 #include "_httpmessage.h"
 #include "_buffer.h"
@@ -103,20 +104,6 @@ int httpmessage_chunksize()
 }
 
 #ifdef HTTPCLIENT_FEATURES
-
-static const httpclient_ops_t *httpclient_ops;
-
-void httpclient_appendops(const httpclient_ops_t *ops)
-{
-	if (httpclient_ops == NULL)
-		httpclient_ops = ops;
-	else
-	{
-		((httpclient_ops_t *)ops)->next = httpclient_ops;
-		httpclient_ops = ops;
-	}
-}
-
 http_message_t * httpmessage_create()
 {
 	http_message_t *client = _httpmessage_create(NULL, NULL);
@@ -159,7 +146,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 			return NULL;
 		*pathname = 0;
 		pathname++;
-		const httpclient_ops_t *it_ops = httpclient_ops;
+		const httpclient_ops_t *it_ops = httpclient_ops();
 		const httpclient_ops_t *protocol_ops = NULL;
 		void *protocol_ctx = NULL;
 		while (it_ops != NULL)
@@ -185,18 +172,13 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 
 		httpmessage_addheader(message, "Host", host);
 		client = httpclient_create(NULL, protocol_ops, protocol_ctx);
-		if (client && client->ops->connect)
+		int ret = _httpclient_connect(client, host, iport);
+		if (ret == EREJECT)
 		{
-			int ret = client->ops->connect(client->opsctx, host, iport);
-			if (ret == EREJECT)
-			{
-				err("client connection error");
-				httpclient_destroy(client);
-				client = NULL;
-			}
+			err("client connection error");
+			httpclient_destroy(client);
+			client = NULL;
 		}
-		else
-			err("client creation error");
 		url = pathname;
 	}
 	if (url)
@@ -294,7 +276,7 @@ int _httpmessage_contentempty(http_message_t *message, int unset)
 static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_INIT;
-	const http_message_method_t *method = message->client->server->methods;
+	const http_message_method_t *method = httpclient_server(message->client)->methods;
 	while (method != NULL)
 	{
 		int length = strlen(method->key);
@@ -319,7 +301,7 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 	{
 		err("parse reject method %s", data->offset);
 		data->offset++;
-		message->version = message->client->server->config->version;
+		message->version = httpclient_server(message->client)->config->version;
 		message->result = RESULT_405;
 		next = PARSE_END;
 	}
@@ -420,7 +402,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 		uri = _buffer_append(message->uri, uri, length);
 		if (uri == NULL)
 		{
-			message->version = message->client->server->config->version;
+			message->version = httpclient_server(message->client)->config->version;
 #ifdef RESULT_414
 			message->result = RESULT_414;
 #else
@@ -1267,7 +1249,7 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
 		_buffer_append(message->content, content, length);
 		return message->content->size - message->content->length;
 	}
-	return message->client->server->config->chunksize;
+	return httpclient_server(message->client)->config->chunksize;
 }
 
 int httpmessage_keepalive(http_message_t *message)
@@ -1295,9 +1277,9 @@ static char service[NI_MAXSERV];
 
 const char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
-	if (message->client == NULL || message->client->server == NULL)
+	if (message->client == NULL || httpclient_server(message->client) == NULL)
 		return NULL;
-	const char *value;
+	const char *value = NULL;
 
 	if (!strcasecmp(key, "port"))
 	{
@@ -1324,11 +1306,11 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 		}
 		if (value != host)
 		{
-			value = message->client->server->config->addr;
+			value = httpclient_server(message->client)->config->addr;
 		}
 	}
 	if (value == NULL)
-		value = httpserver_INFO(message->client->server, key);
+		value = httpserver_INFO(httpclient_server(message->client), key);
 	return value;
 }
 
@@ -1404,15 +1386,6 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 			value = dbentry_search(message->headers, key);
 		}
 	}
-	else if (!strncasecmp(key, "remote_addr", 11))
-	{
-		if (message->client == NULL)
-			return NULL;
-
-		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
-			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
-		value = host;
-	}
 #if defined NETDB_REMOTEINFO
 	else if (!strncasecmp(key, "remote_", 7))
 	{
@@ -1427,13 +1400,25 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 		if (!strcasecmp(key + 7, "port"))
 			value = service;
 	}
+	else if (!strncasecmp(key, "remote_addr", 11))
+#else
+	else if (!strncasecmp(key, "remote_addr", 11) ||
+			!strncasecmp(key, "remote_host", 11))
 #endif
+	{
+		if (message->client == NULL)
+			return NULL;
+
+		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
+			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
+		value = host;
+	}
 	else
 	{
 		value = dbentry_search(message->headers, key);
 	}
 	if (value == NULL)
-		value = httpserver_INFO(message->client->server, key);
+		value = httpserver_INFO(httpclient_server(message->client), key);
 	return value;
 }
 
@@ -1514,3 +1499,53 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 	return (const void *)sessioninfo->value;
 }
 
+void _httpconnector_add(http_connector_list_t **first,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name)
+{
+	http_connector_list_t *callback;
+
+	callback = vcalloc(1, sizeof(*callback));
+	if (callback == NULL)
+		return;
+	callback->func = func;
+	callback->arg = funcarg;
+	callback->name = name;
+	callback->priority = priority;
+	if (*first == NULL)
+	{
+		*first = callback;
+		dbg("install connector %s", callback->name);
+	}
+	else
+	{
+		http_connector_list_t *previous = NULL;
+		http_connector_list_t *it = *first;
+		while (it != NULL && it->priority < callback->priority)
+		{
+			previous = it;
+			it = it->next;
+		}
+		callback->next = it;
+		if (previous == NULL)
+		{
+#ifdef DEBUG
+			if (it != NULL)
+				dbg("install connector first =  %s < %s", callback->name, it->name);
+			else
+				dbg("install connector first =  %s", callback->name);
+#endif
+			*first = callback;
+		}
+		else
+		{
+#ifdef DEBUG
+			if (it != NULL)
+				dbg("install connector %s < %s < %s", previous->name, callback->name, it->name);
+			else
+				dbg("install connector %s < %s = end ", previous->name, callback->name);
+#endif
+			previous->next = callback;
+		}
+	}
+}

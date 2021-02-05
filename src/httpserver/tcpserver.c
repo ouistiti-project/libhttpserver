@@ -75,6 +75,7 @@ extern "C" {
 #include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
+#include "_httpclient.h"
 
 #define tcp_dbg(...)
 
