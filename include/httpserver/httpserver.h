@@ -244,6 +244,8 @@ typedef struct http_server_config_s
 	char *addr;
 	/** @param port the TCP/IP prot to bind the server */
 	int port;
+	/** @param service name if different to http server */
+	const char *service;
 	/** @param maxclients the maximum number of clients accepted by the server. */
 	int maxclients;
 	int chunksize;

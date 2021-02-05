@@ -845,6 +845,10 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 		else
 			value = default_value;
 	}
+	else if (!strcasecmp(key, "service"))
+	{
+		value = server->config->service;
+	}
 	else if (!strcasecmp(key, "software"))
 	{
 		value = httpserver_software;
