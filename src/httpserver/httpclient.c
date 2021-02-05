@@ -435,7 +435,7 @@ http_server_t *httpclient_server(http_client_t *client)
 	return client->server;
 }
 
-static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response)
+static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response, int priority)
 {
 	int ret = ESUCCESS;
 	http_connector_list_t *iterator;
@@ -444,6 +444,11 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	{
 		if (iterator->func)
 		{
+			if (priority > 0 && iterator->priority != priority)
+			{
+				iterator = iterator->next;
+				continue;
+			}
 			client_dbg("client %p connector \"%s\"", client, iterator->name);
 			ret = iterator->func(iterator->arg, request, response);
 			if (ret != EREJECT)
@@ -490,7 +495,8 @@ static int _httpclient_error_connector(void *arg, http_message_t *request, http_
 	if (request->response->result == RESULT_200)
 		request->response->result = RESULT_404;
 	dbg("error connector");
-	_httpmessage_changestate(request->response, PARSE_END);
+	_httpclient_checkconnector(arg, request, response, CONNECTOR_ERROR);
+	_httpmessage_changestate(response, PARSE_END);
 	return ESUCCESS;
 }
 
@@ -583,7 +589,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 	{
 		if (request->connector == NULL)
 		{
-			ret = _httpclient_checkconnector(client, request, response);
+			ret = _httpclient_checkconnector(client, request, response, -1);
 		}
 		else if (response->state & PARSE_CONTINUE)
 		{
@@ -632,6 +638,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		break;
 		case EREJECT:
 		{
+			error_connector.arg = client;
 			request->connector = &error_connector;
 			_httpmessage_changestate(response, GENERATE_ERROR);
 			request->response->state &= ~PARSE_CONTINUE;
@@ -1121,6 +1128,7 @@ static int _httpclient_run(http_client_t *client)
 			if (client->request->response == NULL)
 				client->request->response = _httpmessage_create(client, client->request);
 
+			error_connector.arg = client;
 			client->request->connector = &error_connector;
 			_httpmessage_changestate(client->request->response, PARSE_CONTENT);
 			client->request->response->state |= PARSE_CONTINUE;
