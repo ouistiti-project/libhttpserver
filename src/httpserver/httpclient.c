@@ -490,6 +490,7 @@ static int _httpclient_error_connector(void *arg, http_message_t *request, http_
 	if (request->response->result == RESULT_200)
 		request->response->result = RESULT_404;
 	dbg("error connector");
+	_httpmessage_changestate(request->response, PARSE_END);
 	return ESUCCESS;
 }
 
@@ -497,6 +498,8 @@ static http_connector_list_t error_connector = {
 	.func = _httpclient_error_connector,
 	.arg = NULL,
 	.next = NULL,
+	.priority = CONNECTOR_ERROR,
+	.name = "server",
 };
 /**
  * @brief This function receives data from the client connection and parse the request.
@@ -1119,18 +1122,20 @@ static int _httpclient_run(http_client_t *client)
 				client->request->response = _httpmessage_create(client, client->request);
 
 			client->request->connector = &error_connector;
-			_httpmessage_changestate(client->request->response, PARSE_END);
+			_httpmessage_changestate(client->request->response, PARSE_CONTENT);
+			client->request->response->state |= PARSE_CONTINUE;
 			_httpmessage_changestate(client->request->response, GENERATE_ERROR);
 			/**
 			 * The format of the request is bad. It may be an attack.
 			 */
 			warn("bad request");
-			client->request->state = PARSE_END;
+			_httpmessage_changestate(client->request, PARSE_END);
 			/**
 			 * The request contains an syntax error and must be rejected
 			 */
-			client->state = CLIENT_EXIT | CLIENT_LOCKED | (client->state & ~CLIENT_MACHINEMASK);
+			client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 			_buffer_reset(client->sockdata);
+			client->request = NULL;
 		}
 		break;
 		case ESUCCESS:
