@@ -1386,7 +1386,15 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 			value = dbentry_search(message->headers, key);
 		}
 	}
-#if defined NETDB_REMOTEINFO
+	else if (!strncasecmp(key, "remote_addr", 11))
+	{
+		if (message->client == NULL)
+			return NULL;
+
+		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
+			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
+		value = host;
+	}
 	else if (!strncasecmp(key, "remote_", 7))
 	{
 		if (message->client == NULL)
@@ -1399,19 +1407,6 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 			value = host;
 		if (!strcasecmp(key + 7, "port"))
 			value = service;
-	}
-	else if (!strncasecmp(key, "remote_addr", 11))
-#else
-	else if (!strncasecmp(key, "remote_addr", 11) ||
-			!strncasecmp(key, "remote_host", 11))
-#endif
-	{
-		if (message->client == NULL)
-			return NULL;
-
-		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
-			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
-		value = host;
 	}
 	else
 	{
