@@ -1449,7 +1449,7 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, http_cli
 	return session;
 }
 
-const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value)
+const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size)
 {
 	dbentry_t *sessioninfo = NULL;
 	if (message->client == NULL)
@@ -1482,10 +1482,12 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
 		}
-		if (sessioninfo->value != (char *)value)
+		if (sessioninfo->value != NULL)
 		{
-			sessioninfo->value = (char *)value;
+			free((void *)sessioninfo->value);
 		}
+		sessioninfo->value = malloc(size);
+		memcpy((void *)sessioninfo->value, value, size);
 	}
 	else if (sessioninfo == NULL)
 	{

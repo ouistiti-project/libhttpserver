@@ -586,10 +586,11 @@ EXPORT_SYMBOL const char * httpmessage_REQUEST(http_message_t *message, const ch
  * @param message the request message received
  * @param key the name of the attribut
  * @param value the value to set with the key or NULL
+ * @param size the size of value
  *
  * @return the value of the attribute or NULL
  */
-EXPORT_SYMBOL const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value);
+EXPORT_SYMBOL const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size);
 
 /**
  * @brief get value from query parameters and/or POST form data
