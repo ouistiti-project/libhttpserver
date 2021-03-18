@@ -825,6 +825,8 @@ void httpserver_destroy(http_server_t *server)
 		/*vfree(method);*/
 		method = next;
 	}
+	if (server->methods_storage == NULL)
+		_buffer_destroy(server->methods_storage);
 	if (server->poll_set)
 		vfree(server->poll_set);
 	vfree(server);
@@ -870,6 +872,22 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	else if (!strcasecmp(key, "protocol"))
 	{
 		value = httpversion[(server->config->version & HTTPVERSION_MASK)];
+	}
+	else if (!strcasecmp(key, "methods"))
+	{
+		if (server->methods_storage == NULL)
+		{
+			server->methods_storage = _buffer_create(MAXCHUNKS_URI);
+			const http_message_method_t *method = server->methods;
+			while (method)
+			{
+				_buffer_append(server->methods_storage, method->key, -1);
+				if (method->next != NULL)
+					_buffer_append(server->methods_storage, ",", -1);
+				method = method->next;
+			}
+		}
+		value = server->methods_storage->data;
 	}
 	else if (!strcasecmp(key, "service"))
 	{

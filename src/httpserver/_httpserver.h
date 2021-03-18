@@ -73,6 +73,7 @@ struct http_server_s
 	const httpclient_ops_t *protocol_ops;
 	void *protocol;
 	http_message_method_t *methods;
+	buffer_t *methods_storage;
 #ifdef USE_POLL
 	struct pollfd *poll_set;
 #else
