@@ -90,8 +90,8 @@ const char str_contenttype[] = "Content-Type";
 const char str_contentlength[] = "Content-Length";
 
 const http_message_method_t default_methods[] = {
-	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (const http_message_method_t*)&default_methods[1]},
-	{ .key = str_post, .id = MESSAGE_TYPE_POST, .properties = MESSAGE_ALLOW_CONTENT, .next = (const http_message_method_t*)&default_methods[2]},
+	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (http_message_method_t *)&default_methods[1]},
+	{ .key = str_post, .id = MESSAGE_TYPE_POST, .properties = MESSAGE_ALLOW_CONTENT, .next =(http_message_method_t *) &default_methods[2]},
 	{ .key = str_head, .id = MESSAGE_TYPE_HEAD, .next = NULL},
 #ifdef HTTPCLIENT_FEATURES
 	{ .key = NULL, .id = -1, .next = NULL},

@@ -137,7 +137,7 @@ struct http_message_method_s
 	const char *key;
 	short id;
 	short properties;
-	const http_message_method_t *next;
+	http_message_method_t *next;
 };
 
 extern const http_message_method_t default_methods[];

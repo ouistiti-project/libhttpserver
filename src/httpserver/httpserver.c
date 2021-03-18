@@ -637,7 +637,12 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	else
 		server->config = &defaultconfig;
 	server->ops = httpserver_ops;
-	server->methods = (http_message_method_t *)default_methods;
+	const http_message_method_t *method = default_methods;
+	while (method)
+	{
+		httpserver_addmethod(server, method->key, method->properties);
+		method = method->next;
+	}
 
 	server->protocol_ops = tcpclient_ops;
 	server->protocol = server;
@@ -673,7 +678,12 @@ http_server_t *httpserver_dup(http_server_t *server)
 		return NULL;
 	vserver->config = server->config;
 	vserver->ops = server->ops;
-	vserver->methods = (http_message_method_t *)default_methods;
+	const http_message_method_t *method = default_methods;
+	while (method)
+	{
+		httpserver_addmethod(vserver, method->key, method->properties);
+		method = method->next;
+	}
 
 	vserver->protocol_ops = server->protocol_ops;
 	vserver->protocol = server->protocol;
@@ -683,7 +693,7 @@ http_server_t *httpserver_dup(http_server_t *server)
 
 void httpserver_addmethod(http_server_t *server, const char *key, short properties)
 {
-	short id = 0;
+	short id = -1;
 	http_message_method_t *method = server->methods;
 	while (method != NULL)
 	{
@@ -701,7 +711,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 			return;
 		method->key = key;
 		method->id = id + 1;
-		method->next = (const http_message_method_t *)server->methods;
+		method->next = server->methods;
 		server->methods = method;
 	}
 	if (properties != method->properties)

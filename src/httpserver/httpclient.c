@@ -882,13 +882,11 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				if (sent == EREJECT)
 					ret = EREJECT;
 #ifdef DEBUG
-				{
-					static long long sent = 0;
-					sent += response->content->length;
-					if (!_httpmessage_contentempty(response, 1) &&
-						_httpmessage_state(response, PARSE_END))
-					client_dbg("response send content %d %lld %lld", ret, response->content_length, sent);
-				}
+				static long long sent = 0;
+				sent += response->content->length;
+				if (!_httpmessage_contentempty(response, 1) &&
+					_httpmessage_state(response, PARSE_END))
+				client_dbg("response send content %d %lld %lld", ret, response->content_length, sent);
 #endif
 			}
 			else
