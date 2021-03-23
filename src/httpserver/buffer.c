@@ -268,7 +268,8 @@ char _buffer_last(buffer_t *buffer)
 
 void _buffer_destroy(buffer_t *buffer)
 {
-	vfree(buffer->data);
+	if (buffer->data != NULL)
+		vfree(buffer->data);
 	vfree(buffer);
 }
 
