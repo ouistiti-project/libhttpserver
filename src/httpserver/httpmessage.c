@@ -1471,9 +1471,8 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 		if (!message->client->session)
 		{
 			message->client->session = _httpserver_createsession(message->client->server, message->client);
-			sessioninfo = message->client->session->dbfirst;
 		}
-		if (!sessioninfo)
+		if (size > 0 && !sessioninfo)
 		{
 			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 			if (sessioninfo == NULL)
@@ -1483,12 +1482,20 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
 		}
-		if (sessioninfo->value != NULL)
+		if (sessioninfo)
 		{
-			free((void *)sessioninfo->value);
+			if (sessioninfo->value != NULL)
+			{
+				free((void *)sessioninfo->value);
+			}
+			if (size > 0)
+			{
+				sessioninfo->value = malloc(size);
+				memcpy((void *)sessioninfo->value, value, size);
+			}
 		}
-		sessioninfo->value = malloc(size);
-		memcpy((void *)sessioninfo->value, value, size);
+		else
+			return NULL;
 	}
 	else if (sessioninfo == NULL)
 	{
