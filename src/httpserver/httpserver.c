@@ -825,7 +825,7 @@ void httpserver_destroy(http_server_t *server)
 		/*vfree(method);*/
 		method = next;
 	}
-	if (server->methods_storage == NULL)
+	if (server->methods_storage != NULL)
 		_buffer_destroy(server->methods_storage);
 	if (server->poll_set)
 		vfree(server->poll_set);
