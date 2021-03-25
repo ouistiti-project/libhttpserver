@@ -317,7 +317,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	return ret;
 }
 
-static int utils_searchstring(const char **result, const char *haystack, const char *needle, int *length)
+static int utils_searchstring(const char *haystack, const char *needle, const char **result, int *length)
 {
 	if (*length != 0)
 		return 0;
@@ -379,7 +379,7 @@ int utils_parsestring(const char *string, int listlength, utils_parsestring_t li
 		{
 			const char *value = NULL;
 			int valuelen = 0;
-			int ret = utils_searchstring(&value, string + i, list[listit].field, &valuelen);
+			int ret = utils_searchstring(string + i, list[listit].field, &value, &valuelen);
 			i += ret;
 			if (ret > 0)
 			{
