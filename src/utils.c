@@ -116,7 +116,8 @@ static const mime_entry_t *_utils_getmime(const mime_entry_t *entry, const char 
 {
 	while (entry)
 	{
-		if (_utils_searchexp(filepath, entry->ext, 1, NULL) == ESUCCESS)
+		const char *ext = strrchr(filepath, '.');
+		if (_utils_searchexp(ext, entry->ext, 1, NULL) == ESUCCESS)
 		{
 			break;
 		}
@@ -136,11 +137,12 @@ const char *utils_getmime(const char *filepath)
 }
 
 
-char *utils_urldecode(const char *encoded)
+char *utils_urldecode(const char *encoded, size_t length)
 {
 	if (encoded == NULL)
 		return NULL;
-	int length = strlen(encoded);
+	if (length == -1)
+		length = strlen(encoded);
 	if (length == 0)
 		return NULL;
 	char *decoded = calloc(1, length + 1);
@@ -196,7 +198,7 @@ char *utils_urldecode(const char *encoded)
 					offset = decoded;
 			}
 		}
-		else if (*encoded == '?')
+		else if (*encoded == '?' || *encoded == '&')
 		{
 			break;
 		}
@@ -273,7 +275,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 						lneedle += 0x20;
 					needle_entry = needle;
 					ret = ESUCCESS;
-					if (lneedle == hay)
+					if (hay != '\0' && lneedle == hay)
 					{
 						wildcard = NULL;
 						needle++;
@@ -287,14 +289,12 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 				}
 			}
 			while(haystack[i] != '\0');
-			if (*needle == '*' && haystack[i] != '\0')
-			{
-				ret = ESUCCESS;
+			if (*needle == '*')
 				needle++;
-			}
-			else if (*needle == '$' && haystack[i] != '\0')
+			if (*needle == '$')
 			{
-				ret = EREJECT;
+				if (haystack[i] != '\0')
+					ret = EREJECT;
 				needle++;
 			}
 			utils_dbg("searchexp %d %c %c", ret, *needle, haystack[i]);
@@ -306,7 +306,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 						*rest = wildcard;
 					break;
 				}
-				else if (*needle != '*')
+				else
 					ret = EREJECT;
 			}
 			needle = strchr(needle, ',');
@@ -318,7 +318,7 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 	return ret;
 }
 
-static int utils_searchstring(const char **result, const char *haystack, const char *needle, int *length)
+static int utils_searchstring(const char *haystack, const char *needle, const char **result, int *length)
 {
 	if (*length != 0)
 		return 0;
@@ -380,7 +380,7 @@ int utils_parsestring(const char *string, int listlength, utils_parsestring_t li
 		{
 			const char *value = NULL;
 			int valuelen = 0;
-			int ret = utils_searchstring(&value, string + i, list[listit].field, &valuelen);
+			int ret = utils_searchstring(string + i, list[listit].field, &value, &valuelen);
 			i += ret;
 			if (ret > 0)
 			{

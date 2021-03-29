@@ -28,6 +28,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#ifdef USE_POLL
+#include <poll.h>
+#else
+#include <sys/select.h>
+#endif
 
 #ifndef WIN32
 # include <sys/types.h>
@@ -70,6 +75,7 @@ extern "C" {
 #include "log.h"
 #include "httpserver.h"
 #include "_httpserver.h"
+#include "_httpclient.h"
 
 #define tcp_dbg(...)
 
@@ -205,6 +211,145 @@ static int tcpclient_send(void *ctl, const char *data, int length)
 	return ret;
 }
 
+static int tcpclient_wait(void *ctl, int options)
+{
+	http_client_t *client = (http_client_t *)ctl;
+	if (client->sock < 0)
+		return EREJECT;
+	int ret = ESUCCESS;
+
+#if defined(VTHREAD) && !defined(BLOCK_SOCKET)
+	struct timespec *ptimeout = NULL;
+	struct timespec timeout;
+	int ttimeout = -1;
+	if (options & WAIT_SEND)
+	{
+		timeout.tv_sec = 0;
+		timeout.tv_nsec = 10000000;
+		ptimeout = &timeout;
+		ptimeout = NULL;
+		ttimeout = 10;
+	}
+	else
+	{
+		timeout.tv_sec = WAIT_TIMER;
+		timeout.tv_nsec = 0;
+		ptimeout = &timeout;
+		ttimeout = WAIT_TIMER * 1000;
+	}
+
+	fd_set fds;
+	FD_ZERO(&fds);
+#ifdef USE_POLL
+	struct pollfd poll_set[1];
+	int numfds = 0;
+	poll_set[0].fd = client->sock;
+	if (options & WAIT_SEND)
+		poll_set[0].events = POLLOUT;
+	else
+		poll_set[0].events = POLLIN;
+	numfds++;
+
+	/**
+	 * ppoll receives SIGCHLD with pthread and fork VTREAD_TYPE.
+	 * Normally it shouldn't occure, the client is the child of the server
+	 * and has no child (exception for cgi module answer
+	 */
+	sigset_t sigmask;
+	sigemptyset(&sigmask);
+	sigaddset(&sigmask, SIGCHLD);
+	//ret = ppoll(poll_set, numfds, ptimeout, NULL);
+	ret = poll(poll_set, numfds, ttimeout);
+	if (poll_set[0].revents & POLLIN)
+	{
+		FD_SET(client->sock, &fds);
+	}
+	else if (poll_set[0].revents & POLLOUT)
+	{
+		FD_SET(client->sock, &fds);
+	}
+	else if (ret < 0)
+		err("client %p poll %x", client, poll_set[0].revents);
+#else
+	fd_set *rfds = NULL, *wfds = NULL;
+	FD_SET(client->sock, &fds);
+	if (options & WAIT_SEND)
+		wfds = &fds;
+	else
+		rfds = &fds;
+
+	sigset_t sigmask;
+	sigemptyset(&sigmask);
+	sigaddset(&sigmask, SIGCHLD);
+	ret = pselect(client->sock + 1, rfds, wfds, NULL, ptimeout, &sigmask);
+#endif
+
+	if (ret == 0)
+	{
+		if (options & WAIT_ACCEPT)
+		{
+			ret = EREJECT;
+		}
+		else if (options & WAIT_SEND)
+		{
+			ret = EINCOMPLETE;
+			errno = EAGAIN;
+		}
+		else
+		{
+			client->timeout -= 100 * WAIT_TIMER;
+			if (client->timeout <  0)
+				ret = EREJECT;
+			else
+				ret = EINCOMPLETE;
+			errno = EAGAIN;
+		}
+	}
+	else if (ret > 0)
+	{
+		if (FD_ISSET(client->sock, &fds))
+		{
+			ret = client->ops->status(client->opsctx);
+			if (options & WAIT_SEND)
+			{
+				ret = ESUCCESS;
+			}
+			else if (ret != ESUCCESS)
+			{
+				if (ret == EINCOMPLETE)
+					err("httpclient_wait %p socket empty", client);
+				else
+					err("httpclient_wait %p socket closed", client);
+				ret = EREJECT;
+			}
+		}
+	}
+	else
+	{
+		err("httpclient_wait %p error (%d %s)", client, errno, strerror(errno));
+		if (errno == EINTR)
+		{
+			ret = EINCOMPLETE;
+			errno = EAGAIN;
+		}
+		else
+			ret = EREJECT;
+	}
+#else
+	if (options & WAIT_SEND)
+		ret = ESUCCESS;
+	else
+		ret = client->ops->status(client->opsctx);
+	/**
+	 * The main server loop detected an event on the socket.
+	 * If there is not data then the socket had to be closed.
+	 */
+	if (ret != ESUCCESS)
+		ret = EREJECT;
+#endif
+	return ret;
+}
+
 static int tcpclient_status(void *ctl)
 {
 	http_client_t *client = (http_client_t *)ctl;
@@ -274,6 +419,7 @@ const httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.connect = tcpclient_connect,
 	.recvreq = tcpclient_recv,
 	.sendresp = tcpclient_send,
+	.wait = tcpclient_wait,
 	.status = tcpclient_status,
 	.flush = tcpclient_flush,
 	.disconnect = tcpclient_disconnect,
@@ -288,7 +434,7 @@ static void handler(int sig, siginfo_t *si, void *arg)
 
 static int _tcpserver_start(http_server_t *server)
 {
-	int status;
+	int status = -1;
 
 #ifdef WIN32
 	WSADATA wsaData = {0};
@@ -333,7 +479,7 @@ static int _tcpserver_start(http_server_t *server)
 	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
 #endif
 	if (status != 0) {
-		warn("socket interface not found");
+		warn("socket interface not found : %s", hstrerror(status));
 		result = &hints;
 #ifdef USE_IPV6
 		if (result->ai_family == AF_INET6)
@@ -359,7 +505,6 @@ static int _tcpserver_start(http_server_t *server)
 		server->sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if (server->sock == -1)
 			continue;
-
 		if (setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (void *)&(int){ 1 }, sizeof(int)) < 0)
 				warn("setsockopt(SO_REUSEADDR) failed");
 #ifdef SO_REUSEPORT
@@ -381,8 +526,10 @@ static int _tcpserver_start(http_server_t *server)
 		status = bind(server->sock, rp->ai_addr, rp->ai_addrlen);
 		server->type = rp->ai_family;
 		if (status == 0)
+		{
 			/* Success */
 			break;
+		}
 		server->ops->close(server);
 	}
 #ifdef HAVE_GETNAMEINFO
@@ -411,6 +558,11 @@ static int _tcpserver_start(http_server_t *server)
 			err("Error bind/listen port %d : %s", server->config->port, strerror(errno));
 		return -1;
 	}
+	warn("socket started on port %d", server->config->port);
+	int flags;
+	flags = fcntl(server->sock, F_GETFL, 0);
+	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);
+
 	return 0;
 }
 
@@ -454,7 +606,8 @@ static void _tcpserver_close(http_server_t *server)
 	{
 		http_client_t *next = client->next;
 		client->ops->disconnect(client->opsctx);
-		client->ops->destroy(client->opsctx);
+		httpclient_destroy(client);
+		//client->ops->destroy(client->opsctx);
 		client = next;
 	}
 	server->clients = NULL;

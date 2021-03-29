@@ -1,9 +1,9 @@
 /*****************************************************************************
- * dbentry.h: Simple Database collection
+ * _buffer.h: buffer object private data
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
- * Authors: Marc Chalain <marc.chalain@gmail.com>
+ * Authors: Marc Chalain <marc.chalain@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -25,31 +25,30 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef DBENTRY_H
-#define DBENTRY_H
+#ifndef ___BUFFER_H__
+#define ___BUFFER_H__
 
-struct dbentry_s
+typedef struct buffer_s buffer_t;
+struct buffer_s
 {
-	char *storage;
-	const char *key;
-	const char *value;
-	struct dbentry_s *next;
+	char *data;
+	char *offset;
+	int size;
+	int length;
+	int maxchunks;
 };
 
-typedef struct dbentry_s dbentry_t;
-
-struct dbentry_revert_s
-{
-	char *storage;
-	char *key;
-	char *value;
-	struct dbentry_revert_s *next;
-};
-
-typedef struct dbentry_revert_s dbentry_revert_t;
-
-const char *dbentry_search(dbentry_t *entry, const char *key);
-void dbentry_destroy(dbentry_t *entry);
-void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep);
+buffer_t * _buffer_create(int maxchunks);
+int _buffer_chunksize(int new);
+char *_buffer_append(buffer_t *buffer, const char *data, int length);
+char *_buffer_pop(buffer_t *buffer, int length);
+void _buffer_shrink(buffer_t *buffer, int reset);
+void _buffer_reset(buffer_t *buffer);
+int _buffer_rewindto(buffer_t *buffer, char needle);
+int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value);
+int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep);
+int _buffer_empty(buffer_t *buffer);
+char _buffer_last(buffer_t *buffer);
+void _buffer_destroy(buffer_t *buffer);
 
 #endif

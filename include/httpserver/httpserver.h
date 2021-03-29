@@ -84,15 +84,17 @@ extern "C"
 #define EREJECT -4
 #define ETIMEOUT -5
 
+#define EXPORT_SYMBOL __attribute__((visibility("default")))
+
 typedef struct http_message_s http_message_t;
 typedef struct http_server_s http_server_t;
 typedef struct http_client_s http_client_t;
 
-extern const char str_get[];
-extern const char str_post[];
-extern const char str_head[];
-extern const char str_defaultscheme[];
-extern const char str_form_urlencoded[];
+extern const char EXPORT_SYMBOL str_get[];
+extern const char EXPORT_SYMBOL str_post[];
+extern const char EXPORT_SYMBOL str_head[];
+extern const char EXPORT_SYMBOL str_defaultscheme[];
+extern const char EXPORT_SYMBOL str_form_urlencoded[];
 
 typedef enum
 {
@@ -105,7 +107,7 @@ typedef enum
 	HTTP_PIPELINE = 0x0100,
 } http_message_version_e;
 
-extern const char *httpversion[];
+EXPORT_SYMBOL extern const char *httpversion[];
 /**
 {
 	"HTTP/0.9",
@@ -123,6 +125,7 @@ typedef int http_message_result_e;
 #define RESULT_405 405
 #ifndef HTTP_STATUS_PARTIAL
 #define RESULT_101 101
+#define RESULT_201 201
 #define RESULT_204 204
 #define RESULT_206 206
 #define RESULT_301 301
@@ -140,6 +143,7 @@ typedef int http_message_result_e;
 
 typedef void *(*http_create_t)(void *config, http_client_t *clt);
 typedef int (*http_connect_t)(void *ctx, const char *addr, int port);
+typedef int (*http_wait_t)(void *ctx, int options);
 typedef int (*http_status_t)(void *ctx);
 typedef void (*http_flush_t)(void *ctx);
 /**
@@ -178,6 +182,7 @@ struct httpclient_ops_s
 	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */
+	http_wait_t wait;
 	http_status_t status; /* callback to get the socket status*/
 	http_flush_t flush; /* callback to flush the socket */
 	http_disconnect_t disconnect; /* callback to close the socket */
@@ -186,7 +191,7 @@ struct httpclient_ops_s
 	const httpclient_ops_t *next;
 };
 
-void httpclient_appendops(const httpclient_ops_t *ops);
+EXPORT_SYMBOL void httpclient_appendops(const httpclient_ops_t *ops);
 
 /**
  * @brief callback to manage a request
@@ -240,6 +245,8 @@ typedef struct http_server_config_s
 	char *addr;
 	/** @param port the TCP/IP prot to bind the server */
 	int port;
+	/** @param service name if different to http server */
+	const char *service;
 	/** @param maxclients the maximum number of clients accepted by the server. */
 	int maxclients;
 	int chunksize;
@@ -256,7 +263,7 @@ typedef struct http_server_config_s
  * This value may be changed, by default it is "libhttpserver".
  * It is returned by httpserver_INFO(server, "software")
  */
-extern char *httpserver_software;
+EXPORT_SYMBOL extern char * httpserver_software;
 
 /**
  * @brief create a server object and open the main socket
@@ -265,9 +272,9 @@ extern char *httpserver_software;
  *
  * @return the server object
  */
-http_server_t *httpserver_create(http_server_config_t *config);
+EXPORT_SYMBOL http_server_t * httpserver_create(http_server_config_t *config);
 
-http_server_t *httpserver_dup(http_server_t *server);
+EXPORT_SYMBOL http_server_t * httpserver_dup(http_server_t *server);
 
 /**
  * @brief get value for different attributs of the server
@@ -293,7 +300,7 @@ http_server_t *httpserver_dup(http_server_t *server);
  * @return the value of the attribut or a empty string
  */
 
-const char *httpserver_INFO(http_server_t *server, const char *key);
+EXPORT_SYMBOL const char * httpserver_INFO(http_server_t *server, const char *key);
 
 /**
  * @brief add a HTTP method to manage
@@ -305,7 +312,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key);
  */
 #define MESSAGE_PROTECTED 0x01
 #define MESSAGE_ALLOW_CONTENT 0x02
-void httpserver_addmethod(http_server_t *server, const char *method, short properties);
+EXPORT_SYMBOL void httpserver_addmethod(http_server_t *server, const char *method, short properties);
 
 /**
  * @brief add a HTTP method to manage
@@ -315,7 +322,7 @@ void httpserver_addmethod(http_server_t *server, const char *method, short prope
  * @param config the first argument of create function.
  * @return the previous protocol
  */
-const httpclient_ops_t * httpserver_changeprotocol(http_server_t *server, const httpclient_ops_t *newops, void *config);
+EXPORT_SYMBOL const httpclient_ops_t * httpserver_changeprotocol(http_server_t *server, const httpclient_ops_t *newops, void *config);
 
 /**
  * @brief add a callback on client message reception
@@ -326,7 +333,7 @@ const httpclient_ops_t * httpserver_changeprotocol(http_server_t *server, const 
  * @param priority the level to order the connectors
  * @param name the name of the module which add the connector
  */
-void httpserver_addconnector(http_server_t *server, http_connector_t func, void *data, int priority, const char *name);
+EXPORT_SYMBOL void httpserver_addconnector(http_server_t *server, http_connector_t func, void *data, int priority, const char *name);
 
 /**
  * @brief add a module for client
@@ -334,14 +341,14 @@ void httpserver_addconnector(http_server_t *server, http_connector_t func, void 
  * @param server the server object generated by httpserver_create
  * @param mod the module description
  */
-void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg, const char *name);
+EXPORT_SYMBOL void httpserver_addmod(http_server_t *server, http_getctx_t mod, http_freectx_t unmod, void *arg, const char *name);
 
 /**
  * @brief start the server to a new thread
  *
  * @param server the server object generated by httpserver_create
  */
-void httpserver_connect(http_server_t *server);
+EXPORT_SYMBOL void httpserver_connect(http_server_t *server);
 
 /**
  * @brief run all servers
@@ -351,21 +358,21 @@ void httpserver_connect(http_server_t *server);
  * @return ESUCCESS when all servers closed
  * 	EINCOMPLETE when at least one server must be call again.
  */
-int httpserver_run(http_server_t *server);
+EXPORT_SYMBOL int httpserver_run(http_server_t *server);
 
 /**
  * @brief stop the server from any thread
  *
  * @param server the server object generated by httpserver_create
  */
-void httpserver_disconnect(http_server_t *server);
+EXPORT_SYMBOL void httpserver_disconnect(http_server_t *server);
 
 /**
  * @brief destroy the server object
  *
  * @param server the server object generated by httpserver_create
  */
-void httpserver_destroy(http_server_t *server);
+EXPORT_SYMBOL void httpserver_destroy(http_server_t *server);
 
 /*****************************************/
 /** internal functions for the callback **/
@@ -380,14 +387,14 @@ void httpserver_destroy(http_server_t *server);
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-http_message_t * httpmessage_create();
+EXPORT_SYMBOL http_message_t * httpmessage_create();
 
 /**
  * @brief destroy message created with httpmessage_create
  *
  * @param message the message to destroy
  */
-void httpmessage_destroy(http_message_t *message);
+EXPORT_SYMBOL void httpmessage_destroy(http_message_t *message);
 
 /**
  * @brief return the client of the request
@@ -396,7 +403,7 @@ void httpmessage_destroy(http_message_t *message);
  *
  * @return the client instance
  */
-http_client_t *httpmessage_client(http_message_t *message);
+EXPORT_SYMBOL http_client_t * httpmessage_client(http_message_t *message);
 
 /**
  * @brief store and return private data for callback
@@ -407,7 +414,7 @@ http_client_t *httpmessage_client(http_message_t *message);
  *
  * @return the same pointer as stored
  */
-void *httpmessage_private(http_message_t *message, void *data);
+EXPORT_SYMBOL void * httpmessage_private(http_message_t *message, void *data);
 
 /**
  * @brief change the result of the message
@@ -419,7 +426,7 @@ void *httpmessage_private(http_message_t *message, void *data);
  *
  * If result is 0, the function only returns the current result of the message.
  */
-http_message_result_e httpmessage_result(http_message_t *message, http_message_result_e result);
+http_message_result_e EXPORT_SYMBOL httpmessage_result(http_message_t *message, http_message_result_e result);
 
 #ifdef HTTPCLIENT_FEATURES
 /**
@@ -432,7 +439,7 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
  * @return the client to use for sending
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-http_client_t *httpmessage_request(http_message_t *message, const char *method, char *resource);
+EXPORT_SYMBOL http_client_t * httpmessage_request(http_message_t *message, const char *method, char *resource);
 #endif
 
 /**
@@ -442,7 +449,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
  * @param key the name of the header to set
  * @param value the value to set
  */
-void httpmessage_addheader(http_message_t *message, const char *key, const char *value);
+EXPORT_SYMBOL void httpmessage_addheader(http_message_t *message, const char *key, const char *value);
 
 /**
  * @brief apend the last header of the response message
@@ -451,7 +458,7 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
  * @param key the name of the last header to set
  * @param value several const char * string terminate with a NULL pointer
  */
-int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...);
+EXPORT_SYMBOL int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...);
 
 /**
  * @brief add the content to the response message
@@ -463,7 +470,7 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
  *
  * @return the space available into the chunk of content
  */
-int httpmessage_addcontent(http_message_t *message, const char *type, const char *content, int length);
+EXPORT_SYMBOL int httpmessage_addcontent(http_message_t *message, const char *type, const char *content, int length);
 
 /**
  * @brief append data to content of the response message before sending
@@ -474,7 +481,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
  *
  * @return the space available into the chunk of content
  */
-int httpmessage_appendcontent(http_message_t *message, const char *content, int length);
+EXPORT_SYMBOL int httpmessage_appendcontent(http_message_t *message, const char *content, int length);
 
 /**
  * @brief returns the content of the request message
@@ -485,7 +492,7 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
  *
  * @return the length of data pop into contentpart
  */
-int httpmessage_content(http_message_t *message, char **contentpart, unsigned long long *contentlenght);
+EXPORT_SYMBOL int httpmessage_content(http_message_t *message, char **contentpart, unsigned long long *contentlenght);
 
 /**
  * @brief set the Keep-Alive connection
@@ -497,7 +504,7 @@ int httpmessage_content(http_message_t *message, char **contentpart, unsigned lo
  *
  * @return the client socket descriptor
  */
-int httpmessage_keepalive(http_message_t *message);
+EXPORT_SYMBOL int httpmessage_keepalive(http_message_t *message);
 
 /**
  * @brief lock the connection
@@ -510,7 +517,7 @@ int httpmessage_keepalive(http_message_t *message);
  *
  * @return the client socket descriptor
  */
-int httpmessage_lock(http_message_t *message);
+EXPORT_SYMBOL int httpmessage_lock(http_message_t *message);
 
 /**
  * @brief return the protection of the message
@@ -522,7 +529,7 @@ int httpmessage_lock(http_message_t *message);
  * @return 0 for unprotected message, or -1 for forbidden message,
  * otherwise a value > 0
  */
-int httpmessage_isprotected(http_message_t *message);
+EXPORT_SYMBOL int httpmessage_isprotected(http_message_t *message);
 
 /**
  * @brief create response for data stream
@@ -539,7 +546,7 @@ int httpmessage_isprotected(http_message_t *message);
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
+EXPORT_SYMBOL int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
 
 /**
  * @brief get value for different attributs of the connection
@@ -558,7 +565,7 @@ int httpmessage_parsecgi(http_message_t *message, char *data, int *size);
  * @return the value of the attribut or a empty string
  */
 
-const char *httpmessage_SERVER(http_message_t *message, const char *key);
+EXPORT_SYMBOL const char * httpmessage_SERVER(http_message_t *message, const char *key);
 
 /**
  * @brief get value for different attributs of the request
@@ -570,7 +577,7 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key);
  *
  * @return the value of the attribut or a empty string
  */
-const char *httpmessage_REQUEST(http_message_t *message, const char *key);
+EXPORT_SYMBOL const char * httpmessage_REQUEST(http_message_t *message, const char *key);
 
 /**
  * @brief get value for the session used by the request
@@ -580,10 +587,11 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key);
  * @param message the request message received
  * @param key the name of the attribut
  * @param value the value to set with the key or NULL
+ * @param size the size of value
  *
  * @return the value of the attribute or NULL
  */
-const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value);
+EXPORT_SYMBOL const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size);
 
 /**
  * @brief get value from query parameters and/or POST form data
@@ -595,7 +603,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
  *
  * @return the value of the paramater or NULL
  */
-const char *httpmessage_parameter(http_message_t *message, const char *key);
+EXPORT_SYMBOL const char * httpmessage_parameter(http_message_t *message, const char *key);
 
 /**
  * @brief get value from Cookie header
@@ -607,7 +615,7 @@ const char *httpmessage_parameter(http_message_t *message, const char *key);
  *
  * @return the value of the cookie or NULL
  */
-const char *httpmessage_cookie(http_message_t *message, const char *key);
+EXPORT_SYMBOL const char * httpmessage_cookie(http_message_t *message, const char *key);
 
 /**********************************************************************/
 typedef struct httpclient_ops_s httpclient_ops_t;
@@ -621,15 +629,15 @@ typedef struct httpclient_ops_s httpclient_ops_t;
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol);
-extern const httpclient_ops_t *tcpclient_ops;
+EXPORT_SYMBOL http_client_t * httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol);
+EXPORT_SYMBOL extern const httpclient_ops_t * tcpclient_ops;
 
 /**
  * @brief delete the client object
  *
  * @param client the connection that will send the request
  */
-void httpclient_destroy(http_client_t *client);
+void EXPORT_SYMBOL httpclient_destroy(http_client_t *client);
 
 #ifdef HTTPCLIENT_FEATURES
 /**
@@ -643,7 +651,7 @@ void httpclient_destroy(http_client_t *client);
  *
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_message_t *response);
+EXPORT_SYMBOL int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_message_t *response);
 #endif
 
 /**
@@ -653,7 +661,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
  *
  * @return return the context
  */
-void *httpclient_context(http_client_t *client);
+EXPORT_SYMBOL void * httpclient_context(http_client_t *client);
 
 /**
  * @brief return the socket descriptor
@@ -662,7 +670,7 @@ void *httpclient_context(http_client_t *client);
  *
  * @return return the socket
  */
-int httpclient_socket(http_client_t *client);
+EXPORT_SYMBOL int httpclient_socket(http_client_t *client);
 
 /**
  * @brief return the server which has created this client
@@ -671,7 +679,7 @@ int httpclient_socket(http_client_t *client);
  *
  * @return return the server
  */
-http_server_t *httpclient_server(http_client_t *client);
+EXPORT_SYMBOL http_server_t * httpclient_server(http_client_t *client);
 
 /**
  * @brief add a callback on client message reception
@@ -684,7 +692,7 @@ http_server_t *httpclient_server(http_client_t *client);
  * @param name the name of the module which add the connector
  */
 
-void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name);
+EXPORT_SYMBOL void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name);
 
 /**
  * @brief add a request receiver callback
@@ -695,7 +703,7 @@ void httpclient_addconnector(http_client_t *client, http_connector_t func, void 
  *
  * @return return the previous request receiver callback
  */
-http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg);
+EXPORT_SYMBOL http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void *arg);
 
 /**
  * @brief add a response sender callback
@@ -706,7 +714,7 @@ http_recv_t httpclient_addreceiver(http_client_t *client, http_recv_t func, void
  *
  * @return return the previous response sender callback
  */
-http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
+EXPORT_SYMBOL http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *arg);
 
 
 /**
@@ -714,7 +722,7 @@ http_send_t httpclient_addsender(http_client_t *client, http_send_t func, void *
  *
  * @param client the connection that received the request
  */
-void httpclient_shutdown(http_client_t *client);
+EXPORT_SYMBOL void httpclient_shutdown(http_client_t *client);
 
 /**
  * @brief wait on the socket while no dat available
@@ -726,7 +734,7 @@ void httpclient_shutdown(http_client_t *client);
  */
 #define WAIT_SEND 0x01
 #define WAIT_ACCEPT 0x02
-int httpclient_wait(http_client_t *client, int options);
+EXPORT_SYMBOL int httpclient_wait(http_client_t *client, int options);
 
 #ifdef __cplusplus
 }

@@ -37,29 +37,35 @@
 # include <winsock2.h>
 #endif
 
-//#define HTTPMESSAGE_DECL extern
-#define HTTPMESSAGE_DECL static
-
 #include "dbentry.h"
 
-#define CHUNKSIZE 64
 #define HTTPMESSAGE_KEEPALIVE 0x01
 #define HTTPMESSAGE_LOCKED 0x02
 
+extern const char str_true[];
+extern const char str_get[];
+extern const char str_post[];
+extern const char str_head[];
+extern const char str_form_urlencoded[];
+extern const char str_cookie[];
+extern const char str_connection[];
+extern const char str_contenttype[];
+extern const char str_contentlength[];
+
 typedef struct buffer_s buffer_t;
-struct buffer_s
+
+typedef struct http_connector_list_s http_connector_list_t;
+struct http_connector_list_s
 {
-	char *data;
-	char *offset;
-	int size;
-	int length;
-	int maxchunks;
+	http_connector_t func;
+	void *arg;
+	struct http_connector_list_s *next;
+	const char *name;
+	int priority;
 };
-HTTPMESSAGE_DECL buffer_t * _buffer_create(int nbchunks);
-HTTPMESSAGE_DECL char *_buffer_append(buffer_t *buffer, const char *data, int length);
-HTTPMESSAGE_DECL void _buffer_shrink(buffer_t *buffer);
-HTTPMESSAGE_DECL void _buffer_reset(buffer_t *buffer);
-HTTPMESSAGE_DECL void _buffer_destroy(buffer_t *buffer);
+void _httpconnector_add(http_connector_list_t **first,
+						http_connector_t func, void *funcarg,
+						int priority, const char *name);
 
 struct http_message_s
 {
@@ -72,17 +78,17 @@ struct http_message_s
 	enum {
 		PARSE_INIT,
 		PARSE_URI = 0x0001,
-		PARSE_URIENCODED,
-		PARSE_URIDOUBLEDOT,
-		PARSE_VERSION,
-		PARSE_STATUS,
-		PARSE_PREHEADER,
-		PARSE_HEADER,
-		PARSE_POSTCONTENT, /**POSTCONTENT is hear to allow to parse all the content of POST request  see _httpclient_request*/
-		PARSE_POSTHEADER,
-		PARSE_PRECONTENT,
-		PARSE_CONTENT,
-		PARSE_END,
+		PARSE_URIENCODED = 0x0002,
+		PARSE_URIDOUBLEDOT = 0x0003,
+		PARSE_VERSION = 0x0004,
+		PARSE_STATUS = 0x0005,
+		PARSE_PREHEADER = 0x0006,
+		PARSE_HEADER = 0x0007,
+		PARSE_POSTCONTENT = 0x0008, /**POSTCONTENT is here to allow to parse all the content of POST request  see _httpclient_request*/
+		PARSE_POSTHEADER = 0x0009,
+		PARSE_PRECONTENT = 0x000A,
+		PARSE_CONTENT = 0x000B,
+		PARSE_END = 0x000C,
 		PARSE_MASK = 0x000F,
 		GENERATE_ERROR = 0x0010,
 		GENERATE_INIT = 0x0020,
@@ -96,6 +102,7 @@ struct http_message_s
 	}
 	state;
 	buffer_t *content;
+	buffer_t *content_storage;
 	buffer_t *header;
 	unsigned long long content_length;
 	unsigned int content_packet;
@@ -122,20 +129,41 @@ struct _http_message_result_s
 };
 typedef struct _http_message_result_s _http_message_result_t;
 
-HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[];
-
-HTTPMESSAGE_DECL http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent);
-HTTPMESSAGE_DECL void _httpmessage_destroy(http_message_t *message);
-HTTPMESSAGE_DECL int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *header);
-HTTPMESSAGE_DECL buffer_t *_httpmessage_buildheader(http_message_t *message);
-HTTPMESSAGE_DECL int _httpmessage_parserequest(http_message_t *message, buffer_t *data);
-HTTPMESSAGE_DECL int _httpmessage_fillheaderdb(http_message_t *message);
-HTTPMESSAGE_DECL char *_httpmessage_status(http_message_t *message);
+extern const _http_message_result_t *_http_message_result[];
 
 typedef struct http_message_method_s http_message_method_t;
+struct http_message_method_s
+{
+	const char *key;
+	short id;
+	short properties;
+	http_message_method_t *next;
+};
+
+extern const http_message_method_t default_methods[];
+
+typedef enum
+{
+	MESSAGE_TYPE_GET,
+	MESSAGE_TYPE_POST,
+	MESSAGE_TYPE_HEAD,
+} _http_message_method_e;
+
+
+http_message_t * _httpmessage_create(http_client_t *client, http_message_t *parent);
+void _httpmessage_destroy(http_message_t *message);
+int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *header);
+buffer_t *_httpmessage_buildheader(http_message_t *message);
+int _httpmessage_parserequest(http_message_t *message, buffer_t *data);
+int _httpmessage_fillheaderdb(http_message_t *message);
+char *_httpmessage_status(http_message_t *message);
+int _httpmessage_changestate(http_message_t *message, int new);
+int _httpmessage_state(http_message_t *message, int check);
+int _httpmessage_contentempty(http_message_t *message, int unset);
+int _httpmessage_runconnector(http_message_t *request, http_message_t *response);
 
 #ifdef _HTTPMESSAGE_
-HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[] =
+const _http_message_result_t *_http_message_result[] =
 {
 #if defined(RESULT_100)
 	&(_http_message_result_t){.result = RESULT_100, .status = " 100 Continue"},
@@ -262,9 +290,6 @@ HTTPMESSAGE_DECL const _http_message_result_t *_http_message_result[] =
 	NULL
 };
 
-HTTPMESSAGE_DECL const char str_connection[] = "Connection";
-HTTPMESSAGE_DECL const char str_contenttype[] = "Content-Type";
-HTTPMESSAGE_DECL const char str_contentlength[] = "Content-Length";
 #endif
 #endif
 
