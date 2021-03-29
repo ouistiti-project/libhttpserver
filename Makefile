@@ -1,7 +1,7 @@
 include scripts.mk
 
 package?=httpserver
-version=2.9
+version=3.1
 
 ifeq ($(VTHREAD_TYPE),pthread)
 USE_PTHREAD=y
