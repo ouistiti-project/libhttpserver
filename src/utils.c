@@ -137,11 +137,12 @@ const char *utils_getmime(const char *filepath)
 }
 
 
-char *utils_urldecode(const char *encoded)
+char *utils_urldecode(const char *encoded, size_t length)
 {
 	if (encoded == NULL)
 		return NULL;
-	int length = strlen(encoded);
+	if (length == -1)
+		length = strlen(encoded);
 	if (length == 0)
 		return NULL;
 	char *decoded = calloc(1, length + 1);
@@ -197,7 +198,7 @@ char *utils_urldecode(const char *encoded)
 					offset = decoded;
 			}
 		}
-		else if (*encoded == '?')
+		else if (*encoded == '?' || *encoded == '&')
 		{
 			break;
 		}

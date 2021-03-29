@@ -43,7 +43,7 @@ extern const char str_applicationoctetstream[];
 const char *utils_getmime(const char *path);
 void utils_addmime(const char *ext, const char*mime);
 
-char *utils_urldecode(const char *encoded);
+char *utils_urldecode(const char *encoded, size_t length);
 int utils_searchexp(const char *haystack, const char *needleslist, const char **rest);
 
 struct utils_parsestring_s
