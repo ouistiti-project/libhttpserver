@@ -376,7 +376,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				ret = _httpmessage_parserequest(response, data);
 			}
 		}
-		if (_httpmessage_state(response, PARSE_END))
+		if (size == EREJECT || _httpmessage_state(response, PARSE_END))
 		{
 			request->state = GENERATE_ERROR;
 		}
@@ -1050,7 +1050,7 @@ static int _httpclient_run(http_client_t *client)
 		 */
 		_buffer_reset(client->sockdata);
 		size = client->client_recv(client->recv_arg, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
-		if (size == 0 || size == EINCOMPLETE)
+		if (size == 0 || size == EREJECT)
 		{
 			/**
 			 * error on the connection
@@ -1059,15 +1059,22 @@ static int _httpclient_run(http_client_t *client)
 			client->state |= CLIENT_ERROR;
 			return ECONTINUE;
 		}
-		recv_ret = ESUCCESS;
-		client->sockdata->length += size;
-		client->sockdata->offset[size] = 0;
-		/**
-		 * the buffer must always be read from the beginning
-		 */
-		client->sockdata->offset = client->sockdata->data;
+		else if (size == EINCOMPLETE)
+		{
+			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		}
+		else
+		{
+			recv_ret = ESUCCESS;
+			client->sockdata->length += size;
+			client->sockdata->offset[size] = 0;
+			/**
+			 * the buffer must always be read from the beginning
+			 */
+			client->sockdata->offset = client->sockdata->data;
 
-		client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+			client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+		}
 	}
 	else if (recv_ret == EREJECT)
 	{
