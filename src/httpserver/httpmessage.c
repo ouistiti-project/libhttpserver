@@ -606,7 +606,8 @@ static int _httpmessage_parsepreheader(http_message_t *message, buffer_t *data)
 		 * uri buffer may be change during an extension
 		 */
 		message->query = strchr(message->uri->data, '?');
-		warn("new request %s %s from %p", message->method->key, message->uri->data, message->client);
+		const char *service = httpserver_INFO(httpclient_server(message->client), "service");
+		warn("new request %s %s from \"%s\" service", message->method->key, message->uri->data, service);
 	}
 	else if (message->uri == NULL)
 	{

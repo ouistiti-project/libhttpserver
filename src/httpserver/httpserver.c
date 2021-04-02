@@ -860,6 +860,11 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	else if (!strcasecmp(key, "service"))
 	{
 		value = server->config->service;
+		if ( value == NULL)
+		{
+			snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
+			value = service;
+		}
 	}
 	else if (!strcasecmp(key, "software"))
 	{
@@ -888,11 +893,6 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 			}
 		}
 		value = server->methods_storage->data;
-	}
-	else if (!strcasecmp(key, "service"))
-	{
-		snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
-		value = service;
 	}
 	else if (!strcasecmp(key, "secure"))
 	{
