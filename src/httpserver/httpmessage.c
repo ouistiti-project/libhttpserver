@@ -338,8 +338,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 					(*(data->offset - 1) == '/') &&
 					(message->query == NULL))
 				{
-					data->offset++;
-					continue;
+					next = PARSE_URI | PARSE_CONTINUE;
 				}
 				else
 					length++;
@@ -411,6 +410,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			next = PARSE_END;
 			err("parse reject uri too long : %s %s", message->uri->data, data->data);
 		}
+		next &= ~PARSE_CONTINUE;
 	}
 	return next;
 }
