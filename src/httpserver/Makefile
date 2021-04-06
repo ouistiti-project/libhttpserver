@@ -62,15 +62,15 @@ hostslib-y+=uri
 uri_SOURCES+=uri.c
 uri_CFLAGS+=-I../../include/httpserver
 
-lib-$(DLIB_WEBSOCKET)+=websocket
-slib-$(SLIB_WEBSOCKET)+=websocket
-hostslib-$(WEBSOCKET)+=websocket
-websocket_SOURCES+=websocket.c
-websocket_CFLAGS+=-I../../include/httpserver
+lib-$(DLIB_WEBSOCKET)+=ouibsocket
+slib-$(SLIB_WEBSOCKET)+=ouibsocket
+hostslib-$(WEBSOCKET)+=ouibsocket
+ouibsocket_SOURCES+=websocket.c
+ouibsocket_CFLAGS+=-I../../include/httpserver
 
 $(TARGET)_CFLAGS-$(DEBUG)+=-g -DDEBUG
 uri_CFLAGS-$(DEBUG)+=-g -DDEBUG
-websocket_CFLAGS-$(DEBUG)+=-g -DDEBUG
+ouibsocket_CFLAGS-$(DEBUG)+=-g -DDEBUG
 
 ifeq ($(WIN32),1)
 $(TARGET)_LDFLAGS+=-lws2_32
