@@ -1,0 +1,6 @@
+libouistiti (3.0.2-1) stable; urgency=low
+
+  * Fix the double / into the URI
+    
+
+ -- Marc Chalain <marc.chalain@gmail.com>  Wed, 07 Apr 2021 16:32:59 +0000

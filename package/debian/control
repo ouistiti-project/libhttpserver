@@ -1,0 +1,20 @@
+Source: libouistiti
+Section: net
+Priority: extra
+Maintainer: Marc Chalain <marc.chalain@gmail.com>
+Build-Depends: debhelper (>=9), libmbedtls-dev
+Standards-Version: 3.9.8
+Homepage: https://github.com/ouistiti-project/libhttpserver
+
+Package: libouistiti
+Architecture: any
+Multi-Arch: same
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Simple HTTP server library
+
+Package: libouistiti-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: ${misc:Depends}, ${shlibs:Depends}, opendds
+Description: Simple HTTP server library API

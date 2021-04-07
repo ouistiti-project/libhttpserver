@@ -41,3 +41,6 @@ else
 SLIBEXT=a
 DLIBEXT=so
 endif
+
+debian:
+	$(MAKE) -C package debian
