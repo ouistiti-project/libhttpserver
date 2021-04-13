@@ -42,5 +42,5 @@ SLIBEXT=a
 DLIBEXT=so
 endif
 
-debian:
-	$(MAKE) -C package debian
+install:
+	$(MAKE) -C $(srcdir)/include install
