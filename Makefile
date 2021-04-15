@@ -41,6 +41,3 @@ else
 SLIBEXT=a
 DLIBEXT=so
 endif
-
-install:
-	$(MAKE) -C $(srcdir)/include install

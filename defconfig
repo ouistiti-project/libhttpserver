@@ -26,6 +26,3 @@ USE_PTHREAD=n
 USE_POLL=y
 USE_REENTRANT=y
 USE_IPV6=n
-
-prefix=/usr/local
-libdir=$(prefix)/lib

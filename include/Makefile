@@ -4,6 +4,9 @@ include-$(LIBUTILS)+=httpserver/utils.h
 include-$(LIBHASH)+=httpserver/hash.h
 include-$(LIBWEBSOCKET)+=httpserver/websocket.h
 
-install:
-	install -D ../config.h $(DESTDIR)$(includedir)/httpserver/
-	install -D ../version.h $(DESTDIR)$(includedir)/httpserver/
+hook-install-y+=install-config
+
+install-config:
+	@echo INSTALL config.h version.h
+	@install -D ../config.h $(DESTDIR)$(includedir)/httpserver/
+	@install -D ../version.h $(DESTDIR)$(includedir)/httpserver/
