@@ -16,5 +16,5 @@ Package: libouistiti-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: ${misc:Depends}, ${shlibs:Depends}, opendds
+Depends: ${misc:Depends}, ${shlibs:Depends}, libouistiti
 Description: Simple HTTP server library API
