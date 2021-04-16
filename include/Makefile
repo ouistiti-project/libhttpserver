@@ -4,7 +4,7 @@ include-$(LIBUTILS)+=httpserver/utils.h
 include-$(LIBHASH)+=httpserver/hash.h
 include-$(LIBWEBSOCKET)+=httpserver/websocket.h
 
-hook-install-y+=install-config
+hook-install-$(DEVINSTALL)+=install-config
 
 install-config:
 	@echo INSTALL config.h version.h
