@@ -32,8 +32,7 @@ Development files for libouistiti
 %setup -q -c libouistiti
 
 %build
-CFLAGS="$RPM_OPT_FLAGS" make defconfig
-CFLAGS="$RPM_OPT_FLAGS" make package=ouistiti prefix=/usr libdir=/usr/lib64/ LIBURI=n STATIC=n oldconfig
+CFLAGS="$RPM_OPT_FLAGS" make package=ouistiti prefix=/usr libdir=/usr/lib64/ STATIC=n defconfig
 CFLAGS="$RPM_OPT_FLAGS" make package=ouistiti
 
 %install
