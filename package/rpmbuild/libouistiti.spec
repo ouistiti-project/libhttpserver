@@ -51,6 +51,7 @@ CFLAGS="$RPM_OPT_FLAGS" make package=ouistiti clean
 
 %files devel
 %{_includedir}/*
+%{_libdir}/pkgconfig/ouistiti.pc
 
 %changelog
 
