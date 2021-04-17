@@ -8,5 +8,5 @@ hook-install-$(DEVINSTALL)+=install-config
 
 install-config:
 	@echo INSTALL config.h version.h
-	@install -D ../config.h $(DESTDIR)$(includedir)/httpserver/
-	@install -D ../version.h $(DESTDIR)$(includedir)/httpserver/
+	@install -m 0644 -D ../config.h $(DESTDIR)$(includedir)/httpserver/
+	@install -m 0644 -D ../version.h $(DESTDIR)$(includedir)/httpserver/
