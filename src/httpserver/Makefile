@@ -22,7 +22,7 @@ $(TARGET)_SOURCES+=httpserver.c
 $(TARGET)_SOURCES+=tcpserver.c
 #$(TARGET)_CFLAGS+=-DTCPDUMP
 $(TARGET)_CFLAGS+=-fvisibility=hidden
-$(TARGET)_CFLAGS+=-I../../include/httpserver
+$(TARGET)_CFLAGS+=-I../../include/ouistiti
 # SERVER_DEFER_ACCEPT may protect the client connection from some exceptions.
 # But it still decrease the speed of the answers.
 $(TARGET)_CFLAGS+=-DSERVER_DEFER_ACCEPT
@@ -60,13 +60,13 @@ slib-$(SLIB_URI)+=uri
 hostslib-y+=uri
 
 uri_SOURCES+=uri.c
-uri_CFLAGS+=-I../../include/httpserver
+uri_CFLAGS+=-I../../include/ouistiti
 
 lib-$(DLIB_WEBSOCKET)+=ouibsocket
 slib-$(SLIB_WEBSOCKET)+=ouibsocket
 hostslib-$(WEBSOCKET)+=ouibsocket
 ouibsocket_SOURCES+=websocket.c
-ouibsocket_CFLAGS+=-I../../include/httpserver
+ouibsocket_CFLAGS+=-I../../include/ouistiti
 
 $(TARGET)_CFLAGS-$(DEBUG)+=-g -DDEBUG
 uri_CFLAGS-$(DEBUG)+=-g -DDEBUG

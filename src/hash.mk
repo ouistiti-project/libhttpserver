@@ -63,7 +63,7 @@ ouihash_LIBS-$(WOLFSSL):=wolfssl
 ouihash_SOURCES-$(MBEDTLS):=hash_mbedtls.c
 ouihash_LIBS-$(MBEDTLS):=mbedcrypto
 
-ouihash_CFLAGS+=-I../include
+ouihash_CFLAGS+=-I../include/ouistiti
 
 ouihash_SOURCES-$(LIBB64)+=hash_libb64.c
 

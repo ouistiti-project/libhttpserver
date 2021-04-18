@@ -39,7 +39,7 @@
 # include <winsock2.h>
 #endif
 
-#include "httpserver.h"
+#include "ouistiti/httpserver.h"
 
 int test_client = 0;
 

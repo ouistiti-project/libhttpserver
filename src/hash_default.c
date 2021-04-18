@@ -27,8 +27,8 @@
  *****************************************************************************/
 #include <stdlib.h>
 
-#include "httpserver/hash.h"
-#include "httpserver/log.h"
+#include "hash.h"
+#include "log.h"
 
 static void *MD5_init();
 static void MD5_update(void *ctx, const char *in, size_t len);
