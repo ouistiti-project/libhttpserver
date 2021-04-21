@@ -1488,6 +1488,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			if (sessioninfo->value != NULL)
 			{
 				free((void *)sessioninfo->value);
+				sessioninfo->value = NULL;
 			}
 			if (size > 0)
 			{
