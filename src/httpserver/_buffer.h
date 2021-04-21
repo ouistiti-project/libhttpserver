@@ -48,6 +48,7 @@ int _buffer_rewindto(buffer_t *buffer, char needle);
 int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value);
 int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep);
 int _buffer_empty(buffer_t *buffer);
+int _buffer_full(buffer_t *buffer);
 char _buffer_last(buffer_t *buffer);
 void _buffer_destroy(buffer_t *buffer);
 

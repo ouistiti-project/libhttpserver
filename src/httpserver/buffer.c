@@ -258,6 +258,11 @@ int _buffer_empty(buffer_t *buffer)
 	return (buffer->length <= buffer->offset - buffer->data);
 }
 
+int _buffer_full(buffer_t *buffer)
+{
+	return (buffer->length == buffer->size);
+}
+
 char _buffer_last(buffer_t *buffer)
 {
 	if (buffer->length > 0)
