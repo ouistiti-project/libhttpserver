@@ -32,9 +32,9 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "httpserver/log.h"
-#include "httpserver/httpserver.h"
-#include "httpserver/utils.h"
+#include "log.h"
+#include "httpserver.h"
+#include "utils.h"
 
 #define utils_dbg(...)
 

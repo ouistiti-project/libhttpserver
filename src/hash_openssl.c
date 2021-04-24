@@ -31,8 +31,8 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
-#include "httpserver/hash.h"
-#include "httpserver/log.h"
+#include "hash.h"
+#include "log.h"
 
 static void *MD5_init();
 static void *SHA1_init();

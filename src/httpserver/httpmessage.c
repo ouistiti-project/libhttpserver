@@ -827,7 +827,7 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 		_buffer_append(message->query_storage, "&", 1);
 		message->query = NULL;
 	}
-	while (length > 0 && query[length - 1] == '\n' || query[length - 1] == '\r')
+	while (length > 0 && (query[length - 1] == '\n' || query[length - 1] == '\r'))
 		length--;
 	_buffer_append(message->query_storage, query, length);
 	if (message->content_length <= length)
@@ -1488,6 +1488,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			if (sessioninfo->value != NULL)
 			{
 				free((void *)sessioninfo->value);
+				sessioninfo->value = NULL;
 			}
 			if (size > 0)
 			{

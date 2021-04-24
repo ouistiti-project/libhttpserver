@@ -1,7 +1,7 @@
-include scripts.mk
-
-package?=httpserver
+package?=libouistiti
 version=3.1
+
+include scripts.mk
 
 ifeq ($(VTHREAD_TYPE),pthread)
 USE_PTHREAD=y

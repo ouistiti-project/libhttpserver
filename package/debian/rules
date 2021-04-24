@@ -1,0 +1,26 @@
+#!/usr/bin/make -f
+
+# Where we install every file before calling dh_install
+DESTDIR := $(PWD)/debian/tmp
+SRCDIR := ..
+
+MAKE_OPTIONS := package=ouistiti
+CONFIG_OPTIONS := prefix=/usr libdir=/usr/lib/$(shell gcc -dumpmachine) LIBURI=n
+%:
+	dh $@
+
+.PHONY: configure
+override_dh_auto_configure:
+	$(MAKE) -C $(SRCDIR) defconfig
+	$(MAKE) -C $(SRCDIR) $(CONFIG_OPTIONS) $(MAKE_OPTIONS) oldconfig
+
+override_dh_auto_build-arch:
+	$(MAKE) -C $(SRCDIR) $(MAKE_OPTIONS)
+
+
+override_dh_auto_install:
+	$(MAKE) -C $(SRCDIR) DESTDIR=$(DESTDIR) $(MAKE_OPTIONS) install
+
+override_dh_auto_clean:
+	$(MAKE) -C $(SRCDIR) clean
+

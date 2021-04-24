@@ -984,7 +984,7 @@ static int _httpclient_run(http_client_t *client)
 		case CLIENT_READING:
 		{
 			send_ret = ESUCCESS;
-			if (_buffer_empty(client->sockdata))
+			if (!_buffer_full(client->sockdata))
 				recv_ret = client->ops->status(client->opsctx);
 		}
 		break;
@@ -1032,9 +1032,8 @@ static int _httpclient_run(http_client_t *client)
 				client->ops->disconnect(client->opsctx);
 
 			client->state |= CLIENT_STOPPED;
-			return ESUCCESS;
 		}
-		break;
+		return ESUCCESS;
 		default:
 		break;
 	}
@@ -1048,7 +1047,7 @@ static int _httpclient_run(http_client_t *client)
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		_buffer_reset(client->sockdata);
+		_buffer_shrink(client->sockdata, 0);
 		size = client->client_recv(client->recv_arg, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
 		if (size == 0 || size == EREJECT)
 		{
