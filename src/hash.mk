@@ -33,6 +33,8 @@ lib-$(SHARED)+=ouihash
 slib-$(STATIC)+=ouihash
 hostslib-y+=ouihash
 
+ouihash_PKGCONFIG:=ouistiti
+
 ifeq ($(findstring y,$(OPENSSL)$(WOLFSSL)$(MBEDTLS)), )
 ouihash_SOURCES:=hash_default.c
 endif

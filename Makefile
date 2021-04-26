@@ -1,6 +1,8 @@
 package?=libouistiti
 version=3.1
 
+pkgconfig-y+=ouistiti
+
 include scripts.mk
 
 ifeq ($(VTHREAD_TYPE),pthread)

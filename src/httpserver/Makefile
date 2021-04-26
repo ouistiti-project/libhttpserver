@@ -26,6 +26,7 @@ $(TARGET)_CFLAGS+=-I../../include/ouistiti
 # SERVER_DEFER_ACCEPT may protect the client connection from some exceptions.
 # But it still decrease the speed of the answers.
 $(TARGET)_CFLAGS+=-DSERVER_DEFER_ACCEPT
+$(TARGET)_PKGCONFIG:=ouistiti
 
 ifneq ($(MAX_SERVERS),)
 $(TARGET)_CFLAGS+=-DMAXSERVERS=$(MAX_SERVERS)
@@ -67,6 +68,7 @@ slib-$(SLIB_WEBSOCKET)+=ouibsocket
 hostslib-$(WEBSOCKET)+=ouibsocket
 ouibsocket_SOURCES+=websocket.c
 ouibsocket_CFLAGS+=-I../../include/ouistiti
+ouibsocket_PKGCONFIG:=ouistiti
 
 $(TARGET)_CFLAGS-$(DEBUG)+=-g -DDEBUG
 uri_CFLAGS-$(DEBUG)+=-g -DDEBUG
