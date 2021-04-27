@@ -130,6 +130,11 @@ static int BASE64_encode(const char *in, size_t inlen, char *out, size_t outlen)
 
 static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen)
 {
+	if (outlen < (inlen / 1.5) + 2)
+	{
+		err("base64: outlen to small for decoding");
+		return -1;
+	}
 	base64_decodestate decoder;
 	base64_init_decodestate(&decoder);
 	int cnt = base64_decode_block(in, inlen, out, &decoder);
