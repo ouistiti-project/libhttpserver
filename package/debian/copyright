@@ -1,3 +1,10 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Ouistiti
+Upstream-Contact: Marc Chalain <marc.chalain@gmail.com>
+Source: https://github.com/ouistiti-project/ouistiti
+
+Files: *
+
 Copyright: 2016-2021 Marc Chalain <marc.chalain@gmail.com>
 
 License: Expat
