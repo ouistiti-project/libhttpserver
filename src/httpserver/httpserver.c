@@ -81,7 +81,6 @@ struct http_server_mod_s
 	http_server_mod_t *next;
 };
 
-static int _httpclient_run(http_client_t *client);
 static void _http_addconnector(http_connector_list_t **first,
 						http_connector_t func, void *funcarg,
 						int priority, const char *name);
@@ -372,7 +371,7 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 					vthread_attr_t attr;
 					client->state &= ~CLIENT_STOPPED;
 					client->state |= CLIENT_STARTED;
-					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_thread, (void *)client, sizeof(*client));
+					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client));
 #ifndef SHARED_SOCKET
 					/**
 					 * To disallow the reception of SIGPIPE during the

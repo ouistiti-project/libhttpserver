@@ -67,7 +67,7 @@
 
 #define client_dbg(...)
 
-static int _httpclient_run(http_client_t *client);
+static int _httpclient_thread(http_client_t *client);
 static void _httpclient_destroy(http_client_t *client);
 
 http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol)
@@ -394,7 +394,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 #endif
 
 #ifdef VTHREAD
-int _httpclient_thread(http_client_t *client)
+int _httpclient_run(http_client_t *client)
 {
 	int ret;
 	httpclient_flag(client, 1, CLIENT_STARTED);
@@ -408,7 +408,7 @@ int _httpclient_thread(http_client_t *client)
 #endif
 	do
 	{
-		ret = _httpclient_run(client);
+		ret = _httpclient_thread(client);
 	} while(ret == ECONTINUE || ret == EINCOMPLETE);
 	/**
 	 * When the connector manages it-self the socket,
@@ -422,6 +422,13 @@ int _httpclient_thread(http_client_t *client)
 	fflush(stderr);
 #endif
 	return 0;
+}
+#else
+int _httpclient_run(http_client_t *client)
+{
+	int ret;
+	ret = _httpclient_thread(client);
+	return ret;
 }
 #endif
 
@@ -961,7 +968,7 @@ int httpclient_wait(http_client_t *client, int options)
  * @return ESUCCESS : The client is closed and the loop may stop.
  * ECONTINUE : The main loop must continue to run.
  */
-static int _httpclient_run(http_client_t *client)
+static int _httpclient_thread(http_client_t *client)
 {
 #ifdef DEBUG
 	struct timespec spec;
