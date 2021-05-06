@@ -557,9 +557,14 @@ static int _httpserver_run(http_server_t *server)
 		}
 		else if (nbselect < 0)
 		{
-			if (errno == EINTR || errno == EAGAIN)
+			if (errno == EINTR)
 			{
 				warn("server %p select error (%d, %s)", server, errno, strerror(errno));
+				errno = 0;
+				server->run = 0;
+			}
+			else if (errno == EAGAIN)
+			{
 				errno = 0;
 			}
 			/**
