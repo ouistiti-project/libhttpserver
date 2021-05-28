@@ -225,7 +225,6 @@ static int _httpserver_prepare(http_server_t *server)
 static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
 {
 	int ret = 0;
-	int run = 0;
 	http_client_t *client = server->clients;
 	while (client != NULL)
 	{
@@ -246,6 +245,7 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 					client->state |= CLIENT_STOPPED;
 				}
 			}
+			/** fcntl changes the value of errno **/
 			errno = EBADF;
 		}
 #endif
@@ -275,7 +275,6 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 					client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			while (run_ret == EINCOMPLETE && client->request_queue == NULL);
-			run++;
 		}
 
 		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
@@ -311,6 +310,7 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 			client = client->next;
 		}
 	}
+	warn("server: %d clients running", ret);
 
 	return ret;
 }
