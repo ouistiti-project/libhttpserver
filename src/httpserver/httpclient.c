@@ -533,15 +533,17 @@ static http_connector_list_t error_connector = {
  */
 static int _httpclient_message(http_client_t *client, http_message_t *request)
 {
-	/**
-	 * WAIT_ACCEPT does the first initialization
-	 * otherwise the return is EREJECT
-	 */
-	int timer = WAIT_TIMER * 3;
-	if (client->server->config->keepalive)
-		timer = client->server->config->keepalive;
-	client->timeout = timer * 100;
-
+	if (client->timeout == 0)
+	{
+		/**
+		 * WAIT_ACCEPT does the first initialization
+		 * otherwise the return is EREJECT
+		 */
+		int timer = WAIT_TIMER * 3;
+		if (client->server->config->keepalive)
+			timer = client->server->config->keepalive;
+		client->timeout = timer * 100;
+	}
 	int ret = _httpmessage_parserequest(request, client->sockdata);
 
 	if ((request->mode & HTTPMESSAGE_KEEPALIVE) &&
@@ -1084,6 +1086,7 @@ static int _httpclient_thread(http_client_t *client)
 	}
 	else if (recv_ret == EREJECT)
 	{
+		err("client: message in error");
 		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 		client->state |= CLIENT_ERROR;
 		return ECONTINUE;
@@ -1121,6 +1124,11 @@ static int _httpclient_thread(http_client_t *client)
 		break;
 		case EINCOMPLETE:
 		{
+#if 0
+			/**
+			 * this version may be faster, but it is impossible to trigg message
+			 * with a smaller Content than the Content-Length
+			 */
 			if (_buffer_empty(client->sockdata))
 			{
 				/**
@@ -1132,6 +1140,9 @@ static int _httpclient_thread(http_client_t *client)
 			{
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 			}
+#else
+			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+#endif
 		}
 		break;
 		case EREJECT:
