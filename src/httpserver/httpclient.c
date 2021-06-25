@@ -956,6 +956,28 @@ int httpclient_wait(http_client_t *client, int options)
 	return ret;
 }
 
+int _httpclient_geterror(http_client_t *client)
+{
+	/**
+	 * The request contains an syntax error and must be rejected
+	 */
+	if (client->request->response == NULL)
+		client->request->response = _httpmessage_create(client, client->request);
+
+	error_connector.arg = client;
+	client->request->connector = &error_connector;
+	_httpmessage_changestate(client->request->response, PARSE_CONTENT);
+	client->request->response->state |= PARSE_CONTINUE;
+	_httpmessage_changestate(client->request->response, GENERATE_ERROR);
+	/**
+	 * The format of the request is bad. It may be an attack.
+	 */
+	warn("bad request");
+	_httpmessage_changestate(client->request, PARSE_END);
+	client->request = NULL;
+	return ESUCCESS;
+}
+
 /**
  * @brief This function is the manager of the client's loop.
  *
@@ -1063,6 +1085,7 @@ static int _httpclient_thread(http_client_t *client)
 			/**
 			 * error on the connection
 			 */
+			_httpclient_geterror(client);
 			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			client->state |= CLIENT_ERROR;
 			return ECONTINUE;
@@ -1087,6 +1110,7 @@ static int _httpclient_thread(http_client_t *client)
 	else if (recv_ret == EREJECT)
 	{
 		err("client: message in error");
+		_httpclient_geterror(client);
 		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 		client->state |= CLIENT_ERROR;
 		return ECONTINUE;
@@ -1147,25 +1171,11 @@ static int _httpclient_thread(http_client_t *client)
 		break;
 		case EREJECT:
 		{
-			if (client->request->response == NULL)
-				client->request->response = _httpmessage_create(client, client->request);
+			_httpclient_geterror(client);
 
-			error_connector.arg = client;
-			client->request->connector = &error_connector;
-			_httpmessage_changestate(client->request->response, PARSE_CONTENT);
-			client->request->response->state |= PARSE_CONTINUE;
-			_httpmessage_changestate(client->request->response, GENERATE_ERROR);
-			/**
-			 * The format of the request is bad. It may be an attack.
-			 */
-			warn("bad request");
-			_httpmessage_changestate(client->request, PARSE_END);
-			/**
-			 * The request contains an syntax error and must be rejected
-			 */
 			client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+			client->state |= CLIENT_ERROR;
 			_buffer_reset(client->sockdata);
-			client->request = NULL;
 		}
 		break;
 		case ESUCCESS:
@@ -1249,6 +1259,11 @@ static int _httpclient_thread(http_client_t *client)
 					client_dbg("client: uncomplete");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
+				}
+				else if (client->state & CLIENT_ERROR)
+				{
+					client_dbg("client: error");
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else if (client->state & CLIENT_LOCKED)
 				{
