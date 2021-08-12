@@ -789,6 +789,18 @@ int httpserver_run(http_server_t *server)
 #endif
 }
 
+int httpserver_reloadclient(http_server_t *server, http_client_t *client)
+{
+	client->callbacks = NULL;
+	http_connector_list_t *callback = server->callbacks;
+	while (callback != NULL)
+	{
+		httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
+		callback = callback->next;
+	}
+	return EREJECT;
+}
+
 void httpserver_disconnect(http_server_t *server)
 {
 	server->run = 0;
