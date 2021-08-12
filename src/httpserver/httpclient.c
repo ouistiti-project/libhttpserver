@@ -67,7 +67,7 @@
 
 #define client_dbg(...)
 
-static int _httpclient_run(http_client_t *client);
+static int _httpclient_thread(http_client_t *client);
 static void _httpclient_destroy(http_client_t *client);
 
 http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol)
@@ -394,7 +394,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 #endif
 
 #ifdef VTHREAD
-int _httpclient_thread(http_client_t *client)
+int _httpclient_run(http_client_t *client)
 {
 	int ret;
 	httpclient_flag(client, 1, CLIENT_STARTED);
@@ -408,7 +408,7 @@ int _httpclient_thread(http_client_t *client)
 #endif
 	do
 	{
-		ret = _httpclient_run(client);
+		ret = _httpclient_thread(client);
 	} while(ret == ECONTINUE || ret == EINCOMPLETE);
 	/**
 	 * When the connector manages it-self the socket,
@@ -422,6 +422,13 @@ int _httpclient_thread(http_client_t *client)
 	fflush(stderr);
 #endif
 	return 0;
+}
+#else
+int _httpclient_run(http_client_t *client)
+{
+	int ret;
+	ret = _httpclient_thread(client);
+	return ret;
 }
 #endif
 
@@ -439,7 +446,9 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 {
 	int ret = ESUCCESS;
 	http_connector_list_t *iterator;
-	iterator = client->callbacks;
+	http_connector_list_t *first;
+	first = client->callbacks;
+	iterator = first;
 	while (iterator != NULL)
 	{
 		if (iterator->func)
@@ -459,6 +468,15 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 				}
 				request->connector = iterator;
 				break;
+			}
+			/**
+			 * check if the connectors' list wasn't relaoded
+			 */
+			else if (first != client->callbacks)
+			{
+				first = client->callbacks;
+				iterator = first;
+				continue;
 			}
 		}
 		iterator = iterator->next;
@@ -526,15 +544,17 @@ static http_connector_list_t error_connector = {
  */
 static int _httpclient_message(http_client_t *client, http_message_t *request)
 {
-	/**
-	 * WAIT_ACCEPT does the first initialization
-	 * otherwise the return is EREJECT
-	 */
-	int timer = WAIT_TIMER * 3;
-	if (client->server->config->keepalive)
-		timer = client->server->config->keepalive;
-	client->timeout = timer * 100;
-
+	if (client->timeout == 0)
+	{
+		/**
+		 * WAIT_ACCEPT does the first initialization
+		 * otherwise the return is EREJECT
+		 */
+		int timer = WAIT_TIMER * 3;
+		if (client->server->config->keepalive)
+			timer = client->server->config->keepalive;
+		client->timeout = timer * 100;
+	}
 	int ret = _httpmessage_parserequest(request, client->sockdata);
 
 	if ((request->mode & HTTPMESSAGE_KEEPALIVE) &&
@@ -947,6 +967,28 @@ int httpclient_wait(http_client_t *client, int options)
 	return ret;
 }
 
+int _httpclient_geterror(http_client_t *client)
+{
+	/**
+	 * The request contains an syntax error and must be rejected
+	 */
+	if (client->request->response == NULL)
+		client->request->response = _httpmessage_create(client, client->request);
+
+	error_connector.arg = client;
+	client->request->connector = &error_connector;
+	_httpmessage_changestate(client->request->response, PARSE_CONTENT);
+	client->request->response->state |= PARSE_CONTINUE;
+	_httpmessage_changestate(client->request->response, GENERATE_ERROR);
+	/**
+	 * The format of the request is bad. It may be an attack.
+	 */
+	warn("bad request");
+	_httpmessage_changestate(client->request, PARSE_END);
+	client->request = NULL;
+	return ESUCCESS;
+}
+
 /**
  * @brief This function is the manager of the client's loop.
  *
@@ -961,7 +1003,7 @@ int httpclient_wait(http_client_t *client, int options)
  * @return ESUCCESS : The client is closed and the loop may stop.
  * ECONTINUE : The main loop must continue to run.
  */
-static int _httpclient_run(http_client_t *client)
+static int _httpclient_thread(http_client_t *client)
 {
 #ifdef DEBUG
 	struct timespec spec;
@@ -1054,6 +1096,7 @@ static int _httpclient_run(http_client_t *client)
 			/**
 			 * error on the connection
 			 */
+			_httpclient_geterror(client);
 			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			client->state |= CLIENT_ERROR;
 			return ECONTINUE;
@@ -1077,6 +1120,8 @@ static int _httpclient_run(http_client_t *client)
 	}
 	else if (recv_ret == EREJECT)
 	{
+		err("client: message in error");
+		_httpclient_geterror(client);
 		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 		client->state |= CLIENT_ERROR;
 		return ECONTINUE;
@@ -1114,6 +1159,11 @@ static int _httpclient_run(http_client_t *client)
 		break;
 		case EINCOMPLETE:
 		{
+#if 0
+			/**
+			 * this version may be faster, but it is impossible to trigg message
+			 * with a smaller Content than the Content-Length
+			 */
 			if (_buffer_empty(client->sockdata))
 			{
 				/**
@@ -1125,29 +1175,18 @@ static int _httpclient_run(http_client_t *client)
 			{
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 			}
+#else
+			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+#endif
 		}
 		break;
 		case EREJECT:
 		{
-			if (client->request->response == NULL)
-				client->request->response = _httpmessage_create(client, client->request);
+			_httpclient_geterror(client);
 
-			error_connector.arg = client;
-			client->request->connector = &error_connector;
-			_httpmessage_changestate(client->request->response, PARSE_CONTENT);
-			client->request->response->state |= PARSE_CONTINUE;
-			_httpmessage_changestate(client->request->response, GENERATE_ERROR);
-			/**
-			 * The format of the request is bad. It may be an attack.
-			 */
-			warn("bad request");
-			_httpmessage_changestate(client->request, PARSE_END);
-			/**
-			 * The request contains an syntax error and must be rejected
-			 */
 			client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+			client->state |= CLIENT_ERROR;
 			_buffer_reset(client->sockdata);
-			client->request = NULL;
 		}
 		break;
 		case ESUCCESS:
@@ -1231,6 +1270,11 @@ static int _httpclient_run(http_client_t *client)
 					client_dbg("client: uncomplete");
 					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 					ret = EINCOMPLETE;
+				}
+				else if (client->state & CLIENT_ERROR)
+				{
+					client_dbg("client: error");
+					client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				}
 				else if (client->state & CLIENT_LOCKED)
 				{

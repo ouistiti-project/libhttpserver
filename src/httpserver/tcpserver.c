@@ -298,7 +298,7 @@ static int tcpclient_wait(void *ctl, int options)
 		else
 		{
 			client->timeout -= 100 * WAIT_TIMER;
-			if (client->timeout <  0)
+			if (client->timeout <=  0)
 				ret = EREJECT;
 			else
 				ret = EINCOMPLETE;

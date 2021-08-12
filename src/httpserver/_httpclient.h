@@ -87,13 +87,12 @@ struct http_client_s
 typedef struct http_client_s http_client_t;
 
 int httpclient_socket(http_client_t *client);
-#ifdef VTHREAD
-int _httpclient_thread(http_client_t *client);
-#endif
+int _httpclient_run(http_client_t *client);
 #ifdef HTTPCLIENT_FEATURES
 void httpclient_appendops(const httpclient_ops_t *ops);
 const httpclient_ops_t *httpclient_ops();
 int _httpclient_connect(http_client_t *client, const char *addr, int port);
+void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name);
 #endif
 
 #endif

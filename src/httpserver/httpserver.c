@@ -81,7 +81,6 @@ struct http_server_mod_s
 	http_server_mod_t *next;
 };
 
-static int _httpclient_run(http_client_t *client);
 static void _http_addconnector(http_connector_list_t **first,
 						http_connector_t func, void *funcarg,
 						int priority, const char *name);
@@ -226,7 +225,6 @@ static int _httpserver_prepare(http_server_t *server)
 static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
 {
 	int ret = 0;
-	int run = 0;
 	http_client_t *client = server->clients;
 	while (client != NULL)
 	{
@@ -247,6 +245,7 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 					client->state |= CLIENT_STOPPED;
 				}
 			}
+			/** fcntl changes the value of errno **/
 			errno = EBADF;
 		}
 #endif
@@ -276,7 +275,6 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 					client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 			}
 			while (run_ret == EINCOMPLETE && client->request_queue == NULL);
-			run++;
 		}
 
 		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
@@ -312,6 +310,7 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 			client = client->next;
 		}
 	}
+	warn("server: %d clients running", ret);
 
 	return ret;
 }
@@ -372,7 +371,7 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 					vthread_attr_t attr;
 					client->state &= ~CLIENT_STOPPED;
 					client->state |= CLIENT_STARTED;
-					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_thread, (void *)client, sizeof(*client));
+					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client));
 #ifndef SHARED_SOCKET
 					/**
 					 * To disallow the reception of SIGPIPE during the
@@ -558,9 +557,14 @@ static int _httpserver_run(http_server_t *server)
 		}
 		else if (nbselect < 0)
 		{
-			if (errno == EINTR || errno == EAGAIN)
+			if (errno == EINTR)
 			{
 				warn("server %p select error (%d, %s)", server, errno, strerror(errno));
+				errno = 0;
+				server->run = 0;
+			}
+			else if (errno == EAGAIN)
+			{
 				errno = 0;
 			}
 			/**
@@ -783,6 +787,18 @@ int httpserver_run(http_server_t *server)
 	pause();
 	return ECONTINUE;
 #endif
+}
+
+int httpserver_reloadclient(http_server_t *server, http_client_t *client)
+{
+	client->callbacks = NULL;
+	http_connector_list_t *callback = server->callbacks;
+	while (callback != NULL)
+	{
+		httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
+		callback = callback->next;
+	}
+	return EREJECT;
 }
 
 void httpserver_disconnect(http_server_t *server)
