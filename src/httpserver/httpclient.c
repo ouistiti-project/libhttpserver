@@ -446,7 +446,9 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 {
 	int ret = ESUCCESS;
 	http_connector_list_t *iterator;
-	iterator = client->callbacks;
+	http_connector_list_t *first;
+	first = client->callbacks;
+	iterator = first;
 	while (iterator != NULL)
 	{
 		if (iterator->func)
@@ -466,6 +468,15 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 				}
 				request->connector = iterator;
 				break;
+			}
+			/**
+			 * check if the connectors' list wasn't relaoded
+			 */
+			else if (first != client->callbacks)
+			{
+				first = client->callbacks;
+				iterator = first;
+				continue;
 			}
 		}
 		iterator = iterator->next;
