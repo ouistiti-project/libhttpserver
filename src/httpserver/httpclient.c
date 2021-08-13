@@ -166,6 +166,43 @@ void httpclient_addconnector(http_client_t *client, http_connector_t func, void 
 	_httpconnector_add(&client->callbacks, func, funcarg, priority, name);
 }
 
+int httpclient_addmodule(http_client_t *client, http_server_mod_t *mod)
+{
+	http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
+	if (modctx == NULL)
+		return EREJECT;
+	if (mod->func)
+	{
+		modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
+		if (modctx->ctx == NULL)
+		{
+			free(modctx);
+			return EREJECT;
+		}
+	}
+	modctx->freectx = mod->freectx;
+	modctx->name = mod->name;
+	modctx->next = client->modctx;
+	client->modctx = modctx;
+	return ESUCCESS;
+}
+
+void httpclient_freemodules(http_client_t *client)
+{
+	http_client_modctx_t *modctx = client->modctx;
+	while (modctx)
+	{
+		http_client_modctx_t *next = modctx->next;
+		if (modctx->freectx)
+		{
+			modctx->freectx(modctx->ctx);
+		}
+		free(modctx);
+		modctx = next;
+	}
+	client->modctx = NULL;
+}
+
 void *httpclient_context(http_client_t *client)
 {
 	void *ctx = NULL;
@@ -1052,24 +1089,7 @@ static int _httpclient_thread(http_client_t *client)
 			 * one is called by the vthread parent after that the client
 			 * died.
 			 */
-			http_client_modctx_t *modctx = client->modctx;
-			while (modctx)
-			{
-				http_client_modctx_t *next = modctx->next;
-				dbg("free module instance %s", modctx->name);
-				if (modctx->freectx)
-				{
-					/**
-					 * The module may be used by the locked client.
-					 * Example: it's forbidden to free TLS while the
-					 * client is running
-					 * But after is impossible to free the module.
-					 */
-					modctx->freectx(modctx->ctx);
-				}
-				free(modctx);
-				modctx = next;
-			}
+			httpclient_freemodules(client);
 			if (!(client->state & CLIENT_LOCKED))
 				client->ops->disconnect(client->opsctx);
 

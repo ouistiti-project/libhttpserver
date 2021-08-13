@@ -59,6 +59,15 @@ struct httpserver_ops_s
 
 typedef struct http_server_mod_s http_server_mod_t;
 
+struct http_server_mod_s
+{
+	void *arg;
+	const char *name;
+	http_getctx_t func;
+	http_freectx_t freectx;
+	http_server_mod_t *next;
+};
+
 struct http_server_s
 {
 	int sock;
