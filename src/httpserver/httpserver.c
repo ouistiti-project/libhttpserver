@@ -761,6 +761,8 @@ int httpserver_run(http_server_t *server)
 int httpserver_reloadclient(http_server_t *server, http_client_t *client)
 {
 	client->callbacks = NULL;
+	httpclient_freemodules(client);
+	_httpserver_setmod(server, client);
 	http_connector_list_t *callback = server->callbacks;
 	while (callback != NULL)
 	{
