@@ -212,8 +212,9 @@ EXPORT_SYMBOL void httpclient_appendops(const httpclient_ops_t *ops);
  *  EINCOMPLETE for content not ready and need to be called again.
  */
 typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message_t *response);
-#define CONNECTOR_FILTER		0
-#define CONNECTOR_AUTH			1
+#define CONNECTOR_SERVER		0
+#define CONNECTOR_FILTER		1
+#define CONNECTOR_AUTH			2
 #define CONNECTOR_DOCFILTER		4
 #define CONNECTOR_DOCUMENT		5
 #define CONNECTOR_ERROR			10
