@@ -53,13 +53,10 @@
 #include "_buffer.h"
 #include "dbentry.h"
 
-#ifndef HTTPMESSAGE_CHUNKSIZE
-#define HTTPMESSAGE_CHUNKSIZE 64
-#endif
-
 #define buffer_dbg(...)
 
 #define BUFFERMAX 2048
+
 static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
 /**
  * the chunksize has to be constant during the life of the application.

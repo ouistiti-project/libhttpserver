@@ -46,36 +46,6 @@ extern "C"
 #ifndef DEFAULT_MAXCLIENTS
 #define DEFAULT_MAXCLIENTS 10
 #endif
-#ifndef DEFAULT_CHUNKSIZE
-#define DEFAULT_CHUNKSIZE 64
-#endif
-/**
- * MAXCHUNKS defines the maximum number of memory chunk which may be allocated
- * The size of the chunks is configurable with the server (see chunksize).
- *
- * The header may be large in some cases like POST multipart/form-data messages.
- * But it could be an attack by memory overflow. The value of MAXCHUNKS_HEADER
- * has to be correctly set (4 is to small, 8 seems to large for embeded target)
- *
- * The content may be larger than 3 chunks. But httpserver send chunk by chunk
- * the content. It may exist one case, it is a module (not of the currently modules
- * available) which want to way the end of the content before to send.
- * This may be done with a connector which returns EINCOMPLETE.
- * If a new module uses this feature and needs more than 3 chunk before
- * to send, the value MAXCHUNKS_CONTENT has to be increased.
- */
-#ifndef MAXCHUNKS_HEADER
-#define MAXCHUNKS_HEADER  12
-#endif
-#ifndef MAXCHUNKS_CONTENT
-#define MAXCHUNKS_CONTENT 3
-#endif
-#ifndef MAXCHUNKS_SESSION
-#define MAXCHUNKS_SESSION 2
-#endif
-#ifndef MAXCHUNKS_URI
-#define MAXCHUNKS_URI 2
-#endif
 
 #define ESUCCESS 0
 #define EINCOMPLETE -1
