@@ -908,5 +908,10 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 		}
 #endif
 	}
+	else if (!strcasecmp(key, "chunksize"))
+	{
+		snprintf(service, 8, "%.7u", server->config->chunksize);
+		value = service;
+	}
 	return value;
 }
