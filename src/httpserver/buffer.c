@@ -91,6 +91,14 @@ int _buffer_chunksize(int new)
 	return ChunkSize;
 }
 
+int _buffer_accept(buffer_t *buffer, int length)
+{
+	if ((buffer->data + buffer->size < buffer->offset + length) &&
+		(buffer->maxchunks * ChunkSize < length))
+		return EREJECT;
+	return ESUCCESS;
+}
+
 char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
 	if (length == -1)
