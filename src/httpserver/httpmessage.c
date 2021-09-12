@@ -1004,10 +1004,10 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 		char content_length[32];
 		snprintf(content_length, 31, "%llu",  message->content_length);
 		httpmessage_addheader(message, str_contentlength, content_length);
-		if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
-		{
-			httpmessage_addheader(message, str_connection, "Keep-Alive");
-		}
+	}
+	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
+	{
+		httpmessage_addheader(message, str_connection, "Keep-Alive");
 	}
 	else
 	{
@@ -1173,10 +1173,19 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 	{
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 	}
-	_buffer_append(message->headers_storage, key, strlen(key));
-	_buffer_append(message->headers_storage, ": ", 2);
-	_buffer_append(message->headers_storage, value, strlen(value));
-	_buffer_append(message->headers_storage, "\r\n", 2);
+	int keylen = strlen(key);
+	int valuelen = strlen(value);
+	if (_buffer_accept(message->headers_storage, keylen + 2 + valuelen + 2) == ESUCCESS)
+	{
+		_buffer_append(message->headers_storage, key, keylen);
+		_buffer_append(message->headers_storage, ": ", 2);
+		_buffer_append(message->headers_storage, value, valuelen);
+		_buffer_append(message->headers_storage, "\r\n", 2);
+	}
+	else
+	{
+		err("message: buffer too small to add %s", key);
+	}
 }
 
 int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...)
@@ -1185,11 +1194,17 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 	{
 		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
 	}
+	/**
+	 * check the key of the current header
+	 */
 	const char *end = message->headers_storage->offset - 2;
 	while (*end != '\n' && end >= message->headers_storage->data ) end--;
 	int length = strlen(key);
 	if (strncmp(end + 1, key, length))
 		return EREJECT;
+	/**
+	 * remove the ending \r\n of the previous header
+	 */
 	_buffer_pop(message->headers_storage, 2);
 #ifdef USE_STDARG
 	va_list ap;
@@ -1197,11 +1212,17 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 	while (value != NULL)
 	{
 #endif
-		_buffer_append(message->headers_storage, value, strlen(value));
+		if (_buffer_append(message->headers_storage, value, strlen(value)) == NULL)
 #ifdef USE_STDARG
+		{
+			break;
+		}
 		value = va_arg(ap, const char *);
 	}
 	va_end(ap);
+#else
+		{
+		}
 #endif
 	_buffer_append(message->headers_storage, "\r\n", 2);
 	return ESUCCESS;
