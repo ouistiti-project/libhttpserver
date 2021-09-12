@@ -273,6 +273,18 @@ int _httpmessage_contentempty(http_message_t *message, int unset)
 	return (message->content_length == 0);
 }
 
+static int _httpmesssage_parsefailed(http_message_t *message)
+{
+	message->version = httpclient_server(message->client)->config->version;
+#ifdef RESULT_414
+	message->result = RESULT_414;
+#else
+	message->result = RESULT_400;
+#endif
+
+	return PARSE_END;
+}
+
 static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_INIT;
@@ -401,14 +413,8 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 		uri = _buffer_append(message->uri, uri, length);
 		if (uri == NULL)
 		{
-			message->version = httpclient_server(message->client)->config->version;
-#ifdef RESULT_414
-			message->result = RESULT_414;
-#else
-			message->result = RESULT_400;
-#endif
-			next = PARSE_END;
-			err("parse reject uri too long : %s %s", message->uri->data, data->data);
+			next = _httpmesssage_parsefailed(message);
+			err("message: reject uri too long : %s %s", message->uri->data, data->data);
 		}
 		next &= ~PARSE_CONTINUE;
 	}
@@ -445,9 +451,8 @@ static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
 		}
 		else
 		{
-			message->result = RESULT_400;
-			next = PARSE_END;
-			err("parse reject uri : %s %s", message->uri->data, data->data);
+			next = _httpmesssage_parsefailed(message);
+			err("message: reject uri : %s %s", message->uri->data, data->data);
 		}
 		encoded ++;
 	}
@@ -584,9 +589,8 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 	}
 	if (i == HTTPVERSIONS)
 	{
-		next = PARSE_END;
-		message->result = RESULT_400;
-		err("request bad protocol version %s", version);
+		next = _httpmesssage_parsefailed(message);
+		err("message: bad protocol version %s", version);
 	}
 	return next;
 }
@@ -611,9 +615,8 @@ static int _httpmessage_parsepreheader(http_message_t *message, buffer_t *data)
 	}
 	else if (message->uri == NULL)
 	{
-		message->result = RESULT_400;
-		next = PARSE_END;
-		err("parse reject URI bad formatting: %s", data->data);
+		next = _httpmesssage_parsefailed(message);
+		err("message: reject URI bad formatting: %s", data->data);
 	}
 	if (message->query != NULL)
 	{
@@ -653,10 +656,17 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 			else
 			{
 				header[length] = '\0';
-				_buffer_append(message->headers_storage, header, length + 1);
-				header = data->offset + 1;
-				length = 0;
-				message->state &= ~PARSE_CONTINUE;
+				if (_buffer_append(message->headers_storage, header, length + 1) != NULL)
+				{
+					header = data->offset + 1;
+					length = 0;
+					message->state &= ~PARSE_CONTINUE;
+				}
+				else
+				{
+					next = _httpmesssage_parsefailed(message);
+					err("message: header too long!!!");
+				}
 			}
 			}
 			break;
@@ -687,9 +697,8 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 	_buffer_append(message->headers_storage, "\0", 1);
 	if (_httpmessage_fillheaderdb(message) != ESUCCESS)
 	{
-		next = PARSE_END;
-		message->result = RESULT_400;
-		err("request bad header %s", message->headers_storage->data);
+		next = _httpmesssage_parsefailed(message);
+		err("message: request bad header %s", message->headers_storage->data);
 	}
 	else
 	{
@@ -740,7 +749,10 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	{
 		int nbchunks = (length / _buffer_chunksize(-1) ) + 1;
 		message->query_storage = _buffer_create(nbchunks);
-		_buffer_append(message->query_storage, message->query, -1);
+		if (_buffer_append(message->query_storage, message->query, -1) == NULL)
+		{
+			next = _httpmesssage_parsefailed(message);
+		}
 	}
 	return next;
 }
