@@ -429,8 +429,10 @@ EXPORT_SYMBOL http_client_t * httpmessage_request(http_message_t *message, const
  * @param message the response message to update
  * @param key the name of the header to set
  * @param value the value to set
+ *
+ * @result ESUCCESS or EREJECT if not enough memory
  */
-EXPORT_SYMBOL void httpmessage_addheader(http_message_t *message, const char *key, const char *value);
+EXPORT_SYMBOL int httpmessage_addheader(http_message_t *message, const char *key, const char *value);
 
 /**
  * @brief apend the last header of the response message

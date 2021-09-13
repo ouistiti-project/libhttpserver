@@ -276,11 +276,22 @@ int _httpmessage_contentempty(http_message_t *message, int unset)
 static int _httpmesssage_parsefailed(http_message_t *message)
 {
 	message->version = httpclient_server(message->client)->config->version;
-#ifdef RESULT_414
-	message->result = RESULT_414;
-#else
-	message->result = RESULT_400;
+	switch (message->state  & PARSE_MASK)
+	{
+#ifdef RESULT_405
+	case PARSE_INIT:
+		message->result = RESULT_405;
+	break;
 #endif
+#ifdef RESULT_414
+	case PARSE_URI:
+		message->result = RESULT_414;
+	break;
+#endif
+	default:
+		message->result = RESULT_400;
+	break;
+	}
 
 	return PARSE_END;
 }
@@ -313,9 +324,7 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 	{
 		err("parse reject method %s", data->offset);
 		data->offset++;
-		message->version = httpclient_server(message->client)->config->version;
-		message->result = RESULT_405;
-		next = PARSE_END;
+		next = _httpmesssage_parsefailed(message);
 	}
 	return next;
 }
@@ -1167,7 +1176,7 @@ int _httpmessage_runconnector(http_message_t *request, http_message_t *response)
 	return ret;
 }
 
-void httpmessage_addheader(http_message_t *message, const char *key, const char *value)
+int httpmessage_addheader(http_message_t *message, const char *key, const char *value)
 {
 	if (message->headers_storage == NULL)
 	{
@@ -1185,7 +1194,9 @@ void httpmessage_addheader(http_message_t *message, const char *key, const char 
 	else
 	{
 		err("message: buffer too small to add %s", key);
+		return EREJECT;
 	}
+	return ESUCCESS;
 }
 
 int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...)
