@@ -1006,6 +1006,8 @@ int httpclient_wait(http_client_t *client, int options)
 
 int _httpclient_geterror(http_client_t *client)
 {
+	if (client->request == NULL)
+		return EREJECT;
 	/**
 	 * The request contains an syntax error and must be rejected
 	 */
