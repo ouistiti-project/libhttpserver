@@ -72,15 +72,6 @@
 
 extern httpserver_ops_t *httpserver_ops;
 
-struct http_server_mod_s
-{
-	void *arg;
-	const char *name;
-	http_getctx_t func;
-	http_freectx_t freectx;
-	http_server_mod_t *next;
-};
-
 static void _http_addconnector(http_connector_list_t **first,
 						http_connector_t func, void *funcarg,
 						int priority, const char *name);
@@ -111,32 +102,10 @@ static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 {
 	int ret = ESUCCESS;
 	http_server_mod_t *mod = server->mod;
-	http_client_modctx_t *currentctx = client->modctx;
 	while (mod)
 	{
-		http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
-		if (modctx == NULL)
-		{
-			ret = EREJECT;
-			break;
-		}
-		dbg("new module instance %s", mod->name);
-		if (mod->func)
-		{
-			modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
-			if (modctx->ctx == NULL)
-				ret = EREJECT;
-		}
-		modctx->freectx = mod->freectx;
-		modctx->name = mod->name;
+		ret = httpclient_addmodule(client, mod);
 		mod = mod->next;
-		if (client->modctx == NULL)
-			client->modctx = modctx;
-		else
-		{
-			currentctx->next = modctx;
-		}
-		currentctx = modctx;
 	}
 	return ret;
 }
@@ -792,6 +761,8 @@ int httpserver_run(http_server_t *server)
 int httpserver_reloadclient(http_server_t *server, http_client_t *client)
 {
 	client->callbacks = NULL;
+	httpclient_freemodules(client);
+	_httpserver_setmod(server, client);
 	http_connector_list_t *callback = server->callbacks;
 	while (callback != NULL)
 	{
@@ -936,6 +907,11 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 			value = service;
 		}
 #endif
+	}
+	else if (!strcasecmp(key, "chunksize"))
+	{
+		snprintf(service, 8, "%.7u", server->config->chunksize);
+		value = service;
 	}
 	return value;
 }

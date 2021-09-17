@@ -92,7 +92,8 @@ int _httpclient_run(http_client_t *client);
 void httpclient_appendops(const httpclient_ops_t *ops);
 const httpclient_ops_t *httpclient_ops();
 int _httpclient_connect(http_client_t *client, const char *addr, int port);
-void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name);
 #endif
+int httpclient_addmodule(http_client_t *client, http_server_mod_t *mod);
+void httpclient_freemodules(http_client_t *client);
 
 #endif

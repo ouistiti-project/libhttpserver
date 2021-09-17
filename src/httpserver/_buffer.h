@@ -40,6 +40,7 @@ struct buffer_s
 
 buffer_t * _buffer_create(int maxchunks);
 int _buffer_chunksize(int new);
+int _buffer_accept(buffer_t *buffer, int length);
 char *_buffer_append(buffer_t *buffer, const char *data, int length);
 char *_buffer_pop(buffer_t *buffer, int length);
 void _buffer_shrink(buffer_t *buffer, int reset);

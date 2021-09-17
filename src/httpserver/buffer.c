@@ -53,13 +53,8 @@
 #include "_buffer.h"
 #include "dbentry.h"
 
-#ifndef HTTPMESSAGE_CHUNKSIZE
-#define HTTPMESSAGE_CHUNKSIZE 64
-#endif
-
 #define buffer_dbg(...)
 
-#define BUFFERMAX 2048
 static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
 /**
  * the chunksize has to be constant during the life of the application.
@@ -83,7 +78,7 @@ buffer_t * _buffer_create(int maxchunks)
 		free(buffer);
 		return NULL;
 	}
-	buffer->maxchunks = maxchunks;
+	buffer->maxchunks = maxchunks - 1;
 	buffer->size = ChunkSize + 1;
 	buffer->offset = buffer->data;
 	return buffer;
@@ -96,6 +91,14 @@ int _buffer_chunksize(int new)
 	return ChunkSize;
 }
 
+int _buffer_accept(buffer_t *buffer, int length)
+{
+	if ((buffer->data + buffer->size < buffer->offset + length) &&
+		(buffer->maxchunks * ChunkSize < length))
+		return EREJECT;
+	return ESUCCESS;
+}
+
 char *_buffer_append(buffer_t *buffer, const char *data, int length)
 {
 	if (length == -1)
@@ -106,29 +109,29 @@ char *_buffer_append(buffer_t *buffer, const char *data, int length)
 	if (buffer->data + buffer->size < buffer->offset + length)
 	{
 		int nbchunks = (length / ChunkSize) + 1;
-		if (buffer->maxchunks - nbchunks < 0)
+		if (buffer->maxchunks > -1 && buffer->maxchunks - nbchunks < 0)
 			nbchunks = buffer->maxchunks;
 		int chunksize = ChunkSize * nbchunks;
 
 		if (chunksize == 0)
 		{
-			warn("buffer max chunk: %d", buffer->size / ChunkSize);
+			err("buffer: max chunk: %d", buffer->size / ChunkSize);
 			return NULL;
 		}
 
-		buffer->maxchunks -= nbchunks;
-		if ((buffer->size + chunksize) > BUFFERMAX)
-		{
-			warn("buffer max: %d / %d", buffer->size + chunksize, BUFFERMAX);
-			return NULL;
-		}
 		char *newptr = vrealloc(buffer->data, buffer->size + chunksize);
 		if (newptr == NULL)
 		{
 			buffer->maxchunks = 0;
-			warn("buffer out memory: %d", buffer->size + chunksize);
+			warn("buffer: memory allocation error");
+		}
+		if (buffer->maxchunks == 0)
+		{
+			err("buffer: out memory block: %d", buffer->size + chunksize);
 			return NULL;
 		}
+		if (buffer->maxchunks > -1)
+			buffer->maxchunks -= nbchunks;
 		buffer->size += chunksize;
 		if (newptr != buffer->data)
 		{
