@@ -8,7 +8,7 @@ RPMDIR?=$(HOME)
 .PHONY: FORCE
 
 debian: FORCE
-	@debuild --no-sign
+	@dpkg-buildpackage --no-sign
 
 $(RPMDIR)/rpmbuild/SOURCES:
 	@mkdir -p $@
