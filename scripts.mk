@@ -64,13 +64,15 @@ CONFIGFILE?=$(builddir)config.h
 DEFCONFIG?=$(srcdir)defconfig
 CONFIG:=$(builddir).config
 
--include $(CONFIG)
 ifneq ($(wildcard $(CONFIG)),)
+  include $(CONFIG)
 # define all unset variable as variable defined as n
-$(foreach config,$(shell cat $(CONFIG) | awk '/^. .* is not set/{print $$2}'),$(eval $(config)=n))
+  $(foreach config,$(shell cat $(CONFIG) | awk '/^. .* is not set/{print $$2}'),$(eval $(config)=n))
 endif
 PATHCACHE=$(builddir).pathcache
-include $(PATHCACHE)
+ifneq ($(wildcard $(PATHCACHE)),)
+  include $(PATHCACHE)
+endif
 
 ifneq ($(file),)
   include $(file)
@@ -162,7 +164,9 @@ TARGETGCOV:=$(TARGETPREFIX)$(GCOV)
 
 ARCH?=$(shell LANG=C $(TARGETCC) -dumpmachine | awk -F- '{print $$1}')
 libsuffix?=/$(shell $(TARGETCC) -dumpmachine)
+ifeq ($(CC),gcc)
 SYSROOT=$(shell $(TARGETCC) -print-sysroot)
+endif
 
 ifneq ($(SYSROOT),)
 sysroot:=$(patsubst "%",%,$(SYSROOT:%/=%)/)
@@ -810,7 +814,7 @@ $(pkgconfig-target): $(builddir)%.pc:$(builddir).%.pc.in
 	@$(call cmd,generate_pkgconfig)
 
 
-.PHONY: menuconfig gconfig xconfig config oldconfig saveconfig defconfig FORCE
+.PHONY: menuconfig gconfig xconfig config oldconfig _oldconfig saveconfig defconfig FORCE
 menuconfig gconfig xconfig config:
 	$(EDITOR) $(CONFIG)
 
@@ -857,7 +861,6 @@ defconfig: _info cleanconfig FORCE
 quiet_cmd__saveconfig=DEFCONFIG $(notdir $(DEFCONFIG))
 cmd__saveconfig=printf "$(strip $(foreach config,$(CONFIGS),$(config)=$($(config))\n))" > $(CONFIG)
 
-# FIXME: PATHCACHE has not to be FORCEd
 $(PATHCACHE):
 	@printf "$(strip $(foreach config,$(PATHES),$(config)=$($(config))\n))" > $@
 

@@ -5,14 +5,13 @@ DESTDIR := $(PWD)/debian/tmp
 SRCDIR := ..
 
 MAKE_OPTIONS := package=ouistiti
-CONFIG_OPTIONS := prefix=/usr libdir=/usr/lib/$(shell gcc -dumpmachine) LIBURI=n
+CONFIG_OPTIONS := prefix=/usr libdir=/usr/lib/$(shell gcc -dumpmachine) LIBURI=n OPENSSL=y MBEDTLS=n
 %:
 	dh $@
 
 .PHONY: configure
 override_dh_auto_configure:
-	$(MAKE) -C $(SRCDIR) defconfig
-	$(MAKE) -C $(SRCDIR) $(CONFIG_OPTIONS) $(MAKE_OPTIONS) oldconfig
+	$(MAKE) -C $(SRCDIR) $(CONFIG_OPTIONS) $(MAKE_OPTIONS) defconfig
 
 override_dh_auto_build-arch:
 	$(MAKE) -C $(SRCDIR) $(MAKE_OPTIONS)
