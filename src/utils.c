@@ -250,11 +250,11 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 				// lowercase
 				if (ignore_case && hay > 0x40 && hay < 0x5b)
 					hay += 0x20;
+				char lneedle = *needle;
+				if (ignore_case && lneedle > 0x40 && lneedle < 0x5b)
+					lneedle += 0x20;
 				if (wildcard == NULL)
 				{
-					char lneedle = *needle;
-					if (ignore_case && lneedle > 0x40 && lneedle < 0x5b)
-						lneedle += 0x20;
 					if (lneedle != hay)
 					{
 						utils_dbg("end of needle %c, hay %c",lneedle, hay);
@@ -270,9 +270,6 @@ static int _utils_searchexp(const char *haystack, const char *needleslist, int i
 				}
 				else
 				{
-					char lneedle = *needle;
-					if (ignore_case && lneedle > 0x40 && lneedle < 0x5b)
-						lneedle += 0x20;
 					needle_entry = needle;
 					ret = ESUCCESS;
 					if (hay != '\0' && lneedle == hay)
