@@ -409,7 +409,21 @@ const char *cookie_get(http_message_t *request, const char *key)
 	cookie = httpmessage_REQUEST(request, str_Cookie);
 	if (cookie != NULL)
 	{
-		value = strstr(cookie, key);
+		key = strstr(cookie, key);
+		const char *end = cookie + strlen(cookie);
+		const char *value = key;
+		if (key != NULL)
+		{
+			while (value[0] != '\0' )
+			{
+				if (value[0] == ';')
+					value = end;
+				else if (value[0] == '=')
+					break;
+				else
+					value++;
+			}
+		}
 	}
 	return value;
 }
