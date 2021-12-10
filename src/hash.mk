@@ -55,11 +55,11 @@ endif
 
 # reinitialization of VARIABLES if OPENSSL
 ouihash_SOURCES-$(OPENSSL):=hash_openssl.c
-ouihash_LIBS-$(OPENSSL):=crypto
+ouihash_LIBRARY-$(OPENSSL):=libcrypto
 
 # reinitialization of VARIABLES if WOLFSSL
 ouihash_SOURCES-$(WOLFSSL):=hash_wolfssl.c
-ouihash_LIBS-$(WOLFSSL):=wolfssl
+ouihash_LIBRARY-$(WOLFSSL):=wolfssl
 
 # reinitialization of VARIABLES if MBEDTLS
 ouihash_SOURCES-$(MBEDTLS):=hash_mbedtls.c
