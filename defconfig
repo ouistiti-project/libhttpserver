@@ -37,11 +37,6 @@ LIBB64=y
 
 LIBUTILS=y
 
-#LIBB64_VERSION=1.2.1
-LIBB64_DIR=$(srcdir)src/libb64$(LIBB64_VERSION:%=-%)
-LIBMD5_DIR=$(srcdir)src/md5-c
-LIBSHA1_DIR=$(srcdir)src/libsha1
-
 USE_STDARG=y
 USE_PTHREAD=n
 USE_POLL=y
