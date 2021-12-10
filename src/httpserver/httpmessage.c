@@ -652,8 +652,8 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 	{
 		switch (*data->offset)
 		{
-			case '\n':
-			{
+		case '\n':
+		{
 			/**
 			 * Empty Header line defines the end of the header and
 			 * the beginning fo the content.
@@ -677,12 +677,12 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 					err("message: header too long!!!");
 				}
 			}
-			}
-			break;
-			case '\r':
-			break;
-			default:
-				length++;
+		}
+		break;
+		case '\r':
+		break;
+		default:
+			length++;
 		}
 		data->offset++;
 	}

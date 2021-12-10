@@ -386,7 +386,7 @@ static void tcpclient_disconnect(void *ctl)
 		 * The real closing is done outside.
 		 */
 		shutdown(client->sock, SHUT_RDWR);
-		warn("client %p shutdown", client);
+		dbg("tcpclient: %p shutdown", client);
 	}
 }
 
@@ -401,7 +401,7 @@ static void tcpclient_destroy(void *ctl)
 		 * The socket must be close to free the
 		 * file descriptor of the kernel.
 		 */
-		warn("client %p close", client);
+		dbg("tcpclient: %p close", client);
 #ifndef WIN32
 		close(client->sock);
 #else
@@ -558,7 +558,7 @@ static int _tcpserver_start(http_server_t *server)
 			err("Error bind/listen port %d : %s", server->config->port, strerror(errno));
 		return -1;
 	}
-	warn("socket started on port %d", server->config->port);
+	warn("tcpserver: socket started on port %d", server->config->port);
 	int flags;
 	flags = fcntl(server->sock, F_GETFL, 0);
 	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);
@@ -587,7 +587,7 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 		rc = 0;
 #endif
 		if (rc == 0)
-			warn("new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
+			warn("tcpserver: new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
 #ifndef BLOCK_SOCKET
 		int flags;
 		flags = fcntl(httpclient_socket(client), F_GETFL, 0);
@@ -615,7 +615,7 @@ static void _tcpserver_close(http_server_t *server)
 	{
 		shutdown(server->sock, SHUT_RDWR);
 	}
-	warn("server %p close", server);
+	warn("tcpserver: %p close", server);
 	server->sock = -1;
 #ifdef WIN32
 	WSACleanup();
