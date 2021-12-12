@@ -453,7 +453,7 @@ int _httpclient_run(http_client_t *client)
 	 * Be careful to not add action on the socket after this point
 	 */
 	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-	warn("client %p thread exit", client);
+	dbg("client: %p thread exit", client);
 	httpclient_destroy(client);
 #ifdef DEBUG
 	fflush(stderr);
@@ -597,7 +597,7 @@ static int _httpclient_message(http_client_t *client, http_message_t *request)
 	if ((request->mode & HTTPMESSAGE_KEEPALIVE) &&
 		(request->version > HTTP10))
 	{
-		warn("request: set keep-alive");
+		dbg("client: set keep-alive");
 		httpclient_flag(client, 0, CLIENT_KEEPALIVE);
 	}
 	return ret;
@@ -967,7 +967,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			const char *name = "server";
 			if (callback)
 				name = callback->name;
-			warn("response to %p from connector \"%s\" result %d", client, name, request->response->result);
+			warn("client: %p response from connector \"%s\" result %d", client, name, request->response->result);
 			ret = ESUCCESS;
 		}
 		break;
@@ -1022,7 +1022,7 @@ int _httpclient_geterror(http_client_t *client)
 	/**
 	 * The format of the request is bad. It may be an attack.
 	 */
-	warn("bad request");
+	warn("client: bad request");
 	_httpmessage_changestate(client->request, PARSE_END);
 	client->request = NULL;
 	return ESUCCESS;
@@ -1283,7 +1283,7 @@ static int _httpclient_thread(http_client_t *client)
 				ret = ECONTINUE;
 				if (_httpmessage_contentempty(response, 1))
 				{
-					warn("client: disable keep alive (Content-Length is not set)");
+					dbg("client: disable keep alive (Content-Length is not set)");
 					client->state &= ~CLIENT_KEEPALIVE;
 				}
 
@@ -1325,7 +1325,7 @@ static int _httpclient_thread(http_client_t *client)
 				 * In this case the client keeps the request until the connection
 				 * is closed
 				 */
-				warn("client: response complete");
+				dbg("client: response complete");
 				client->request_queue = request->next;
 				_httpmessage_destroy(request);
 				return ret;
