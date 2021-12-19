@@ -1,3 +1,8 @@
+libouistiti (3.2.1-1) stable; urgency=low
+
+  * new message state engine
+
+ -- Marc Chalain <marc.chalain@gmail.com>  Sun, 12 Dec 2021 23:01:01 +0100
 libouistiti (3.1-1) unstable; urgency=low
 
   * Move HEADERS files to ouistiti directory
