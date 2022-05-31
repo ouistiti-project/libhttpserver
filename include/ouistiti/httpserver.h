@@ -224,7 +224,7 @@ typedef struct http_server_config_s
 	/** the version of the HTTP server. */
 	http_message_version_e version;
 	const char *versionstr;
-	/** the keepalive timeout **/
+	/** the keepalive timeout in seconds **/
 	int keepalive;
 } http_server_config_t;
 
