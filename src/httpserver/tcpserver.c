@@ -559,7 +559,7 @@ static int _tcpserver_start(http_server_t *server)
 			err("Error bind/listen port %d : %s", server->config->port, strerror(errno));
 		return -1;
 	}
-	warn("tcpserver: socket started on port %d", server->config->port);
+	dbg("tcpserver: socket started on port %d", server->config->port);
 	int flags;
 	flags = fcntl(server->sock, F_GETFL, 0);
 	fcntl(server->sock, F_SETFL, flags | O_NONBLOCK);
