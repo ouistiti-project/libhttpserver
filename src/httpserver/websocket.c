@@ -155,7 +155,7 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 				if (frame.fin)
 				{
 					out[payloadlen] = 0;
-					ret++;
+					//ret++;
 				}
 			}
 			case fo_binary:
@@ -214,8 +214,9 @@ int websocket_framed(int type, char *in, int inlength, char *out, int *outlength
 */
 	if (type == WS_AUTO)
 	{
-		if ((in[inlength - 1] == '\0' && strlen(in) == inlength - 1)
-			|| (in[inlength] == '\0' && strlen(in) == inlength))
+		int tlen = strlen(in);
+		if ((in[inlength - 1] == '\0' && tlen == inlength - 1)
+			|| (in[inlength] == '\0' && tlen == inlength))
 			type = WS_TEXT;
 		else
 			type = WS_BLOB;
@@ -223,12 +224,15 @@ int websocket_framed(int type, char *in, int inlength, char *out, int *outlength
 	length = inlength;
 	if (type == WS_TEXT)
 	{
+		dbg("websocket: type TEXT");
 		frame.opcode = fo_text;
-		length = strlen(in);
+		//length = strlen(in);
 	}
 	else
+	{
 		frame.opcode = fo_binary;
-
+		dbg("websocket: type BINARY");
+	}
 	frame.mask = 0;
 
 	if (_config->mtu)

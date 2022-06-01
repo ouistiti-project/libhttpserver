@@ -76,6 +76,13 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 	if (client == NULL)
 		return NULL;
 	client->server = server;
+	client->ops = fops;
+	client->opsctx = client->ops->create(protocol, client);
+	if (client->opsctx == NULL)
+	{
+		vfree(client);
+		return NULL;
+	}
 
 	if (server)
 	{
@@ -86,16 +93,11 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 			callback = callback->next;
 		}
 	}
-	client->ops = fops;
-	client->opsctx = client->ops->create(protocol, client);
 	client->client_send = client->ops->sendresp;
 	client->client_recv = client->ops->recvreq;
 	client->send_arg = client->opsctx;
 	client->recv_arg = client->opsctx;
-	if (client->opsctx != NULL)
-	{
-		client->sockdata = _buffer_create(1);
-	}
+	client->sockdata = _buffer_create(1);
 	if (client->sockdata == NULL)
 	{
 		_httpclient_destroy(client);
@@ -549,7 +551,6 @@ static int _httpclient_error_connector(void *arg, http_message_t *request, http_
 {
 	if (request->response->result == RESULT_200)
 		request->response->result = RESULT_404;
-	dbg("error connector");
 	_httpclient_checkconnector(arg, request, response, CONNECTOR_ERROR);
 	_httpmessage_changestate(response, PARSE_END);
 	return ESUCCESS;
