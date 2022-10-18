@@ -115,3 +115,8 @@ void vthread_yield(vthread_t thread)
 	sched_yield();
 #endif
 }
+
+int vthread_self(vthread_t thread)
+{
+	return pthread_self();
+}

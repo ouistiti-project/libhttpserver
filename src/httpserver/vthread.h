@@ -29,4 +29,6 @@ int vthread_exist(vthread_t thread);
 
 void vthread_yield(vthread_t thread);
 
+int vthread_self(vthread_t thread);
+
 #endif

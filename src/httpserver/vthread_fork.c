@@ -167,3 +167,10 @@ void vthread_yield(vthread_t thread)
 {
 	sched_yield();
 }
+
+int vthread_self(vthread_t thread)
+{
+	if (thread)
+		return thread->pid;
+	return getpid();
+}

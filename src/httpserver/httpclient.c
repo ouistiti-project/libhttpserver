@@ -443,6 +443,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 int _httpclient_run(http_client_t *client)
 {
 	int ret;
+	dbg("client: %d %p thread start", vthread_self(client->thread), client);
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
 #ifndef SHARED_SOCKET
@@ -462,7 +463,7 @@ int _httpclient_run(http_client_t *client)
 	 * Be careful to not add action on the socket after this point
 	 */
 	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-	dbg("client: %p thread exit", client);
+	dbg("client: %d %p thread exit", vthread_self(client->thread), client);
 	httpclient_destroy(client);
 #ifdef DEBUG
 	fflush(stderr);
