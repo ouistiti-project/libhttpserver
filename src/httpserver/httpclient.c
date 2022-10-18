@@ -871,7 +871,8 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				ret = EREJECT;
 				break;
 			}
-			client->ops->flush(client->opsctx);
+			if (client->ops->flush != NULL)
+				client->ops->flush(client->opsctx);
 			if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
 			{
 				_httpmessage_changestate(response, GENERATE_END);
@@ -1347,4 +1348,10 @@ void httpclient_shutdown(http_client_t *client)
 {
 	client->ops->disconnect(client->opsctx);
 	client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+}
+
+void httpclient_flush(http_client_t *client)
+{
+	if (client->ops->flush)
+		client->ops->flush(client->opsctx);
 }

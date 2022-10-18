@@ -720,6 +720,14 @@ EXPORT_SYMBOL void httpclient_shutdown(http_client_t *client);
 #define WAIT_ACCEPT 0x02
 EXPORT_SYMBOL int httpclient_wait(http_client_t *client, int options);
 
+/**
+ * @brief flush the data on the socket
+ *
+ * @param client the connection that received the request
+ *
+ */
+EXPORT_SYMBOL void httpclient_flush(http_client_t *client);
+
 #ifdef __cplusplus
 }
 #endif
