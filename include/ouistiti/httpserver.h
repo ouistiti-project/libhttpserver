@@ -415,12 +415,13 @@ http_message_result_e EXPORT_SYMBOL httpmessage_result(http_message_t *message, 
  *
  * @param message the request message to update
  * @param type the method to use ("GET", "POST", "HEAD"...)
- * @param resource the path+query parts of the URI
+ * @param resource the path parts of the URI
+ * @param ... other parts of the URI
  *
  * @return the client to use for sending
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-EXPORT_SYMBOL http_client_t * httpmessage_request(http_message_t *message, const char *method, char *resource);
+EXPORT_SYMBOL http_client_t * httpmessage_request(http_message_t *message, const char *method, const char *resource, ...);
 #endif
 
 /**

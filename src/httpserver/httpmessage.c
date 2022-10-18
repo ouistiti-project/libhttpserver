@@ -115,7 +115,7 @@ void httpmessage_destroy(http_message_t *message)
 	_httpmessage_destroy(message);
 }
 
-http_client_t *httpmessage_request(http_message_t *message, const char *method, char *url)
+http_client_t *httpmessage_request(http_message_t *message, const char *method, const char *url, ...)
 {
 	http_client_t *client = NULL;
 	const http_message_method_t *method_it = &default_methods[0];
@@ -158,7 +158,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 				break;
 			}
 		}
-		if (protocol_ops)
+		if (protocol_ops == NULL)
 			return NULL;
 		int iport = protocol_ops->default_port;
 
@@ -179,14 +179,36 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 			httpclient_destroy(client);
 			client = NULL;
 		}
-		url = pathname;
+		else
+			url = pathname;
 	}
 	if (url)
 	{
+		va_list argv;
 		int length = strlen(url);
+		const char *s = NULL;
+
+		va_start(argv, url);
+		s = va_arg(argv, const char *);
+		while (s != NULL)
+		{
+			length += strlen(s);
+			s = va_arg(argv, const char *);
+		}
+		va_end(argv);
+
 		int nbchunks = (length / _buffer_chunksize(-1)) + 1;
 		message->uri = _buffer_create(nbchunks);
-		_buffer_append(message->uri, url, length);
+
+		_buffer_append(message->uri, url, -1);
+		va_start(argv, url);
+		s = va_arg(argv, const char *);
+		while (s != NULL)
+		{
+			_buffer_append(message->uri, s, -1);
+			s = va_arg(argv, const char *);
+		}
+		va_end(argv);
 	}
 	return client;
 }
