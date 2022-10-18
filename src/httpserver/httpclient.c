@@ -69,6 +69,7 @@
 
 static int _httpclient_thread(http_client_t *client);
 static void _httpclient_destroy(http_client_t *client);
+static int _httpclient_wait(http_client_t *client, int options);
 
 http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *fops, void *protocol)
 {
@@ -329,13 +330,11 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			 * server configuration.
 			 * see http_server_config_t and httpserver_create
 			 */
-			size = httpclient_wait(client, 1);
-			if (size > 0)
+			ret = _httpclient_wait(client, WAIT_SEND);
+			if (ret == ESUCCESS)
 			{
 				size = client->client_send(client->send_arg, data->offset, data->length);
 			}
-			if (size == EINCOMPLETE)
-				continue;
 			if (size < 0)
 				break;
 			data->offset += size;
@@ -346,27 +345,34 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		request->state = GENERATE_SEPARATOR;
 	break;
 	case GENERATE_SEPARATOR:
-		size = client->client_send(client->send_arg, "\r\n", 2);
+		ret = _httpclient_wait(client, WAIT_SEND);
+		if (ret == ESUCCESS)
+		{
+			size = client->client_send(client->send_arg, "\r\n", 2);
+		}
 		ret = EINCOMPLETE;
 		request->state = GENERATE_CONTENT;
 	break;
 	case GENERATE_CONTENT:
 		data = request->content;
-		data->offset = data->data;
-		while (data->length > 0)
+		if (data != NULL)
+			data->offset = data->data;
+		else
+			request->content_length = 0;
+		while (data && data->length > 0)
 		{
 			/**
 			 * here, it is the call to the sendresp callback from the
 			 * server configuration.
 			 * see http_server_config_t and httpserver_create
 			 */
-			size = httpclient_wait(client, 1);
-			if (size > 0)
+			ret = _httpclient_wait(client, WAIT_SEND);
+			if (ret == EINCOMPLETE)
+				continue;
+			if (ret == ESUCCESS)
 			{
 				size = client->client_send(client->send_arg, data->offset, data->length);
 			}
-			if (size == EINCOMPLETE)
-				continue;
 			if (size < 0)
 				break;
 			data->offset += size;
@@ -394,18 +400,19 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		_buffer_reset(data);
 		*(data->offset) = '\0';
 
-		size = httpclient_wait(request->client, 1);
-		if (size < 0)
-			ret = EREJECT;
-		if (!_httpmessage_contentempty(response, 1) && size > 0)
+		ret = _httpclient_wait(request->client, WAIT_SEND);
+		if (ret == ESUCCESS)
 		{
-			size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
-
+			do {
+				size = client->client_recv(client->recv_arg, data->offset, data->size - data->length);
+				sched_yield();
+			} while (size == EINCOMPLETE);
 		}
 		if (size > 0)
 		{
 			data->length += size;
 			data->data[data->length] = 0;
+			dbg("client: response receive:\n%s", data->data);
 
 			data->offset = data->data;
 			ret = _httpmessage_parserequest(response, data);
