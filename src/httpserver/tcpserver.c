@@ -125,43 +125,55 @@ static void *tcpclient_create(void *config, http_client_t *clt)
 static int tcpclient_connect(void *ctl, const char *addr, int port)
 {
 	http_client_t *client = (http_client_t *)ctl;
-	int family = AF_INET;
-#ifdef USE_IPV6
-	family = AF_INET6;
-	struct sockaddr_in6 *saddr;
-	saddr = (struct sockaddr_in6 *)&client->addr;
-	saddr->sin6_family = AF_INET6;
-	saddr->sin6_port = htons(port);
-	if (inet_pton(AF_INET6, addr, &saddr->sin6_addr) == 0)
-	{
-		family = AF_INET;
-		inet_pton(AF_INET, addr, &saddr->sin6_addr);
-	}
-#else
-	struct sockaddr_in *saddr;
-	saddr = (struct sockaddr_in *)&client->addr;
-	saddr->sin_family = family;
-	saddr->sin_port = htons(port);
-	inet_aton(addr, &saddr->sin_addr);
-#endif
-	client->addr_size = sizeof(*saddr);
+	struct addrinfo hints;
 
-	if (client->sock != 0)
+	memset(&hints, 0, sizeof(hints));
+#ifdef USE_IPV6
+	hints.ai_family = AF_UNSPEC;
+#else
+	hints.ai_family = AF_INET;
+#endif
+	hints.ai_socktype = SOCK_STREAM;
+	//hints.ai_flags = AI_ADDRCONFIG;
+	hints.ai_flags = 0;
+	hints.ai_protocol = IPPROTO_TCP;
+	hints.ai_canonname = NULL;
+	hints.ai_addr = NULL;
+	hints.ai_next = NULL;
+
+	char strport[10];
+	sprintf(strport, "%9d", port);
+	struct addrinfo *result;
+	int ret = getaddrinfo(addr, strport, &hints, &result);
+	if (ret != 0)
+	{
+		err("client: url %s not found %s", addr, gai_strerror(ret));
 		return EREJECT;
-	client->sock = socket(family, SOCK_STREAM, 0);
+	}
+
+	struct addrinfo *rp;
+	for (rp = result; rp != NULL; rp = rp->ai_next)
+	{
+		client->sock = socket(rp->ai_family, rp->ai_socktype, 0);
+		if (client->sock > 0)
+		{
+			char straddr[INET_ADDRSTRLEN];
+			inet_ntop(rp->ai_family, &rp->ai_addr, straddr, INET_ADDRSTRLEN); 
+			warn("client: connect to %s", straddr);
+			if (connect(client->sock, rp->ai_addr, rp->ai_addrlen) == 0)
+				break;
+			err("client: %s %s !", addr, strerror(errno));
+			close(client->sock);
+			client->sock = -1;
+		}
+	}
+	freeaddrinfo(result);
 	if (client->sock == -1)
 	{
 		client->sock = 0;
 		return EREJECT;
 	}
 
-	if (connect(client->sock, (struct sockaddr *)&client->addr, client->addr_size) != 0)
-	{
-		err("server connection to %s failed: %s", addr, strerror(errno));
-		close(client->sock);
-		client->sock = 0;
-		return EREJECT;
-	}
 	return ESUCCESS;
 }
 #else
