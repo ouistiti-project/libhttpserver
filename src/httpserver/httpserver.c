@@ -314,6 +314,7 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 		//err("maxclients");
 #ifdef VTHREAD
 		vthread_yield(server->thread);
+		usleep(server->config->keepalive * 1000000);
 #else
 		/**
 		 * It may be possible to call _httpserver_checkserver
@@ -371,10 +372,13 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 					 * It may be a bug or a module checking the client
 					 * like "clientfilter"
 					 */
+					warn("server: connection refused by modules");
 					httpclient_shutdown(client);
 					httpclient_destroy(client);
 				}
 			}
+			else
+				warn("server: client connection error");
 		}
 		while (client != NULL && count < server->config->maxclients);
 		/**
@@ -388,7 +392,10 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 		 */
 
 		if ((count + 1) > server->config->maxclients)
+		{
+			warn("server: too many clients");
 			ret = EINCOMPLETE;
+		}
 	}
 
 	return ret;

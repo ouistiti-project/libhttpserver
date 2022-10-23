@@ -415,12 +415,13 @@ http_message_result_e EXPORT_SYMBOL httpmessage_result(http_message_t *message, 
  *
  * @param message the request message to update
  * @param type the method to use ("GET", "POST", "HEAD"...)
- * @param resource the path+query parts of the URI
+ * @param resource the path parts of the URI
+ * @param ... other parts of the URI
  *
  * @return the client to use for sending
  * This function is available only if HTTPCLIENT_FEATURES is defined
  */
-EXPORT_SYMBOL http_client_t * httpmessage_request(http_message_t *message, const char *method, char *resource);
+EXPORT_SYMBOL http_client_t * httpmessage_request(http_message_t *message, const char *method, const char *resource, ...);
 #endif
 
 /**
@@ -718,6 +719,14 @@ EXPORT_SYMBOL void httpclient_shutdown(http_client_t *client);
 #define WAIT_SEND 0x01
 #define WAIT_ACCEPT 0x02
 EXPORT_SYMBOL int httpclient_wait(http_client_t *client, int options);
+
+/**
+ * @brief flush the data on the socket
+ *
+ * @param client the connection that received the request
+ *
+ */
+EXPORT_SYMBOL void httpclient_flush(http_client_t *client);
 
 #ifdef __cplusplus
 }

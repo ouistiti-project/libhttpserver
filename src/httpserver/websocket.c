@@ -152,6 +152,7 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 		{
 			case fo_text:
 			{
+				dbg("websocket: unframe TEXT");
 				if (frame.fin)
 				{
 					out[payloadlen] = 0;
@@ -160,6 +161,7 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 			}
 			case fo_binary:
 			{
+				dbg("websocket: unframe BINARY");
 				ret += payloadlen;
 			}
 			break;
