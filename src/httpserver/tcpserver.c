@@ -282,6 +282,8 @@ static int tcpclient_wait(void *ctl, int options)
 	}
 	else if (ret < 0)
 		err("client %p poll %x", client, poll_set[0].revents);
+	else /// other type of polling response (HUP, ERR, NVAL)
+		ret = -1;
 #else
 	fd_set *rfds = NULL, *wfds = NULL;
 	FD_SET(client->sock, &fds);
