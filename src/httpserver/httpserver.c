@@ -623,6 +623,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		httpserver_addmethod(server, method->key, method->properties);
 		method = method->next;
 	}
+	vthread_init(server->config->maxclients);
 
 	server->protocol_ops = tcpclient_ops;
 	server->protocol = server;

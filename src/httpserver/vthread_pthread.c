@@ -47,6 +47,11 @@ struct vthread_s
 	pthread_attr_t attr;
 };
 
+void vthread_init(int maxthreads)
+{
+	return;
+}
+
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {
@@ -102,7 +107,7 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 		vthread_t thread = threads[i];
 		if (thread && thread->pthread)
 		{
-			pthread_join(thread->pthread, value_ptr);
+			pthread_join(thread->pthread, &value_ptr);
 		}
 	}
 }

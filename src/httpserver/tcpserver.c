@@ -113,7 +113,7 @@ static void *tcpclient_create(void *config, http_client_t *clt)
 		clt->sock = accept(server->sock, (struct sockaddr *)&clt->addr, &clt->addr_size);
 		if (clt->sock == -1)
 		{
-			dbg("tcp accept error %s", strerror(errno));
+			err("tcp accept %d error %s", server->sock, strerror(errno));
 			return NULL;
 		}
 	}
