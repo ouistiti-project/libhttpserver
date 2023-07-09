@@ -446,13 +446,15 @@ int _httpclient_run(http_client_t *client)
 	dbg("client: %d %p thread start", vthread_self(client->thread), client);
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
-#ifndef SHARED_SOCKET
-	/*
-	 * TODO : dispatch close and destroy from tcpserver.
-	 */
-	close(client->server->sock);
-	client->server->sock = -1;
-#endif
+
+	if (!vthread_sharedmemory(client->thread))
+	{
+		/*
+		 * TODO : dispatch close and destroy from tcpserver.
+		 */
+		close(client->server->sock);
+		client->server->sock = -1;
+	}
 	do
 	{
 		ret = _httpclient_thread(client);

@@ -33,4 +33,5 @@ void vthread_yield(vthread_t thread);
 
 int vthread_self(vthread_t thread);
 
+int vthread_sharedmemory(vthread_t thread);
 #endif

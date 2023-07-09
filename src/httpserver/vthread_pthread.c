@@ -125,3 +125,8 @@ int vthread_self(vthread_t thread)
 {
 	return pthread_self();
 }
+
+int vthread_sharedmemory(vthread_t thread)
+{
+	return 1;
+}

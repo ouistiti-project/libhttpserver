@@ -179,3 +179,8 @@ int vthread_self(vthread_t thread)
 		return thread->pid;
 	return getpid();
 }
+
+int vthread_sharedmemory(vthread_t thread)
+{
+	return 0;
+}
