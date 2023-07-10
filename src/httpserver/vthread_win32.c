@@ -42,6 +42,11 @@ struct vthread_s
 	DWORD id;
 };
 
+void vthread_init(int maxthreads)
+{
+	return;
+}
+
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {

@@ -32,7 +32,10 @@ typedef struct threadpool_s threadpool_t;
 typedef int(*threadhandler_t)(void *data, void *userdata);
 
 threadpool_t *threadpool_init(int pooldepth);
-int threadpool_get(threadpool_t *pool, ThreadHandler_t hdl, void *hdldata, void *userdata);
+int threadpool_grow(threadpool_t *pool);
+int threadpool_get(threadpool_t *pool, threadhandler_t hdl, void *hdldata, void *userdata);
+int threadpool_wait(threadpool_t *pool, int id);
+int threadpool_isrunning(threadpool_t *pool, int id);
 void threadpool_destroy(threadpool_t *pool);
 
 #endif

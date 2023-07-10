@@ -342,17 +342,18 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 					client->state &= ~CLIENT_STOPPED;
 					client->state |= CLIENT_STARTED;
 					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client));
-#ifndef SHARED_SOCKET
-					/**
-					 * To disallow the reception of SIGPIPE during the
-					 * "send" call, the socket into the parent process
-					 * must be closed.
-					 * Or the tcpserver must disable SIGPIPE
-					 * during the sending, but in this case
-					 * it is impossible to recceive real SIGPIPE.
-					 */
-					close(client->sock);
-#endif
+					if (!vthread_sharedmemory(client->thread))
+					{
+						/**
+						 * To disallow the reception of SIGPIPE during the
+						 * "send" call, the socket into the parent process
+						 * must be closed.
+						 * Or the tcpserver must disable SIGPIPE
+						 * during the sending, but in this case
+						 * it is impossible to recceive real SIGPIPE.
+						 */
+						close(client->sock);
+					}
 				}
 #endif
 				if (ret == ESUCCESS)
@@ -623,6 +624,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		httpserver_addmethod(server, method->key, method->properties);
 		method = method->next;
 	}
+	vthread_init(server->config->maxclients);
 
 	server->protocol_ops = tcpclient_ops;
 	server->protocol = server;

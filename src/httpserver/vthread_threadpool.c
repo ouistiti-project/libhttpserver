@@ -1,5 +1,5 @@
 /*****************************************************************************
- * vthread.c: multiplatform thread
+ * vthread_poolthread.c: pthread pool manager
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
@@ -40,90 +40,111 @@
 #include "httpserver.h"
 #include "valloc.h"
 #include "vthread.h"
+#include "threadpool.h"
+
+#include "threadpool.c"
 
 struct vthread_s
 {
-	pthread_t pthread;
-	pthread_attr_t attr;
+	int id;
+	vthread_routine routine;
+	void *data;
+	void *rdata;
 };
+
+static threadpool_t *g_pool = NULL;
+
+static int threadhandler(void *data, void *userdata)
+{
+	vthread_t vthread = (vthread_t )data;
+
+	vthread->rdata = vthread->routine(userdata);
+	if ( vthread->rdata != NULL)
+		return -1;
+	return 0;
+}
 
 void vthread_init(int maxthreads)
 {
-	return;
+	if (g_pool == NULL)
+		g_pool = threadpool_init(maxthreads);
+	else
+	{
+		for (int i = 0; i < maxthreads; i++)
+			threadpool_grow(g_pool);
+	}
 }
 
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {
+	*thread = NULL;
+	if (g_pool == NULL)
+		return EREJECT;
 	int ret = ESUCCESS;
 	vthread_t vthread;
 	vthread = vcalloc(1, sizeof(struct vthread_s));
-	if (attr == NULL)
-	{
-		attr = &vthread->attr;
-	}
-	pthread_attr_init(attr);
-	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE);
 
-	if (pthread_create(&(vthread->pthread), attr, start_routine, arg) < 0)
-		ret = EREJECT;
-
-#if defined(HAVE_PTHREAD_YIELD)
-	pthread_yield();
-#elif defined(HAVE_SCHED_YIELD)
-	sched_yield();
-#endif
+	vthread->routine = start_routine;
+	vthread->data = arg;
+	vthread->id = threadpool_get(g_pool, threadhandler, vthread, arg);
 	*thread = vthread;
-	return ret;
-}
-
-int vthread_join(vthread_t thread, void **value_ptr)
-{
-	int ret = 0;
-	if (thread->pthread)
+	if (vthread->id == 0)
 	{
-#if defined(HAVE_PTHREAD_YIELD)
-		pthread_yield();
-#elif defined(HAVE_SCHED_YIELD)
-		sched_yield();
-#endif
-		ret = pthread_join(thread->pthread, value_ptr);
-		free(thread);
+		free(vthread);
+		ret = EREJECT;
+		*thread = NULL;
 	}
 	return ret;
 }
 
-int vthread_exist(vthread_t thread)
+int vthread_join(vthread_t vthread, void **value_ptr)
 {
-	return 1;
+	if (g_pool == NULL || vthread == NULL)
+		return -1;
+	int ret = 0;
+	if (vthread->id != 0)
+	{
+		threadpool_wait(g_pool, vthread->id);
+		*value_ptr = vthread->rdata;
+		free(vthread);
+	}
+	return ret;
+}
+
+int vthread_exist(vthread_t vthread)
+{
+	if (g_pool == NULL || vthread == NULL)
+		return -1;
+	return threadpool_isrunning(g_pool, vthread->id);;
 }
 
 void vthread_wait(vthread_t threads[], int nbthreads)
 {
+	if (g_pool == NULL)
+		return;
 	int i;
 	for (i = 0; i < nbthreads; i++) 
 	{
 		void *value_ptr;
-		vthread_t thread = threads[i];
-		if (thread && thread->pthread)
+		vthread_t vthread = threads[i];
+		if (vthread)
 		{
-			pthread_join(thread->pthread, &value_ptr);
+			vthread_join(vthread, &value_ptr);
 		}
 	}
 }
 
-void vthread_yield(vthread_t thread)
+void vthread_yield(vthread_t vthread)
 {
-#if defined(HAVE_PTHREAD_YIELD)
-	pthread_yield();
-#elif defined(HAVE_SCHED_YIELD)
 	sched_yield();
-#endif
 }
 
-int vthread_self(vthread_t thread)
+int vthread_self(vthread_t vthread)
 {
-	return pthread_self();
+	if (g_pool == NULL || vthread == NULL)
+		return -1;
+	return vthread->id;
 }
 
 int vthread_sharedmemory(vthread_t thread)

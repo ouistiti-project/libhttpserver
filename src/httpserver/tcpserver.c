@@ -113,7 +113,7 @@ static void *tcpclient_create(void *config, http_client_t *clt)
 		clt->sock = accept(server->sock, (struct sockaddr *)&clt->addr, &clt->addr_size);
 		if (clt->sock == -1)
 		{
-			dbg("tcp accept error %s", strerror(errno));
+			err("tcp accept %d error %s", server->sock, strerror(errno));
 			return NULL;
 		}
 	}
@@ -282,6 +282,8 @@ static int tcpclient_wait(void *ctl, int options)
 	}
 	else if (ret < 0)
 		err("client %p poll %x", client, poll_set[0].revents);
+	else /// other type of polling response (HUP, ERR, NVAL)
+		ret = -1;
 #else
 	fd_set *rfds = NULL, *wfds = NULL;
 	FD_SET(client->sock, &fds);

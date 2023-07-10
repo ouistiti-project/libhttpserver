@@ -44,10 +44,10 @@ struct thread_s
 		E_WAITING,
 		E_RUNNING,
 	} state;
-	ThreadHandler_t hdl;
+	threadhandler_t hdl;
 	void *hdldata;
 	void *userdata;
-	Thread_t *next;
+	thread_t *next;
 };
 
 typedef struct threadpool_s threadpool_t;
@@ -58,7 +58,7 @@ struct threadpool_s
 
 static void * _thread_run(void *data)
 {
-	thread_t *thread = (Thread_t *)data;
+	thread_t *thread = (thread_t *)data;
 
 	warn("thread start");
 	while (thread->state > E_STOPPED)
@@ -74,8 +74,22 @@ static void * _thread_run(void *data)
 		pthread_mutex_lock(&thread->mutex);
 		thread->state = E_WAITING;
 		pthread_mutex_unlock(&thread->mutex);
+		pthread_cond_signal(&thread->cond);
 	}
 	warn("thread end");
+}
+
+int threadpool_grow(threadpool_t *pool)
+{
+	thread_t *it = calloc(1, sizeof(*it));
+
+	it->next = pool->threads;
+	pool->threads = it;
+
+	pthread_mutex_init(&it->mutex, NULL);
+	pthread_cond_init(&it->cond, NULL);
+	it->state = E_WAITING;
+	return pthread_create(&it->id, NULL, _thread_run, it);
 }
 
 threadpool_t *threadpool_init(int pooldepth)
@@ -85,15 +99,7 @@ threadpool_t *threadpool_init(int pooldepth)
 
 	for (int i = 0; i < pooldepth; i++)
 	{
-		thread_t *it = calloc(1, sizeof(*it));
-
-		it->next = pool->threads;
-		pool->threads = it;
-
-		pthread_mutex_init(&it->mutex, NULL);
-		pthread_cond_init(&it->cond, NULL);
-		it->state = E_WAITING;
-		pthread_create(&it->id, NULL, _thread_run, it);
+		threadpool_grow(pool);
 	}
 	return pool;
 }
@@ -114,12 +120,36 @@ int threadpool_get(threadpool_t *pool, threadhandler_t hdl, void *hdldata, void 
 			pthread_mutex_unlock(&it->mutex);
 			pthread_cond_signal(&it->cond);
 			ret = (int) it->id;
+			break;
 		}
 		else
 			pressure++;
 	}
 	dbg("threadpool pressure %d", pressure);
 	return ret;
+}
+
+int threadpool_wait(threadpool_t *pool, int id)
+{
+	thread_t *it = NULL;
+	for (it = pool->threads; it != NULL && it->id != id; it = it->next);
+	if (it == NULL)
+		return -1;
+
+	pthread_mutex_lock(&it->mutex);
+	while (it->state == E_RUNNING)
+		pthread_cond_wait(&it->cond, &it->mutex);
+	pthread_mutex_unlock(&it->mutex);
+	return -(it->state == E_STOPPED);
+}
+
+int threadpool_isrunning(threadpool_t *pool, int id)
+{
+	thread_t *it;
+	for (it = pool->threads; it != NULL && it->id != id; it = it->next);
+	if (it == NULL)
+		return -1;
+	return (it->state == E_RUNNING);
 }
 
 void threadpool_destroy(threadpool_t *pool)
