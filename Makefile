@@ -2,6 +2,11 @@ package?=libouistiti
 version=3.3
 
 pkgconfig-y+=ouistiti
+includedir=$(prefix)/include/$(package)
+ifneq ($(wildcard version.h),)
+include-y+=config.h
+include-y+=version.h
+endif
 
 include scripts.mk
 
