@@ -29,7 +29,7 @@ endif #WEBSOCKET
 export LIBUTILS LIBWEBSOCKET
 
 subdir-y+=src/httpserver
-subdir-y+=include
+subdir-y+=include/ouistiti
 subdir-$(LIBUTILS)+=src/utils.mk
 subdir-$(LIBHASH)+=src/hash.mk
 subdir-$(TEST)+=src/test.mk
