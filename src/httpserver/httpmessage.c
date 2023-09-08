@@ -357,7 +357,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	char *uri = data->offset;
 	int length = 0;
 	int build_uri = 0;
-	while (data->offset < (data->data + data->length) && next == PARSE_URI)
+	while (data->offset < (_buffer_get(data, 0) + _buffer_length(data)) && next == PARSE_URI)
 	{
 		switch (*data->offset)
 		{
@@ -445,7 +445,9 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 		if (uri == NULL)
 		{
 			next = _httpmesssage_parsefailed(message);
-			err("message: reject uri too long : %s %s", message->uri->data, data->data);
+			err("message: reject uri too long : %s %s",
+					_buffer_get(message->uri, 0),
+					_buffer_get(data, 0));
 		}
 		next &= ~PARSE_CONTINUE;
 	}
@@ -483,7 +485,9 @@ static int _httpmessage_parseuriencoded(http_message_t *message, buffer_t *data)
 		else
 		{
 			next = _httpmesssage_parsefailed(message);
-			err("message: reject uri : %s %s", message->uri->data, data->data);
+			err("message: reject uri : %s %s",
+					_buffer_get(message->uri, 0),
+					_buffer_get(data, 0));
 		}
 		encoded ++;
 	}
@@ -589,7 +593,7 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 	 * Move the rest to the beginning and request
 	 * more data.
 	 **/
-	if (data->offset + 10 > data->data + data->length)
+	if (data->offset + 10 > _buffer_get(data, 0) + _buffer_length(data))
 	{
 		return next;
 	}
@@ -612,7 +616,7 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 			{
 				next = PARSE_END;
 				message->result = RESULT_400;
-				err("bad request %s", data->data);
+				err("bad request %s", _buffer_get(data, 0));
 			}
 			message->version = i;
 			break;
@@ -634,20 +638,21 @@ static int _httpmessage_parsepreheader(http_message_t *message, buffer_t *data)
 	 * When the URI is completed, remove the '?'
 	 * and update the query pointer
 	 **/
-	if (message->uri != NULL && message->uri->length > 0)
+	if (message->uri != NULL && _buffer_length(message->uri) > 0)
 	{
 		/**
 		 * query must be set at the end of the uri loading
 		 * uri buffer may be change during an extension
 		 */
-		message->query = strchr(message->uri->data, '?');
+		message->query = strchr(_buffer_get(message->uri, 0), '?');
 		const char *service = httpserver_INFO(httpclient_server(message->client), "service");
-		warn("new request %s %s from \"%s\" service", message->method->key, message->uri->data, service);
+		warn("new request %s %s from \"%s\" service", message->method->key,
+				_buffer_get(message->uri, 0), service);
 	}
 	else if (message->uri == NULL)
 	{
 		next = _httpmesssage_parsefailed(message);
-		err("message: reject URI bad formatting: %s", data->data);
+		err("message: reject URI bad formatting: %s", _buffer_get(data, 0));
 	}
 	if (message->query != NULL)
 	{
@@ -670,7 +675,7 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 	}
 
 	/* store header line as "<key>:<value>\0" */
-	while (data->offset < (data->data + data->length) && next == PARSE_HEADER)
+	while (data->offset < (_buffer_get(data, 0) + _buffer_length(data)) && next == PARSE_HEADER)
 	{
 		switch (*data->offset)
 		{
@@ -729,7 +734,7 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 	if (_httpmessage_fillheaderdb(message) != ESUCCESS)
 	{
 		next = _httpmesssage_parsefailed(message);
-		err("message: request bad header %s", message->headers_storage->data);
+		err("message: request bad header %s", _buffer_get(message->headers_storage, 0));
 	}
 	else
 	{
@@ -805,7 +810,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 * Is possible to use the buffer with the function
 		 *  httpmessage_content
 		 */
-		int length = data->length;
+		size_t length = _buffer_length(data);
 		message_dbg("message: content (%d): %.*s", length, length, data->offset);
 
 		/**
@@ -814,7 +819,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 */
 		if (_httpmessage_contentempty(message, 1))
 		{
-			length -= (data->offset - data->data);
+			length -= (data->offset - _buffer_get(data, 0));
 		}
 		/**
 		 * At the end of the parsing the content_length of request
@@ -833,7 +838,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		}
 		else
 		{
-			length -= (data->offset - data->data);
+			length -= (data->offset - _buffer_get(data, 0));
 		}
 
 		if (message->content == NULL)
@@ -856,13 +861,13 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 {
 	int next = PARSE_POSTCONTENT;
 	char *query = data->offset;
-	int length = data->length -(data->offset - data->data);
+	int length = _buffer_length(data) - (data->offset - _buffer_get(data, 0));
 	/**
 	 * message mix query data inside the URI and Content
 	 */
 	if (message->query_storage == NULL)
 	{
-		int nbchunks = (data->length / _buffer_chunksize(-1) ) + 1;
+		int nbchunks = (_buffer_length(data) / _buffer_chunksize(-1) ) + 1;
 		message->query_storage = _buffer_create(nbchunks);
 	}
 	if (message->query != NULL)
@@ -877,8 +882,8 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	{
 		data->offset += message->content_length;
 		message->content = message->query_storage;
-		message->content_packet = message->query_storage->length;
-		message->content_length = message->query_storage->length;
+		message->content_packet = _buffer_length(message->query_storage);
+		message->content_length = message->content_packet;
 		next = PARSE_END;
 	}
 	else
@@ -984,7 +989,7 @@ int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_END:
 			{
-				message_dbg("parse end with %lu data: %s", data->length, data->offset);
+				message_dbg("parse end with %lu data: %s", _buffer_length(data), data->offset);
 
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;
@@ -1018,7 +1023,7 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 	_buffer_append(header, status, strlen(status));
 	_buffer_append(header, "\r\n", 2);
 
-	header->offset = header->data;
+	header->offset = _buffer_get(header, 0);
 	return ESUCCESS;
 }
 
@@ -1045,7 +1050,7 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 		message->mode &= ~HTTPMESSAGE_KEEPALIVE;
 		httpmessage_addheader(message, str_connection, "Close");
 	}
-	message->headers_storage->offset = message->headers_storage->data;
+	message->headers_storage->offset = _buffer_get(message->headers_storage, 0);
 	return message->headers_storage;
 }
 
@@ -1079,7 +1084,7 @@ int httpmessage_content(http_message_t *message, char **data, unsigned long long
 		size = message->content_packet;
 		if (data)
 		{
-			*data = message->content->data;
+			*data = _buffer_get(message->content, 0);
 		}
 	}
 	if ((message->state & GENERATE_MASK) != 0)
@@ -1231,7 +1236,7 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 	 * check the key of the current header
 	 */
 	const char *end = message->headers_storage->offset - 2;
-	while (*end != '\n' && end >= message->headers_storage->data ) end--;
+	while (*end != '\n' && end >= _buffer_get(message->headers_storage, 0) ) end--;
 	int length = strlen(key);
 	if (strncmp(end + 1, key, length))
 		return EREJECT;
@@ -1292,9 +1297,9 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 	{
 		message->content_length = length;
 	}
-	if (message->content != NULL && message->content->data != NULL )
+	if (message->content != NULL && _buffer_get(message->content, 0) != NULL )
 	{
-		return message->content->length;
+		return _buffer_length(message->content);
 	}
 	return 0;
 }
@@ -1315,7 +1320,7 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
 			message->content_length += length;
 		if (_buffer_append(message->content, content, length) == NULL)
 			return EREJECT;
-		return message->content->size - message->content->length;
+		return message->content->size - _buffer_length(message->content);
 	}
 	return httpclient_server(message->client)->config->chunksize;
 }
@@ -1389,7 +1394,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	{
 		if (message->uri != NULL)
 		{
-			value = message->uri->data;
+			value = _buffer_get(message->uri, 0);
 			/**
 			 * For security all the first '/' (and %2f == /) are removed.
 			 * The module may use the URI as a path on the file system,
@@ -1409,7 +1414,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	else if (!strcasecmp(key, "query"))
 	{
 		if (message->query_storage != NULL)
-			value = message->query_storage->data;
+			value = _buffer_get(message->query_storage, 0);
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
@@ -1440,7 +1445,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	{
 		if (message->content != NULL)
 		{
-			value = message->content->data;
+			value = _buffer_get(message->content, 0);
 		}
 	}
 	else if (!strcasecmp(key, str_contenttype))

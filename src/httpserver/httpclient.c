@@ -304,8 +304,8 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		const char *method = httpmessage_REQUEST(request, "method");
 		client->client_send(client->send_arg, method, strlen(method));
 		client->client_send(client->send_arg, " /", 2);
-		const char *uri = httpmessage_REQUEST(request, "uri");
-		size = client->client_send(client->send_arg, uri, strlen(uri));
+		buffer_t *uri = request->uri;
+		size = client->client_send(client->send_arg, _buffer_get(uri, 0), _buffer_length(uri));
 		const char *version = httpmessage_REQUEST(request, "version");
 		if (version)
 		{
@@ -323,7 +323,8 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		 * send the header
 		 */
 		data = _httpmessage_buildheader(request);
-		while (data->length > 0)
+		size = 0;
+		while (_buffer_length(data) > size)
 		{
 			/**
 			 * here, it is the call to the sendresp callback from the
@@ -333,12 +334,11 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			ret = _httpclient_wait(client, WAIT_SEND);
 			if (ret == ESUCCESS)
 			{
-				size = client->client_send(client->send_arg, data->offset, data->length);
+				int ret = client->client_send(client->send_arg, _buffer_get(data, size), _buffer_length(data) - size);
+				if (ret < 0)
+					break;
+				size += ret;
 			}
-			if (size < 0)
-				break;
-			data->offset += size;
-			data->length -= size;
 		}
 
 		ret = EINCOMPLETE;
@@ -355,11 +355,10 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 	break;
 	case GENERATE_CONTENT:
 		data = request->content;
-		if (data != NULL)
-			data->offset = data->data;
-		else
+		if (data == NULL)
 			request->content_length = 0;
-		while (data && data->length > 0)
+		size = 0;
+		while (data && data->length > size)
 		{
 			/**
 			 * here, it is the call to the sendresp callback from the
@@ -371,15 +370,14 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				continue;
 			if (ret == ESUCCESS)
 			{
-				size = client->client_send(client->send_arg, data->offset, data->length);
+				int ret = client->client_send(client->send_arg, _buffer_get(data, size), _buffer_length(data) - size);
+				if (ret < 0)
+					break;
+				size += ret;
 			}
-			if (size < 0)
-				break;
-			data->offset += size;
-			data->length -= size;
-			if (!_httpmessage_contentempty(request, 1))
-				request->content_length -= size;
 		}
+		if (!_httpmessage_contentempty(request, 1))
+			request->content_length -= size;
 		ret = EINCOMPLETE;
 		if (_httpmessage_contentempty(request, 0) ||
 			!_httpmessage_contentempty(request, 1))
@@ -1122,7 +1120,7 @@ static int _httpclient_thread(http_client_t *client)
 		 * see http_server_config_t and httpserver_create
 		 */
 		_buffer_shrink(client->sockdata);
-		_buffer_reset(client->sockdata, client->sockdata->length);
+		_buffer_reset(client->sockdata, _buffer_length(client->sockdata));
 		size = client->client_recv(client->recv_arg, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
 		if (size == 0 || size == EREJECT)
 		{

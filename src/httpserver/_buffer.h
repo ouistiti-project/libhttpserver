@@ -40,16 +40,22 @@ struct buffer_s
 
 buffer_t * _buffer_create(int maxchunks);
 int _buffer_chunksize(int new);
-int _buffer_accept(buffer_t *buffer, size_t length);
+
+int _buffer_accept(const buffer_t *buffer, size_t length);
 char *_buffer_append(buffer_t *buffer, const char *data, size_t length);
+
 char *_buffer_pop(buffer_t *buffer, size_t length);
 void _buffer_shrink(buffer_t *buffer);
 void _buffer_reset(buffer_t *buffer, size_t offset);
 int _buffer_rewindto(buffer_t *buffer, char needle);
-int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value);
-int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep);
+
+const char *_buffer_get(const buffer_t *buffer, size_t from);
+size_t _buffer_length(const buffer_t *buffer);
 int _buffer_empty(buffer_t *buffer);
 int _buffer_full(buffer_t *buffer);
+
+int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value);
+int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep);
 char _buffer_last(buffer_t *buffer);
 void _buffer_destroy(buffer_t *buffer);
 

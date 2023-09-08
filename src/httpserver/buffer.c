@@ -227,6 +227,13 @@ int _buffer_rewindto(buffer_t *buffer, char needle)
 	return ret;
 }
 
+const char *_buffer_get(const buffer_t *buffer, size_t from)
+{
+	if (from <= buffer->length)
+		return buffer->data + from;
+	return NULL;
+}
+
 int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value)
 {
 	if (key[0] != 0)
@@ -285,6 +292,11 @@ int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char field
 	else
 		count++;
 	return count;
+}
+
+size_t _buffer_length(const buffer_t *buffer)
+{
+	return buffer->length;
 }
 
 int _buffer_empty(buffer_t *buffer)
