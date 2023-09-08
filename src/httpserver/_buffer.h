@@ -51,12 +51,11 @@ int _buffer_rewindto(buffer_t *buffer, char needle);
 
 const char *_buffer_get(const buffer_t *buffer, size_t from);
 size_t _buffer_length(const buffer_t *buffer);
-int _buffer_empty(buffer_t *buffer);
-int _buffer_full(buffer_t *buffer);
+int _buffer_empty(const buffer_t *buffer);
+int _buffer_full(const buffer_t *buffer);
 
 int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value);
 int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep);
-char _buffer_last(buffer_t *buffer);
 void _buffer_destroy(buffer_t *buffer);
 
 #endif

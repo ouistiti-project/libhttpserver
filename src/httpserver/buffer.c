@@ -214,14 +214,16 @@ void _buffer_reset(buffer_t *buffer, size_t offset)
 int _buffer_rewindto(buffer_t *buffer, char needle)
 {
 	int ret = EINCOMPLETE;
-	while (buffer->offset > buffer->data && *(buffer->offset) != needle)
+	char *offset = buffer->data + buffer->length;
+	while (offset > buffer->data && *offset != needle)
 	{
-		buffer->offset--;
-		buffer->length--;
+		offset--;
 	}
-	if (*(buffer->offset) == needle)
+	if (*offset == needle)
 	{
-		*buffer->offset = '\0';
+		*offset = '\0';
+		buffer->offset = offset;
+		buffer->length = buffer->offset - buffer->data;
 		ret = ESUCCESS;
 	}
 	return ret;
@@ -299,22 +301,14 @@ size_t _buffer_length(const buffer_t *buffer)
 	return buffer->length;
 }
 
-int _buffer_empty(buffer_t *buffer)
+int _buffer_empty(const buffer_t *buffer)
 {
 	return (buffer->length <= buffer->offset - buffer->data);
 }
 
-int _buffer_full(buffer_t *buffer)
+int _buffer_full(const buffer_t *buffer)
 {
 	return (buffer->length == buffer->size);
-}
-
-char _buffer_last(buffer_t *buffer)
-{
-	if (buffer->length > 0)
-		return *(buffer->offset - 1);
-	else
-		return 0;
 }
 
 void _buffer_destroy(buffer_t *buffer)
