@@ -621,7 +621,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	const http_message_method_t *method = default_methods;
 	while (method)
 	{
-		httpserver_addmethod(server, method->key, method->properties);
+		httpserver_addmethod(server, method->key.data, method->properties);
 		method = method->next;
 	}
 	vthread_init(server->config->maxclients);
@@ -663,7 +663,7 @@ http_server_t *httpserver_dup(http_server_t *server)
 	const http_message_method_t *method = default_methods;
 	while (method)
 	{
-		httpserver_addmethod(vserver, method->key, method->properties);
+		httpserver_addmethod(vserver, method->key.data, method->properties);
 		method = method->next;
 	}
 
@@ -680,7 +680,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 	while (method != NULL)
 	{
 		id = method->id;
-		if (!strcmp(method->key, key))
+		if (!_string_cmp(&method->key, key))
 		{
 			break;
 		}
@@ -691,7 +691,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		method = vcalloc(1, sizeof(*method));
 		if (method == NULL)
 			return;
-		method->key = key;
+		_string_store(&method->key, key, -1);
 		method->id = id + 1;
 		method->next = server->methods;
 		server->methods = method;
@@ -815,11 +815,7 @@ void httpserver_destroy(http_server_t *server)
 	while (method)
 	{
 		http_message_method_t *next = (http_message_method_t *) method->next;
-		/**
-		 * default_method must not be freed
-		 * prefere to have memory leaks
-		 */
-		/*vfree(method);*/
+		vfree(method);
 		method = next;
 	}
 	if (server->methods_storage != NULL)
@@ -883,7 +879,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 			const http_message_method_t *method = server->methods;
 			while (method)
 			{
-				_buffer_append(server->methods_storage, method->key, -1);
+				_buffer_append(server->methods_storage, method->key.data, method->key.length);
 				if (method->next != NULL)
 					_buffer_append(server->methods_storage, ",", -1);
 				method = method->next;

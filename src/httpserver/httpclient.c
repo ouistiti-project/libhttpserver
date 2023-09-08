@@ -301,8 +301,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		/**
 		 * send the request URI
 		 */
-		const char *method = httpmessage_REQUEST(request, "method");
-		client->client_send(client->send_arg, method, strlen(method));
+		client->client_send(client->send_arg, request->method->key.data, request->method->key.length);
 		client->client_send(client->send_arg, " /", 2);
 		buffer_t *uri = request->uri;
 		size = client->client_send(client->send_arg, _buffer_get(uri, 0), _buffer_length(uri));

@@ -90,11 +90,11 @@ const char str_contenttype[] = "Content-Type";
 const char str_contentlength[] = "Content-Length";
 
 const http_message_method_t default_methods[] = {
-	{ .key = str_get, .id = MESSAGE_TYPE_GET, .next = (http_message_method_t *)&default_methods[1]},
-	{ .key = str_post, .id = MESSAGE_TYPE_POST, .properties = MESSAGE_ALLOW_CONTENT, .next =(http_message_method_t *) &default_methods[2]},
-	{ .key = str_head, .id = MESSAGE_TYPE_HEAD, .next = NULL},
+	{ .key = STRING_DCL(str_get), .id = MESSAGE_TYPE_GET, .next = (http_message_method_t *)&default_methods[1]},
+	{ .key = STRING_DCL(str_post), .id = MESSAGE_TYPE_POST, .properties = MESSAGE_ALLOW_CONTENT, .next =(http_message_method_t *) &default_methods[2]},
+	{ .key = STRING_DCL(str_head), .id = MESSAGE_TYPE_HEAD, .next = NULL},
 #ifdef HTTPCLIENT_FEATURES
-	{ .key = NULL, .id = -1, .next = NULL},
+	{ .key = {NULL, 0, 0}, .id = -1, .next = NULL},
 #endif
 };
 
@@ -121,14 +121,14 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 	const http_message_method_t *method_it = &default_methods[0];
 	while (method_it != NULL)
 	{
-		if (!strcmp(method_it->key, method))
+		if (!_string_cmp(&method_it->key, method))
 			break;
 		method_it = method_it->next;
 	}
 	if (method_it == NULL)
 	{
 		method_it = &default_methods[3];
-		((http_message_method_t *)method_it)->key = method;
+		_string_store(&((http_message_method_t *)method_it)->key, method, -1);
 	}
 	message->method = method_it;
 	message->version = HTTP11;
@@ -324,8 +324,8 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 	const http_message_method_t *method = httpclient_server(message->client)->methods;
 	while (method != NULL)
 	{
-		int length = strlen(method->key);
-		if (!strncasecmp(data->offset, method->key, length) &&
+		int length = method->key.length;
+		if (!_string_cmp(&method->key, data->offset) &&
 			data->offset[length] == ' ')
 		{
 			message->method = method;
@@ -646,7 +646,7 @@ static int _httpmessage_parsepreheader(http_message_t *message, buffer_t *data)
 		 */
 		message->query = strchr(_buffer_get(message->uri, 0), '?');
 		const char *service = httpserver_INFO(httpclient_server(message->client), "service");
-		warn("new request %s %s from \"%s\" service", message->method->key,
+		warn("new request %s %s from \"%s\" service", message->method->key.data,
 				_buffer_get(message->uri, 0), service);
 	}
 	else if (message->uri == NULL)
@@ -1426,7 +1426,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, "method") && (message->method))
 	{
-		value = message->method->key;
+		value = message->method->key.data;
 	}
 	else if (!strcasecmp(key, "result"))
 	{

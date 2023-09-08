@@ -134,7 +134,7 @@ extern const _http_message_result_t *_http_message_result[];
 typedef struct http_message_method_s http_message_method_t;
 struct http_message_method_s
 {
-	const char *key;
+	string_t key;
 	short id;
 	short properties;
 	http_message_method_t *next;
