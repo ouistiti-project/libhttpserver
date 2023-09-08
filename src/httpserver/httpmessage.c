@@ -1031,7 +1031,7 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 {
 	if (message->headers != NULL)
 	{
-		dbentry_revert(message->headers, ':', '\n');
+		_buffer_serializedb(message->headers_storage, message->headers, ':', '\n');
 		dbentry_destroy(message->headers);
 		message->headers = NULL;
 	}
@@ -1532,7 +1532,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 	{
 		sessioninfo = message->client->session->dbfirst;
 
-		while (sessioninfo && strcmp(sessioninfo->key, key))
+		while (sessioninfo && _string_cmp(&sessioninfo->key, key))
 		{
 			sessioninfo = sessioninfo->next;
 		}
@@ -1549,22 +1549,23 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
 			if (sessioninfo == NULL)
 				return  NULL;
-			sessioninfo->key =
+			sessioninfo->key.data =
 				_buffer_append(message->client->session->storage, key, -1);
 			sessioninfo->next = message->client->session->dbfirst;
 			message->client->session->dbfirst = sessioninfo;
 		}
 		if (sessioninfo)
 		{
-			if (sessioninfo->value != NULL)
+			if (sessioninfo->value.data != NULL)
 			{
-				free((void *)sessioninfo->value);
-				sessioninfo->value = NULL;
+				free((void *)sessioninfo->value.data);
+				sessioninfo->value.data = NULL;
 			}
 			if (size > 0)
 			{
-				sessioninfo->value = malloc(size);
-				memcpy((void *)sessioninfo->value, value, size);
+				char *data = malloc(size);
+				memcpy(data, value, size);
+				_string_create(data, size);
 			}
 		}
 		else
@@ -1574,7 +1575,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 	{
 		return NULL;
 	}
-	return (const void *)sessioninfo->value;
+	return (const void *)sessioninfo->value.data;
 }
 
 void _httpconnector_add(http_connector_list_t **first,

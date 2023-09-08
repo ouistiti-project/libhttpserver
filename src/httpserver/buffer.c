@@ -236,13 +236,20 @@ const char *_buffer_get(const buffer_t *buffer, size_t from)
 	return NULL;
 }
 
-int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value)
+int _buffer_dbentry(const buffer_t *storage, dbentry_t **db, const char *key, size_t keylen, const char * value, size_t end)
 {
+	size_t valuelen = 0;
 	if (key[0] != 0)
 	{
 		if (value == NULL)
 		{
 			value = str_true;
+			valuelen = 3;
+		}
+		else
+		{
+			valuelen = storage->data + end - value;
+			storage->data[end] = '\0';
 		}
 		dbentry_t *entry;
 		entry = vcalloc(1, sizeof(dbentry_t));
@@ -250,50 +257,88 @@ int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * v
 			return -1;
 		while (*key == ' ')
 			key++;
-		entry->key = key;
-		entry->value = value;
+		entry->key.data = key;
+		entry->key.length = keylen;
+		entry->value.data = value;
+		entry->value.length = valuelen;
 		entry->next = *db;
 		*db = entry;
-		buffer_dbg("fill \t%s\t%s", key, value);
+		buffer_dbg("fill \t%.*s\t%.*s", keylen, key, valuelen, value);
 	}
 	return 0;
 }
 
 int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep)
 {
-	int i;
-	char *key = storage->data;
-	const char *value = NULL;
+	char *key = NULL;
+	char *value = NULL;
 	int count = 0;
+	size_t keylen = 0;
 
-	for (i = 0; i < storage->length; i++)
+	for (int i = 0; i < storage->length; i++)
 	{
-		if (storage->data[i] == '\n')
+		if (key == NULL && storage->data[i] > 0x19 && storage->data[i] < 0x7f)
+			key = storage->data + i;
+		if ((storage->data[i] == '\r') || (storage->data[i] == '\n'))
 			storage->data[i] = '\0';
-		if (storage->data[i] == separator && value == NULL)
+		if (key != NULL && storage->data[i] == separator && value == NULL)
 		{
-			storage->data[i] = '\0';
+			keylen = storage->data + i - key;
 			value = storage->data + i + 1;
 			while (*value == ' ')
 				value++;
 		}
-		else if ((storage->data[i] == '\0') ||
-				(storage->data[i] == fieldsep))
+		else if (storage->data[i] == fieldsep || storage->data[i] == '\0')
 		{
-			storage->data[i] = '\0';
-			if (_buffer_dbentry(storage, db, key, value) < 0)
+			if (key != NULL && _buffer_dbentry(storage, db, key, keylen, value, i) < 0)
 				return -1;
 			else
 				count++;
-			key = storage->data + i + 1;
+			key = NULL;
+			keylen = 0;
 			value = NULL;
 		}
 	}
-	if (_buffer_dbentry(storage, db, key, value) < 0)
+	if (key != NULL && _buffer_dbentry(storage, db, key, keylen, value, storage->length - 1) < 0)
 		return -1;
 	else
 		count++;
 	return count;
+}
+
+int _buffer_serializedb(buffer_t *storage, dbentry_t *entry, char separator, char fieldsep)
+{
+	while (entry != NULL)
+	{
+		const char *key = _string_get(&entry->key);
+		size_t keylen = _string_length(&entry->key);
+		const char *value = _string_get(&entry->value);
+		size_t valuelen = _string_length(&entry->value);
+		if (key < storage->data || (value + valuelen) > (storage->data + storage->length))
+		{
+			err("buffer: unserialized db with %.*s", (int)entry->key.length, entry->key.data);
+			err("buffer:     => %.*s", (int)entry->value.length, entry->value.data);
+			return EREJECT;
+		}
+		if (key[keylen] == '\0')
+		{
+			size_t keyof = (size_t)(key - storage->data);
+			storage->data[keyof + keylen] = separator;
+		}
+		size_t valueof = (size_t)(value - storage->data);
+		if ( valueof < storage->length)
+		{
+			if (valuelen > 0 && (fieldsep == '\r' || fieldsep == '\n') && value[valuelen + 1] == '\0')
+			{
+				storage->data[valueof + valuelen] = '\r';
+				storage->data[valueof + valuelen + 1] = '\n';
+			}
+			else if (valuelen > 0)
+				storage->data[valueof + valuelen] = fieldsep;
+		}
+		entry = entry->next;
+	}
+	return ESUCCESS;
 }
 
 size_t _buffer_length(const buffer_t *buffer)
@@ -323,9 +368,9 @@ const char *dbentry_search(dbentry_t *entry, const char *key)
 	const char *value = NULL;
 	while (entry != NULL)
 	{
-		if (!strcasecmp(entry->key, key))
+		if (!_string_cmp(&entry->key, key))
 		{
-			value = entry->value;
+			value = _string_get(&entry->value);
 			break;
 		}
 		entry = entry->next;
@@ -335,40 +380,6 @@ const char *dbentry_search(dbentry_t *entry, const char *key)
 		buffer_dbg("dbentry %s not found", key);
 	}
 	return value;
-}
-
-void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep)
-{
-	dbentry_revert_t *entry = (dbentry_revert_t *)constentry;
-	while (entry != NULL)
-	{
-		int i = 0;
-		while ((entry->key[i]) != '\0') i++;
-		(entry->key)[i] = separator;
-
-		if (entry->key < entry->value)
-		{
-			int i = 0;
-			while ((entry->value[i]) != '\0') i++;
-			if ((fieldsep == '\r' || fieldsep == '\n') && entry->value[i + 1] == '\0')
-			{
-				(entry->value)[i] = '\r';
-				(entry->value)[i + 1] = '\n';
-			}
-			else
-				(entry->value)[i] = fieldsep;
-		}
-		else
-		{
-			if ((fieldsep == '\r' || fieldsep == '\n') && entry->key[i + 1] == '\0')
-			{
-				(entry->key)[i] = '\r';
-				(entry->key)[i + 1] = '\n';
-			}
-		}
-
-		entry = entry->next;
-	}
 }
 
 void dbentry_destroy(dbentry_t *entry)

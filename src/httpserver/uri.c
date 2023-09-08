@@ -69,7 +69,9 @@ dbentry_t *dbentry_create(char separator, char *string, int storage)
 		entry->storage = calloc(1, (end - it) + 1);
 		memcpy(entry->storage, string, (end - it) + 1);
 	}
-	entry->key = it;
+	string_t *keyvalue = NULL;
+	entry->key.data = it;
+	keyvalue = &entry->key;
 	while (it < end)
 	{
 		if (*it == 0)
@@ -80,10 +82,12 @@ dbentry_t *dbentry_create(char separator, char *string, int storage)
 		}
 		if (*it == '\n')
 		{
+			keyvalue->length = it - keyvalue->data;
 			dbentry_t *new = calloc(1, sizeof(*new));
-			new->key = it + 1;
+			new->key.data = it + 1;
 			new->next = entry;
 			entry = new;
+			keyvalue = &entry->key;
 			*it = 0;
 			state = e_key;
 		}
@@ -93,7 +97,9 @@ dbentry_t *dbentry_create(char separator, char *string, int storage)
 			{
 				if (*it == separator)
 				{
-					entry->value = it + 1;
+					entry->value.data = it + 1;
+					entry->key.length = it - entry->key.data;
+					keyvalue = &entry->value;
 					*it = 0;
 					state = e_value;
 				}
@@ -114,9 +120,9 @@ dbentry_t *dbentry_create(char separator, char *string, int storage)
 
 const char *dbentry_value(dbentry_t *entry, char *key)
 {
-	while (entry && strcmp(entry->key, key)) entry = entry->next;
+	while (entry && _string_cmp(&entry->key, key)) entry = entry->next;
 	if (entry)
-		return (const char *)entry->value;
+		return (const char *)entry->value.data;
 	return NULL;
 }
 
@@ -127,10 +133,6 @@ void dbentry_free(dbentry_t *entry)
 		dbentry_t *keep = entry->next;
 		if (entry->storage)
 			free(entry->storage);
-		if (entry->key)
-			free(entry->key);
-		if (entry->value)
-			free(entry->value);
 		free(entry);
 		entry = keep;
 	}

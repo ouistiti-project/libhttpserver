@@ -54,8 +54,8 @@ size_t _buffer_length(const buffer_t *buffer);
 int _buffer_empty(const buffer_t *buffer);
 int _buffer_full(const buffer_t *buffer);
 
-int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value);
 int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep);
+int _buffer_serializedb(buffer_t *storage, dbentry_t *entry, char separator, char fieldsep);
 void _buffer_destroy(buffer_t *buffer);
 
 #endif

@@ -28,25 +28,17 @@
 #ifndef DBENTRY_H
 #define DBENTRY_H
 
+#include "_string.h"
+
 struct dbentry_s
 {
 	char *storage;
-	const char *key;
-	const char *value;
+	string_t key;
+	string_t value;
 	struct dbentry_s *next;
 };
 
 typedef struct dbentry_s dbentry_t;
-
-struct dbentry_revert_s
-{
-	char *storage;
-	char *key;
-	char *value;
-	struct dbentry_revert_s *next;
-};
-
-typedef struct dbentry_revert_s dbentry_revert_t;
 
 const char *dbentry_search(dbentry_t *entry, const char *key);
 void dbentry_destroy(dbentry_t *entry);
