@@ -51,9 +51,42 @@
 #include "_httpserver.h"
 #include "_httpmessage.h"
 #include "_buffer.h"
+#include "_string.h"
 #include "dbentry.h"
 
 #define buffer_dbg(...)
+
+string_t *_string_create(const char *pointer, size_t length)
+{
+	string_t *str = calloc(1, sizeof(*str));
+	_string_store(str, pointer, length);
+	return str;
+}
+
+int _string_store(string_t *str, const char *pointer, size_t length)
+{
+	str->data = pointer;
+	if (length == (size_t) -1)
+		str->length = strlen(pointer);
+	else
+		str->length = length;
+	return ESUCCESS;
+}
+
+size_t _string_length(const string_t *str)
+{
+	return str->length;
+}
+
+const char *_string_get(const string_t *str)
+{
+	return str->data;
+}
+
+int _string_cmp(const string_t *str, const char *cmp)
+{
+	return strncasecmp(str->data, cmp, str->length);
+}
 
 static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
 /**
