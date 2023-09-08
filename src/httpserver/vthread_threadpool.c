@@ -75,6 +75,14 @@ void vthread_init(int maxthreads)
 	}
 }
 
+void vthread_uninit(vthread_t thread)
+{
+	if (! threadpool_isrunning(g_pool, -1))
+	{
+		threadpool_destroy(g_pool);
+	}
+}
+
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {
@@ -105,8 +113,12 @@ int vthread_join(vthread_t vthread, void **value_ptr)
 	int ret = 0;
 	if (vthread->id != 0)
 	{
-		threadpool_wait(g_pool, vthread->id);
-		*value_ptr = vthread->rdata;
+		if (threadpool_wait(g_pool, vthread->id) == -1)
+		{
+			return EREJECT;
+		}
+		if (value_ptr)
+			*value_ptr = vthread->rdata;
 		free(vthread);
 	}
 	return ret;
@@ -116,7 +128,7 @@ int vthread_exist(vthread_t vthread)
 {
 	if (g_pool == NULL || vthread == NULL)
 		return -1;
-	return threadpool_isrunning(g_pool, vthread->id);;
+	return threadpool_isrunning(g_pool, vthread->id);
 }
 
 void vthread_wait(vthread_t threads[], int nbthreads)

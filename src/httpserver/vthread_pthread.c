@@ -52,6 +52,11 @@ void vthread_init(int maxthreads)
 	return;
 }
 
+void vthread_uninit(vthread_t thread)
+{
+	return;
+}
+
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize)
 {

@@ -793,6 +793,7 @@ void httpserver_destroy(http_server_t *server)
 	if (server->thread)
 	{
 		vthread_join(server->thread, NULL);
+		vthread_uninit(server->thread);
 		server->thread = NULL;
 	}
 #endif

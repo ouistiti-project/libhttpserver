@@ -20,6 +20,8 @@ typedef void *(*vthread_routine)(void *);
 
 void vthread_init(int maxthreads);
 
+void vthread_uninit(vthread_t thread);
+
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread_routine start_routine, void *arg, int argsize);
 
