@@ -1068,7 +1068,7 @@ http_client_t *httpmessage_client(http_message_t *message)
 	return message->client;
 }
 
-int httpmessage_content(http_message_t *message, char **data, unsigned long long *content_length)
+int httpmessage_content(http_message_t *message, const char **data, unsigned long long *content_length)
 {
 	int size = 0;
 	int state = message->state & PARSE_MASK;
