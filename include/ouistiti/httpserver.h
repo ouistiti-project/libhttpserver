@@ -125,7 +125,7 @@ typedef void (*http_flush_t)(void *ctx);
  *
  * @return the length of the request of the client
  */
-typedef int (*http_recv_t)(void *ctx, char *data, int length);
+typedef int (*http_recv_t)(void *ctx, char *data, size_t length);
 /**
  * @brief callback to send the response to the client
  *
@@ -135,7 +135,7 @@ typedef int (*http_recv_t)(void *ctx, char *data, int length);
  *
  * @return the length of the response
  */
-typedef int (*http_send_t)(void *ctx, const char *data, int length);
+typedef int (*http_send_t)(void *ctx, const char *data, size_t length);
 
 typedef void (*http_disconnect_t)(void *ctx);
 typedef void (*http_destroy_t)(void *ctx);
