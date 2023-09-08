@@ -305,11 +305,12 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		client->client_send(client->send_arg, " /", 2);
 		buffer_t *uri = request->uri;
 		size = client->client_send(client->send_arg, _buffer_get(uri, 0), _buffer_length(uri));
-		const char *version = httpmessage_REQUEST(request, "version");
+		const char *version = NULL;
+		int versionlen = httpserver_version(request->version, &version);
 		if (version)
 		{
 			client->client_send(client->send_arg, " ", 1);
-			client->client_send(client->send_arg, version, strlen(version));
+			client->client_send(client->send_arg, version, versionlen);
 		}
 		client->client_send(client->send_arg, "\r\n", 2);
 
@@ -801,7 +802,9 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			ret = ECONTINUE;
 			if (response->version == HTTP09)
+			{
 				_httpmessage_changestate(response, GENERATE_CONTENT);
+			}
 			else
 			{
 				if (response->header == NULL)

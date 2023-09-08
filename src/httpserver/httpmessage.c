@@ -71,13 +71,12 @@
 #define client_dbg(...)
 #define server_dbg(...)
 
-const char *httpversion[] =
+static string_t httpversion[HTTPVERSIONS] =
 {
-	"HTTP/0.9",
-	"HTTP/1.0",
-	"HTTP/1.1",
-	"HTTP/2",
-	NULL,
+	STRING_DCL("HTTP/0.9"),
+	STRING_DCL("HTTP/1.0"),
+	STRING_DCL("HTTP/1.1"),
+	STRING_DCL("HTTP/2"),
 };
 
 const char str_get[] = "GET";
@@ -97,6 +96,19 @@ const http_message_method_t default_methods[] = {
 	{ .key = {NULL, 0, 0}, .id = -1, .next = NULL},
 #endif
 };
+
+int httpserver_version(http_message_version_e versionid, const char **version)
+{
+	if (version)
+		*version = NULL;
+	if ((versionid & HTTPVERSION_MASK) < HTTPVERSIONS)
+	{
+		if (version)
+			*version = httpversion[(versionid & HTTPVERSION_MASK)].data;
+		return httpversion[(versionid & HTTPVERSION_MASK)].length;
+	}
+	return -1;
+}
 
 int httpmessage_chunksize()
 {
@@ -224,6 +236,7 @@ http_message_t * _httpmessage_create(http_client_t *client, http_message_t *pare
 		message->result = RESULT_200;
 		message->client = client;
 		message->content_length = (unsigned long long)-1;
+		message->version = -1;
 		if (parent)
 		{
 			parent->response = message;
@@ -560,26 +573,28 @@ static int _httpmessage_parseuridoubledot(http_message_t *message, buffer_t *dat
 static int _httpmessage_parsestatus(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_STATUS;
-	int i;
-	for (i = HTTP09; i < HTTPVERSIONS; i++)
+	int version = -1;
+	for (int i = 0; i < sizeof(httpversion)/sizeof(string_t); i++)
 	{
-		int length = strlen(httpversion[i]);
-		if (!strncasecmp(data->offset, httpversion[i], length))
+		if (!_string_cmp(&httpversion[i], data->offset))
 		{
+			version = i;
 			message->version = i;
-			data->offset += length;
+			data->offset += httpversion[i].length;
+			data->offset++;
 			break;
 		}
 	}
-	if (i < HTTPVERSIONS)
+	if (version != -1)
 	{
 		/** pass the next space character */
-		data->offset++;
-		char status[4] = {data->offset[0], data->offset[1], data->offset[2], 0};
-		message->result = atoi(status);
+		message->result = strtol(data->offset, &data->offset, 10);
+		char status[4] = {0};
+		int len = snprintf(status, 4, "%.3d", message->result);
 		httpmessage_addheader(message, "Status", status);
-		data->offset = strchr(data->offset, '\n') + 1;
 	}
+	else /// the error is normal for CGI
+		err("message: protocol version not supported %s", data->offset);
 	next = PARSE_HEADER;
 	return next;
 }
@@ -598,13 +613,11 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 		return next;
 	}
 	char *version = data->offset;
-	int i;
-	for (i = HTTP09; i < HTTPVERSIONS; i++)
+	for (int i = 0; i < sizeof(httpversion)/sizeof(string_t); i++)
 	{
-		int length = strlen(httpversion[i]);
-		if (!strncasecmp(version, httpversion[i], length))
+		if (!_string_cmp(&httpversion[i], version))
 		{
-			data->offset += length;
+			data->offset += httpversion[i].length;
 			if (*data->offset == '\r')
 				data->offset++;
 			if (*data->offset == '\n')
@@ -616,13 +629,14 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 			{
 				next = PARSE_END;
 				message->result = RESULT_400;
-				err("bad request %s", _buffer_get(data, 0));
+				err("bad request %s", data->data);
 			}
 			message->version = i;
 			break;
 		}
+		i++;
 	}
-	if (i == HTTPVERSIONS)
+	if (message->version == -1)
 	{
 		next = _httpmesssage_parsefailed(message);
 		err("message: bad protocol version %s", version);
@@ -947,14 +961,14 @@ int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			}
 			break;
 #endif
-			case PARSE_STATUS:
-			{
-				next = _httpmessage_parsestatus(message, data);
-			}
-			break;
 			case PARSE_VERSION:
 			{
 				next = _httpmessage_parseversion(message, data);
+			}
+			break;
+			case PARSE_STATUS:
+			{
+				next = _httpmessage_parsestatus(message, data);
 			}
 			break;
 			case PARSE_PREHEADER:
@@ -1017,7 +1031,7 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 	http_message_version_e _version = message->version;
 	if (message->version > (version & HTTPVERSION_MASK))
 		_version = (version & HTTPVERSION_MASK);
-	_buffer_append(header, httpversion[_version], strlen(httpversion[_version]));
+	_buffer_append(header, httpversion[_version].data, httpversion[_version].length);
 
 	char *status = _httpmessage_status(message);
 	_buffer_append(header, status, strlen(status));
@@ -1422,7 +1436,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else if (!strcasecmp(key, "version"))
 	{
-		value = httpversion[(message->version & HTTPVERSION_MASK)];
+		httpserver_version(message->version, &value);
 	}
 	else if (!strcasecmp(key, "method") && (message->method))
 	{

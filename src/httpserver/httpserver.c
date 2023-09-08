@@ -877,7 +877,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = httpversion[(server->config->version & HTTPVERSION_MASK)];
+		httpserver_version(server->config->version, &value);
 	}
 	else if (!strcasecmp(key, "methods"))
 	{
