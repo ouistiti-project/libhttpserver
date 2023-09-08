@@ -623,6 +623,30 @@ EXPORT_SYMBOL extern const httpclient_ops_t * tcpclient_ops;
  */
 void EXPORT_SYMBOL httpclient_destroy(http_client_t *client);
 
+/**
+ * @brief create a session for this client
+ * 
+ * @param client the connection that receive the request
+ * @param token the token to assign to the session
+ * 
+ * @return EREJECT if the client already has a session otherwise ESUCCESS
+ */
+EXPORT_SYMBOL int httpclient_setsession(http_client_t *client, const char *token);
+
+/**
+ * @brief get/set session DB
+ * 
+ * @param client the connection that receive the request
+ * @param key the key into the DB to get or to set
+ * @param value the value to set for the key into the DB or NULL to get it
+ * @param size the length of the value to store (-1 for null terminated string)
+ * 
+ * @return the value found into the DB or NULL
+ */
+EXPORT_SYMBOL const void *httpclient_session(http_client_t *client, const char *key, size_t keylen, const void *value, size_t size);
+
+EXPORT_SYMBOL const char *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size);
+
 #ifdef HTTPCLIENT_FEATURES
 /**
  * @brief send a request with client

@@ -1513,69 +1513,9 @@ const char *httpmessage_cookie(http_message_t *message, const char *key)
 	return dbentry_search(message->cookies, key);
 }
 
-http_server_session_t *_httpserver_createsession(http_server_t *server, http_client_t *client)
-{
-	http_server_session_t *session = NULL;
-	session = vcalloc(1, sizeof(*session));
-	if (session)
-		session->storage = _buffer_create(MAXCHUNKS_SESSION);
-	return session;
-}
-
 const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size)
 {
-	dbentry_t *sessioninfo = NULL;
-	if (message->client == NULL)
-		return NULL;
-
-	if (message->client->session)
-	{
-		sessioninfo = message->client->session->dbfirst;
-
-		while (sessioninfo && _string_cmp(&sessioninfo->key, key))
-		{
-			sessioninfo = sessioninfo->next;
-		}
-	}
-
-	if (value != NULL)
-	{
-		if (!message->client->session)
-		{
-			message->client->session = _httpserver_createsession(message->client->server, message->client);
-		}
-		if (size > 0 && !sessioninfo)
-		{
-			sessioninfo = vcalloc(1, sizeof(*sessioninfo));
-			if (sessioninfo == NULL)
-				return  NULL;
-			sessioninfo->key.data =
-				_buffer_append(message->client->session->storage, key, -1);
-			sessioninfo->next = message->client->session->dbfirst;
-			message->client->session->dbfirst = sessioninfo;
-		}
-		if (sessioninfo)
-		{
-			if (sessioninfo->value.data != NULL)
-			{
-				free((void *)sessioninfo->value.data);
-				sessioninfo->value.data = NULL;
-			}
-			if (size > 0)
-			{
-				char *data = malloc(size);
-				memcpy(data, value, size);
-				_string_create(data, size);
-			}
-		}
-		else
-			return NULL;
-	}
-	else if (sessioninfo == NULL)
-	{
-		return NULL;
-	}
-	return (const void *)sessioninfo->value.data;
+	return httpclient_session(message->client, key, strlen(key), value, size);
 }
 
 void _httpconnector_add(http_connector_list_t **first,

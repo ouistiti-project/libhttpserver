@@ -1362,3 +1362,87 @@ void httpclient_flush(http_client_t *client)
 	if (client->ops->flush)
 		client->ops->flush(client->opsctx);
 }
+
+int httpclient_setsession(http_client_t *client, const char *token)
+{
+	if (client->session)
+		return EREJECT;
+	client->session = _httpserver_createsession(client->server, client);
+
+	_buffer_append(client->session->storage, "token=", -1);
+	_buffer_append(client->session->storage, token, -1);
+	_buffer_append(client->session->storage, "\0", 1);
+
+	return _buffer_filldb(client->session->storage, &client->session->dbfirst, '=', '\0');
+}
+
+static dbentry_t * _httpclient_sessioninfo(http_client_t *client, const char *key)
+{
+	dbentry_t *sessioninfo = NULL;
+	if (client == NULL)
+		return NULL;
+	if (client->session == NULL)
+		return NULL;
+	if (key == NULL)
+		return NULL;
+	size_t keylen = strlen(key);
+
+	sessioninfo = client->session->dbfirst;
+
+	while (sessioninfo)
+	{
+		if (!_string_cmp(&sessioninfo->key, key))
+		{
+			//dbg("session: key %s found %s", key, sessioninfo->value);
+			break;
+		}
+		sessioninfo = sessioninfo->next;
+	}
+
+	return sessioninfo;
+}
+
+const void *httpclient_session(http_client_t *client, const char *key, size_t keylen, const void *value, size_t size)
+{
+	if (client->session == NULL)
+		return NULL;
+	dbentry_t *entry = dbentry_get(client->session->dbfirst, key);
+	if (value != NULL)
+	{
+		if (size == 0)
+			return NULL;
+		if (entry != NULL)
+		{
+			_buffer_deletedb(client->session->storage, entry, 0);
+		}
+		key = _buffer_append(client->session->storage, key, keylen);
+		_buffer_append(client->session->storage, "=", 1);
+		value = _buffer_append(client->session->storage, value, size);
+		_buffer_append(client->session->storage, "\0", 1);
+#if 0
+		dbentry_destroy(client->session->dbfirst);
+		client->session->dbfirst = NULL;
+		_buffer_filldb(client->session->storage, &client->session->dbfirst, '=', '\0');
+#else
+		_buffer_dbentry(client->session->storage, &client->session->dbfirst, key, keylen, value, client->session->storage->length - 1);
+#endif
+		entry = dbentry_get(client->session->dbfirst, key);
+	}
+	else if (entry == NULL)
+	{
+		return NULL;
+	}
+	return entry->value.data;
+}
+
+const char *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size)
+{
+	dbentry_t *sessioninfo = _httpclient_sessioninfo(client, key);
+	if (sessioninfo == NULL)
+		return NULL;
+	_buffer_pop(client->session->storage, 1);
+	_buffer_append(client->session->storage, value, size);
+	_buffer_append(client->session->storage, "\0", 1);
+	return (const void *)sessioninfo->value.data;
+}
+

@@ -395,7 +395,7 @@ dbentry_t *dbentry_get(dbentry_t *entry, const char *key)
 	return entry;
 }
 
-int _buffer_deletedb(buffer_t *storage, dbentry_t *entry)
+int _buffer_deletedb(buffer_t *storage, dbentry_t *entry, int shrink)
 {
 	int ret = EREJECT;
 	size_t length = 0;
@@ -414,14 +414,20 @@ int _buffer_deletedb(buffer_t *storage, dbentry_t *entry)
 		storage->offset -= value->length + 1;
 		length = storage->length - (value->data - storage->data);
 		char *data = storage->data + (size_t)(value->data - storage->data);
-		memcpy(data, value->data + value->length + 1, length);
+		if (shrink)
+			memcpy(data, value->data + value->length + 1, length);
+		else
+			memset(data, 0, length);
 	}
 	/// remove key
 	storage->length -= key->length + 1;
 	storage->offset -= key->length + 1;
 	length = storage->length - (key->data - storage->data);
 	char *data = storage->data + (size_t)(key->data - storage->data);
-	memcpy(data, key->data + key->length + 1, length);
+	if (shrink)
+		memcpy(data, key->data + key->length + 1, length);
+	else
+		memset(data, 0, length);
 	ret = ESUCCESS;
 	entry = entry->next;
 	return ret;

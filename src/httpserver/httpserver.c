@@ -925,3 +925,12 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	}
 	return value;
 }
+
+http_server_session_t *_httpserver_createsession(const http_server_t *server, const http_client_t *client)
+{
+	http_server_session_t *session = NULL;
+	session = vcalloc(1, sizeof(*session));
+	if (session)
+		session->storage = _buffer_create(MAXCHUNKS_SESSION);
+	return session;
+}
