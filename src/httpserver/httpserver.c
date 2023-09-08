@@ -621,7 +621,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	const http_message_method_t *method = default_methods;
 	while (method)
 	{
-		httpserver_addmethod(server, method->key.data, method->properties);
+		httpserver_addmethod(server, method->key.data, method->key.length, method->properties);
 		method = method->next;
 	}
 	vthread_init(server->config->maxclients);
@@ -663,7 +663,7 @@ http_server_t *httpserver_dup(http_server_t *server)
 	const http_message_method_t *method = default_methods;
 	while (method)
 	{
-		httpserver_addmethod(vserver, method->key.data, method->properties);
+		httpserver_addmethod(vserver, method->key.data, method->key.length, method->properties);
 		method = method->next;
 	}
 
@@ -673,7 +673,7 @@ http_server_t *httpserver_dup(http_server_t *server)
 	return vserver;
 }
 
-void httpserver_addmethod(http_server_t *server, const char *key, short properties)
+void httpserver_addmethod(http_server_t *server, const char *key, size_t keylen, short properties)
 {
 	short id = -1;
 	http_message_method_t *method = server->methods;
@@ -691,10 +691,18 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		method = vcalloc(1, sizeof(*method));
 		if (method == NULL)
 			return;
-		_string_store(&method->key, key, -1);
+		_string_store(&method->key, key, keylen);
 		method->id = id + 1;
 		method->next = server->methods;
 		server->methods = method;
+
+		if (server->methods_storage == NULL)
+		{
+			server->methods_storage = _buffer_create(MAXCHUNKS_URI);
+		}
+		else
+			_buffer_append(server->methods_storage, ",", 1);
+		_buffer_append(server->methods_storage, method->key.data, method->key.length);
 	}
 	if (properties != method->properties)
 	{
@@ -873,19 +881,7 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	}
 	else if (!strcasecmp(key, "methods"))
 	{
-		if (server->methods_storage == NULL)
-		{
-			server->methods_storage = _buffer_create(MAXCHUNKS_URI);
-			const http_message_method_t *method = server->methods;
-			while (method)
-			{
-				_buffer_append(server->methods_storage, method->key.data, method->key.length);
-				if (method->next != NULL)
-					_buffer_append(server->methods_storage, ",", -1);
-				method = method->next;
-			}
-		}
-		value = server->methods_storage->data;
+		value = _buffer_get(server->methods_storage, 0);
 	}
 	else if (!strcasecmp(key, "secure"))
 	{
