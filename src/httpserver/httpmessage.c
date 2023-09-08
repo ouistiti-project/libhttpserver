@@ -984,7 +984,7 @@ int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			break;
 			case PARSE_END:
 			{
-				message_dbg("parse end with %d data: %s", data->length, data->offset);
+				message_dbg("parse end with %lu data: %s", data->length, data->offset);
 
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;

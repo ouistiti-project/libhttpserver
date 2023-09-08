@@ -743,7 +743,7 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
 		}
 		else if (size < 0)
 		{
-			err("client %p rest %d send error %s", client, buffer->length, strerror(errno));
+			err("client %p rest %lu send error %s", client, buffer->length, strerror(errno));
 			/**
 			 * error on sending the communication is broken and the thread must die
 			 */

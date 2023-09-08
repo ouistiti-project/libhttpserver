@@ -124,7 +124,7 @@ int _buffer_chunksize(int new)
 	return ChunkSize;
 }
 
-int _buffer_accept(buffer_t *buffer, int length)
+int _buffer_accept(const buffer_t *buffer, size_t length)
 {
 	if ((buffer->data + buffer->size < buffer->offset + length) &&
 		(buffer->maxchunks * ChunkSize < length))
@@ -132,9 +132,9 @@ int _buffer_accept(buffer_t *buffer, int length)
 	return ESUCCESS;
 }
 
-char *_buffer_append(buffer_t *buffer, const char *data, int length)
+char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
 {
-	if (length == -1)
+	if (length == (size_t)-1)
 		length = strlen(data);
 	if (length == 0)
 		return buffer->offset;
@@ -144,11 +144,11 @@ char *_buffer_append(buffer_t *buffer, const char *data, int length)
 		int nbchunks = (length / ChunkSize) + 1;
 		if (buffer->maxchunks > -1 && buffer->maxchunks - nbchunks < 0)
 			nbchunks = buffer->maxchunks;
-		int chunksize = ChunkSize * nbchunks;
+		size_t chunksize = ChunkSize * nbchunks;
 
 		if (chunksize == 0)
 		{
-			err("buffer: max chunk: %d", buffer->size / ChunkSize);
+			err("buffer: max chunk: %lu", buffer->size / ChunkSize);
 			return NULL;
 		}
 
@@ -160,7 +160,7 @@ char *_buffer_append(buffer_t *buffer, const char *data, int length)
 		}
 		if (buffer->maxchunks == 0)
 		{
-			err("buffer: out memory block: %d", buffer->size + chunksize);
+			err("buffer: out memory block: %lu", buffer->size + chunksize);
 			return NULL;
 		}
 		if (buffer->maxchunks > -1)
@@ -168,7 +168,7 @@ char *_buffer_append(buffer_t *buffer, const char *data, int length)
 		buffer->size += chunksize;
 		if (newptr != buffer->data)
 		{
-			char *offset = buffer->offset;
+			const char *offset = buffer->offset;
 			buffer->offset = newptr + (offset - buffer->data);
 			buffer->data = newptr;
 		}
@@ -182,7 +182,7 @@ char *_buffer_append(buffer_t *buffer, const char *data, int length)
 	return offset;
 }
 
-char *_buffer_pop(buffer_t *buffer, int length)
+char *_buffer_pop(buffer_t *buffer, size_t length)
 {
 	length = (length < buffer->length)? length: buffer->length;
 	buffer->length -= length;

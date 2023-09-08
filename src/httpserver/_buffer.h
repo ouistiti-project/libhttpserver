@@ -33,16 +33,16 @@ struct buffer_s
 {
 	char *data;
 	char *offset;
-	int size;
-	int length;
+	size_t size;
+	size_t length;
 	int maxchunks;
 };
 
 buffer_t * _buffer_create(int maxchunks);
 int _buffer_chunksize(int new);
-int _buffer_accept(buffer_t *buffer, int length);
-char *_buffer_append(buffer_t *buffer, const char *data, int length);
-char *_buffer_pop(buffer_t *buffer, int length);
+int _buffer_accept(buffer_t *buffer, size_t length);
+char *_buffer_append(buffer_t *buffer, const char *data, size_t length);
+char *_buffer_pop(buffer_t *buffer, size_t length);
 void _buffer_shrink(buffer_t *buffer, int reset);
 void _buffer_reset(buffer_t *buffer);
 int _buffer_rewindto(buffer_t *buffer, char needle);
