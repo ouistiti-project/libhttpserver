@@ -43,5 +43,6 @@ typedef struct dbentry_s dbentry_t;
 const char *dbentry_search(dbentry_t *entry, const char *key);
 void dbentry_destroy(dbentry_t *entry);
 void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep);
+dbentry_t *dbentry_get(dbentry_t *entry, const char *key);
 
 #endif

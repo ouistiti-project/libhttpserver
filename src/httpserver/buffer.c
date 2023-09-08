@@ -382,6 +382,51 @@ const char *dbentry_search(dbentry_t *entry, const char *key)
 	return value;
 }
 
+dbentry_t *dbentry_get(dbentry_t *entry, const char *key)
+{
+	while (entry != NULL)
+	{
+		if (!_string_cmp(&entry->key, key))
+		{
+			break;
+		}
+		entry = entry->next;
+	}
+	return entry;
+}
+
+int _buffer_deletedb(buffer_t *storage, dbentry_t *entry)
+{
+	int ret = EREJECT;
+	size_t length = 0;
+	string_t *value = &entry->value;
+	string_t *key = &entry->key;
+	if (storage->data > key->data ||
+		(storage->data + storage->length) < (value->data + value->length))
+	{
+		return ret;
+	}
+	/// remove value
+	if (value->data >= storage->data &&
+		value->data + value->length <= storage->data + storage->length)
+	{
+		storage->length -= value->length + 1;
+		storage->offset -= value->length + 1;
+		length = storage->length - (value->data - storage->data);
+		char *data = storage->data + (size_t)(value->data - storage->data);
+		memcpy(data, value->data + value->length + 1, length);
+	}
+	/// remove key
+	storage->length -= key->length + 1;
+	storage->offset -= key->length + 1;
+	length = storage->length - (key->data - storage->data);
+	char *data = storage->data + (size_t)(key->data - storage->data);
+	memcpy(data, key->data + key->length + 1, length);
+	ret = ESUCCESS;
+	entry = entry->next;
+	return ret;
+}
+
 void dbentry_destroy(dbentry_t *entry)
 {
 	while (entry)
