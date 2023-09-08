@@ -191,7 +191,7 @@ char *_buffer_pop(buffer_t *buffer, size_t length)
 	return buffer->offset;
 }
 
-void _buffer_shrink(buffer_t *buffer, int reset)
+void _buffer_shrink(buffer_t *buffer)
 {
 	buffer->length -= (buffer->offset - buffer->data);
 	while (buffer->length > 0 && (*(buffer->offset) == 0))
@@ -201,16 +201,14 @@ void _buffer_shrink(buffer_t *buffer, int reset)
 	}
 	memcpy(buffer->data, buffer->offset, buffer->length);
 	buffer->data[buffer->length] = '\0';
-	if (!reset)
-		buffer->offset = buffer->data + buffer->length;
-	else
-		buffer->offset = buffer->data;
+	buffer->offset = buffer->data;
 }
 
-void _buffer_reset(buffer_t *buffer)
+void _buffer_reset(buffer_t *buffer, size_t offset)
 {
-	buffer->offset = buffer->data;
-	buffer->length = 0;
+	buffer->offset = buffer->data + offset;
+	buffer->length = offset;
+	*(buffer->offset) = '\0';
 }
 
 int _buffer_rewindto(buffer_t *buffer, char needle)

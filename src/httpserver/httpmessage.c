@@ -240,11 +240,11 @@ http_message_t * _httpmessage_create(http_client_t *client, http_message_t *pare
 void _httpmessage_reset(http_message_t *message)
 {
 	if (message->uri)
-		_buffer_reset(message->uri);
+		_buffer_reset(message->uri, 0);
 	if (message->content)
-		_buffer_reset(message->content);
+		_buffer_reset(message->content, 0);
 	if (message->headers_storage)
-		_buffer_reset(message->headers_storage);
+		_buffer_reset(message->headers_storage, 0);
 }
 
 void _httpmessage_destroy(http_message_t *message)
@@ -733,7 +733,7 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 	}
 	else
 	{
-		_buffer_shrink(data, 1);
+		_buffer_shrink(data);
 		next = PARSE_PRECONTENT;
 		message->state &= ~PARSE_CONTINUE;
 	}
@@ -841,7 +841,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 			message->content_storage = _buffer_create(1);
 			message->content = message->content_storage;
 		}
-		_buffer_reset(message->content);
+		_buffer_reset(message->content, 0);
 		if (message->content != data)
 			_buffer_append(message->content, data->offset, length);
 		message->content_packet = length;
@@ -1282,7 +1282,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 
 	if (content != NULL)
 	{
-		_buffer_reset(message->content);
+		_buffer_reset(message->content, 0);
 		if (length == -1)
 			length = strlen(content);
 		_buffer_append(message->content, content, length);

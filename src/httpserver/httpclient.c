@@ -397,8 +397,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
 
 		data = client->sockdata;
-		_buffer_reset(data);
-		*(data->offset) = '\0';
+		_buffer_reset(data, 0);
 
 		ret = _httpclient_wait(request->client, WAIT_SEND);
 		if (ret == ESUCCESS)
@@ -418,7 +417,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 			ret = _httpmessage_parserequest(response, data);
 			while ((ret == ECONTINUE) && (data->length - (data->offset - data->data) > 0))
 			{
-				_buffer_shrink(data, 1);
+				_buffer_shrink(data);
 				ret = _httpmessage_parserequest(response, data);
 			}
 		}
@@ -429,8 +428,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 	break;
 	case GENERATE_ERROR:
 		data = client->sockdata;
-		_buffer_reset(data);
-		*(data->offset) = '\0';
+		_buffer_reset(data, 0);
 		ret = ESUCCESS;
 	break;
 	}
@@ -973,7 +971,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 		{
 			if (response->content != NULL && response->content->length > 0)
 			{
-				_buffer_shrink(response->content, 1);
+				_buffer_shrink(response->content);
 			}
 			http_connector_list_t *callback = request->connector;
 			const char *name = "server";
@@ -1123,7 +1121,8 @@ static int _httpclient_thread(http_client_t *client)
 		 * server configuration.
 		 * see http_server_config_t and httpserver_create
 		 */
-		_buffer_shrink(client->sockdata, 0);
+		_buffer_shrink(client->sockdata);
+		_buffer_reset(client->sockdata, client->sockdata->length);
 		size = client->client_recv(client->recv_arg, client->sockdata->offset, client->sockdata->size - client->sockdata->length - 1);
 		if (size == 0 || size == EREJECT)
 		{
@@ -1220,7 +1219,7 @@ static int _httpclient_thread(http_client_t *client)
 
 			client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
 			client->state |= CLIENT_ERROR;
-			_buffer_reset(client->sockdata);
+			_buffer_reset(client->sockdata, 0);
 		}
 		break;
 		case ESUCCESS:
@@ -1231,7 +1230,7 @@ static int _httpclient_thread(http_client_t *client)
 			 * for message without content this shrink is dangerous.
 			 */
 			if (client->request->content_length != 0)
-				_buffer_shrink(client->sockdata, 1);
+				_buffer_shrink(client->sockdata);
 			client->request = NULL;
 			client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
 		}
