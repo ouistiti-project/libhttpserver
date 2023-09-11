@@ -1038,6 +1038,8 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 	_buffer_append(header, status, len);
 	_buffer_append(header, "\r\n", 2);
 
+	if (message->result > 399)
+		message->mode &= ~HTTPMESSAGE_KEEPALIVE;
 	header->offset = _buffer_get(header, 0);
 	return ESUCCESS;
 }
@@ -1062,7 +1064,6 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 	}
 	else
 	{
-		message->mode &= ~HTTPMESSAGE_KEEPALIVE;
 		httpmessage_addheader(message, str_connection, "Close");
 	}
 	message->headers_storage->offset = _buffer_get(message->headers_storage, 0);
