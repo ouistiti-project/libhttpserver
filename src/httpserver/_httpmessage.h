@@ -78,7 +78,7 @@ struct http_message_s
 	enum {
 		PARSE_INIT,
 		PARSE_URI = 0x0001,
-		PARSE_URIENCODED = 0x0002,
+		PARSE_QUERY = 0x0002,
 		PARSE_URIDOUBLEDOT = 0x0003,
 		PARSE_VERSION = 0x0004,
 		PARSE_STATUS = 0x0005,
@@ -111,7 +111,6 @@ struct http_message_s
 	http_message_version_e version;
 	buffer_t *headers_storage;
 	dbentry_t *headers;
-	char *query;
 	buffer_t *query_storage;
 	dbentry_t *queries;
 	buffer_t *cookie_storage;
