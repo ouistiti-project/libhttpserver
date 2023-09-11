@@ -363,14 +363,18 @@ void _buffer_destroy(buffer_t *buffer)
 	vfree(buffer);
 }
 
-const char *dbentry_search(dbentry_t *entry, const char *key)
+ssize_t dbentry_search(dbentry_t *entry, const char *key, const char **value)
 {
-	const char *value = NULL;
+	ssize_t valuelen = -1;
+	if (value != NULL)
+		*value = NULL;
 	while (entry != NULL)
 	{
 		if (!_string_cmp(&entry->key, key))
 		{
-			value = _string_get(&entry->value);
+			if (value != NULL)
+				*value = entry->value.data;
+			valuelen = entry->value.length;
 			break;
 		}
 		entry = entry->next;
@@ -379,7 +383,7 @@ const char *dbentry_search(dbentry_t *entry, const char *key)
 	{
 		buffer_dbg("dbentry %s not found", key);
 	}
-	return value;
+	return valuelen;
 }
 
 dbentry_t *dbentry_get(dbentry_t *entry, const char *key)

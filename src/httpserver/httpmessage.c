@@ -1190,29 +1190,43 @@ size_t _httpmessage_status(const http_message_t *message, char *status, size_t s
 
 int _httpmessage_fillheaderdb(http_message_t *message)
 {
-	_buffer_filldb(message->headers_storage, &message->headers, ':', '\r');
+	_buffer_filldb(message->headers_storage, &message->headers, ':', '\n');
 	const char *value = NULL;
-	value = dbentry_search(message->headers, str_connection);
-	if (value != NULL && strcasestr(value, "Keep-Alive") != NULL)
-		message->mode |= HTTPMESSAGE_KEEPALIVE;
-	if (value != NULL && strcasestr(value, "Upgrade") != NULL)
+	ssize_t valuelen;
+	valuelen = dbentry_search(message->headers, str_connection, &value);
+	if (valuelen > 0)
 	{
-		warn("Connection upgrading");
-		message->mode |= HTTPMESSAGE_LOCKED;
+		for (int i = 0; i < valuelen; i++)
+		{
+			if (!strncasecmp( value + i, "Keep-Alive", sizeof("Keep-Alive") - 1))
+			{
+				message->mode |= HTTPMESSAGE_KEEPALIVE;
+			}
+			if (!strncasecmp( value + i, "Upgrade", sizeof("Upgrade") - 1))
+			{
+				warn("Connection upgrading");
+				message->mode |= HTTPMESSAGE_LOCKED;
+			}
+		}
 	}
-	value = dbentry_search(message->headers, str_contentlength);
-	if (value != NULL)
-		message->content_length = atoi(value);
-	value = dbentry_search(message->headers, str_contenttype);
-	if (value != NULL)
-		message->content_type = value;
-	value = dbentry_search(message->headers, "Status");
-	if (value != NULL)
-		httpmessage_result(message, atoi(value));
-	value = dbentry_search(message->headers, str_cookie);
-	if (value && (message->cookies == NULL))
+	valuelen = dbentry_search(message->headers, str_contentlength, &value);
+	char *endvalue;
+	if (valuelen > 0)
 	{
-		int valuelen = strlen(value);
+		long intvalue = strtol(value, &endvalue, 10);
+		if (endvalue - value == valuelen)
+			message->content_length = intvalue;
+	}
+	valuelen = dbentry_search(message->headers, "Status", &value);
+	if (valuelen > 0)
+	{
+		long intvalue = strtol(value, &endvalue, 10);
+		if (endvalue - value == valuelen)
+			httpmessage_result(message, intvalue);
+	}
+	valuelen = dbentry_search(message->headers, str_cookie, &value);
+	if ((valuelen > 0) && (message->cookies == NULL))
+	{
 		int nbchunks = ((valuelen + 1) / _buffer_chunksize(-1)) + 1;
 		message->cookie_storage = _buffer_create(nbchunks);
 		_buffer_append(message->cookie_storage, value, valuelen);
@@ -1420,6 +1434,7 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 {
 	const char *value = NULL;
+	int valuelen = EREJECT;
 	if (!strcasecmp(key, "uri"))
 	{
 		if (message->uri != NULL)
@@ -1486,7 +1501,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 		}
 		if (value == NULL)
 		{
-			value = dbentry_search(message->headers, key);
+			valuelen = dbentry_search(message->headers, key, &value);
 		}
 	}
 	else if (!strncasecmp(key, "remote_addr", 11))
@@ -1513,7 +1528,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	}
 	else
 	{
-		value = dbentry_search(message->headers, key);
+		valuelen = dbentry_search(message->headers, key, &value);
 	}
 	if (value == NULL)
 		value = httpserver_INFO(httpclient_server(message->client), key);
@@ -1526,13 +1541,15 @@ const char *httpmessage_parameter(http_message_t *message, const char *key)
 	{
 		_buffer_filldb(message->query_storage, &message->queries, '=', '&');
 	}
-	return dbentry_search(message->queries, key);
+	const char *value = NULL;
+	dbentry_search(message->queries, key, &value);
+	return value;
 }
 
 const char *httpmessage_cookie(http_message_t *message, const char *key)
 {
 	const char *value = NULL;
-	value = dbentry_search(message->cookies, key);
+	dbentry_search(message->cookies, key, &value);
 	return value;
 }
 
