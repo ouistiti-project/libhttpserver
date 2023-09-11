@@ -85,9 +85,8 @@ struct http_server_s
 	buffer_t *methods_storage;
 #ifdef USE_POLL
 	struct pollfd *poll_set;
-#else
-	fd_set fds[3];
 #endif
+	fd_set fds[3];
 	int numfds;
 	http_server_t *next;
 };
