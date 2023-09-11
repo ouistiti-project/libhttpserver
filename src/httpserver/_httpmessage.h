@@ -114,7 +114,6 @@ struct http_message_s
 	char *query;
 	buffer_t *query_storage;
 	dbentry_t *queries;
-	const char *cookie;
 	buffer_t *cookie_storage;
 	dbentry_t *cookies;
 	void *private;

@@ -1210,8 +1210,14 @@ int _httpmessage_fillheaderdb(http_message_t *message)
 	if (value != NULL)
 		httpmessage_result(message, atoi(value));
 	value = dbentry_search(message->headers, str_cookie);
-	if (value != NULL)
-		message->cookie = value;
+	if (value && (message->cookies == NULL))
+	{
+		int valuelen = strlen(value);
+		int nbchunks = ((valuelen + 1) / _buffer_chunksize(-1)) + 1;
+		message->cookie_storage = _buffer_create(nbchunks);
+		_buffer_append(message->cookie_storage, value, valuelen);
+		_buffer_filldb(message->cookie_storage, &message->cookies, '=', ';');
+	}
 	return ESUCCESS;
 }
 
@@ -1525,16 +1531,9 @@ const char *httpmessage_parameter(http_message_t *message, const char *key)
 
 const char *httpmessage_cookie(http_message_t *message, const char *key)
 {
-	if (message->cookies == NULL)
-	{
-		if (message->cookie == NULL)
-			return NULL;
-		int nbchunks = ((strlen(message->cookie) + 1) / _buffer_chunksize(-1)) + 1;
-		message->cookie_storage = _buffer_create(nbchunks);
-		_buffer_append(message->cookie_storage, message->cookie, -1);
-		_buffer_filldb(message->cookie_storage, &message->cookies, '=', ';');
-	}
-	return dbentry_search(message->cookies, key);
+	const char *value = NULL;
+	value = dbentry_search(message->cookies, key);
+	return value;
 }
 
 const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size)
