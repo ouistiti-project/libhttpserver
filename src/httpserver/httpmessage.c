@@ -1033,8 +1033,9 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 		_version = (version & HTTPVERSION_MASK);
 	_buffer_append(header, httpversion[_version].data, httpversion[_version].length);
 
-	char *status = _httpmessage_status(message);
-	_buffer_append(header, status, strlen(status));
+	char status[_HTTPMESSAGE_RESULT_MAXLEN];
+	size_t len = _httpmessage_status(message, status, _HTTPMESSAGE_RESULT_MAXLEN);
+	_buffer_append(header, status, len);
 	_buffer_append(header, "\r\n", 2);
 
 	header->offset = _buffer_get(header, 0);
@@ -1164,18 +1165,27 @@ http_message_result_e httpmessage_result(http_message_t *message, http_message_r
 	return message->result;
 }
 
-char *_httpmessage_status(http_message_t *message)
+size_t _httpmessage_status(const http_message_t *message, char *status, size_t statuslen)
 {
 	int i = 0;
 	while (_http_message_result[i] != NULL)
 	{
 		if (_http_message_result[i]->result == message->result)
-			return _http_message_result[i]->status;
+		{
+			if (status != NULL)
+			{
+				statuslen = (_http_message_result[i]->status.length > statuslen)? statuslen: _http_message_result[i]->status.length + 1;
+				memcpy(status, _http_message_result[i]->status.data, statuslen);
+			}
+			return _http_message_result[i]->status.length;
+		}
 		i++;
 	}
-	static char status[] = " XXX ";
-	snprintf(status, 6, " %.3d", message->result);
-	return status;
+	if (status != NULL && statuslen > 4)
+	{
+		snprintf(status, 5, " %.3d", message->result);
+	}
+	return 4;
 }
 
 int _httpmessage_fillheaderdb(http_message_t *message)
@@ -1449,7 +1459,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 		{
 			if (_http_message_result[i]->result == message->result)
 			{
-				value = _http_message_result[i]->status;
+				value = _http_message_result[i]->status.data;
 				break;
 			}
 			i++;

@@ -841,8 +841,10 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 				if ((response->result >= 299) &&
 					(response->content == NULL))
 				{
-					const char *value = _httpmessage_status(response);
-					httpmessage_addcontent(response, "text/plain", value, strlen(value));
+					char value[_HTTPMESSAGE_RESULT_MAXLEN];
+					size_t valuelen = _httpmessage_status(response, value, _HTTPMESSAGE_RESULT_MAXLEN);
+					if (valuelen > 0)
+						httpmessage_addcontent(response, "text/plain", value, valuelen);
 					httpmessage_appendcontent(response, "\r\n", 2);
 				}
 
