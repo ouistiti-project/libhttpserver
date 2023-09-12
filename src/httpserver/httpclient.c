@@ -114,7 +114,11 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 static void _httpclient_destroy(http_client_t *client)
 {
 	if (client->opsctx != NULL)
+	{
+		client->ops->disconnect(client->opsctx);
 		client->ops->destroy(client->opsctx);
+		client->opsctx = NULL;
+	}
 
 	client->modctx = NULL;
 	http_connector_list_t *callback = client->callbacks;
@@ -138,6 +142,7 @@ static void _httpclient_destroy(http_client_t *client)
 	}
 	if (client->sockdata)
 		_buffer_destroy(client->sockdata);
+	client->sockdata = NULL;
 	http_message_t *request = client->request_queue;
 	while (request)
 	{
@@ -438,7 +443,6 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 }
 #endif
 
-#ifdef VTHREAD
 int _httpclient_run(http_client_t *client)
 {
 	int ret;
@@ -446,6 +450,7 @@ int _httpclient_run(http_client_t *client)
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
 
+#ifdef VTHREAD
 	if (!vthread_sharedmemory(client->thread))
 	{
 		/*
@@ -465,20 +470,28 @@ int _httpclient_run(http_client_t *client)
 	 */
 	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 	dbg("client: %d %p thread exit", vthread_self(client->thread), client);
-	httpclient_destroy(client);
+	if (!vthread_sharedmemory(client->thread))
+		httpclient_destroy(client);
+	else if (client->opsctx != NULL)
+	{
+		client->ops->disconnect(client->opsctx);
+		client->ops->destroy(client->opsctx);
+		client->opsctx = NULL;
+	}
+#else
+	do
+	{
+		ret = _httpclient_thread(client);
+	}
+	while (ret == EINCOMPLETE && client->request_queue == NULL);
+	if (ret == ESUCCESS)
+		client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
+#endif
 #ifdef DEBUG
 	fflush(stderr);
 #endif
-	return 0;
-}
-#else
-int _httpclient_run(http_client_t *client)
-{
-	int ret;
-	ret = _httpclient_thread(client);
 	return ret;
 }
-#endif
 
 int httpclient_socket(http_client_t *client)
 {
@@ -497,6 +510,8 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 	http_connector_list_t *first;
 	first = client->callbacks;
 	iterator = first;
+	if (iterator == NULL)
+		warn("client: no connector available");
 	while (iterator != NULL)
 	{
 		if (iterator->func)
