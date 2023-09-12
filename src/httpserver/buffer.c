@@ -143,7 +143,10 @@ char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
 	{
 		int nbchunks = (length / ChunkSize) + 1;
 		if (buffer->maxchunks > -1 && buffer->maxchunks - nbchunks < 0)
+		{
+			err("buffer: impossible to exceed to %d chunks", buffer->maxchunks);
 			nbchunks = buffer->maxchunks;
+		}
 		size_t chunksize = ChunkSize * nbchunks;
 
 		if (chunksize == 0)
@@ -180,6 +183,17 @@ char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
 	buffer->offset += length;
 	buffer->data[buffer->length] = '\0';
 	return offset;
+}
+
+int _buffer_fill(buffer_t *buffer, _buffer_fillcb cb, void * cbarg)
+{
+	int size = cb(cbarg, buffer->offset, buffer->size - buffer->length - 1);
+	if (size > 0)
+	{
+		buffer->length += size;
+		buffer->data[buffer->length] = 0;
+	}
+	return size;
 }
 
 char *_buffer_pop(buffer_t *buffer, size_t length)
