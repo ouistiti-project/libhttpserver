@@ -613,6 +613,45 @@ static int _httpclient_message(http_client_t *client, http_message_t *request)
 	return ret;
 }
 
+static int _httpclient_changeresponsestate(http_client_t *client, http_message_t *response, int ret)
+{
+	switch (ret)
+	{
+	case ESUCCESS:
+	{
+		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		if ((response->state & PARSE_MASK) < PARSE_POSTHEADER)
+			_httpmessage_changestate(response, PARSE_POSTHEADER);
+		if (!(response->state & GENERATE_MASK))
+			_httpmessage_changestate(response, GENERATE_INIT);
+		_httpmessage_changestate(response, PARSE_END);
+		response->state &= ~PARSE_CONTINUE;
+	}
+	break;
+	case ECONTINUE:
+		if ((response->state & PARSE_MASK) < PARSE_POSTHEADER)
+			_httpmessage_changestate(response, PARSE_POSTHEADER);
+		if (!(response->state & GENERATE_MASK))
+			_httpmessage_changestate(response, GENERATE_INIT);
+		response->state |= PARSE_CONTINUE;
+	break;
+	case EINCOMPLETE:
+		response->state |= PARSE_CONTINUE;
+	break;
+	case EREJECT:
+	{
+		_httpmessage_changestate(response, GENERATE_ERROR);
+		response->state &= ~PARSE_CONTINUE;
+		// The response is an error and it is ready to be sent
+	}
+	break;
+	default:
+		err("client: connector error");
+	break;
+	}
+	return ret;
+}
+
 /**
  * @brief This function run the connector with the request.
  *
@@ -671,52 +710,18 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 		 * The content is the "tempo" buffer, it is useless to free it.
 		 **/
 		request->content = NULL;
-		switch (ret)
-		{
-		case ESUCCESS:
-		{
-			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
-			if ((response->state & PARSE_MASK) < PARSE_POSTHEADER)
-				_httpmessage_changestate(response, PARSE_POSTHEADER);
-			if (!(response->state & GENERATE_MASK))
-				_httpmessage_changestate(response, GENERATE_INIT);
-			_httpmessage_changestate(response, PARSE_END);
-			response->state &= ~PARSE_CONTINUE;
-			if (request->mode & HTTPMESSAGE_LOCKED)
-			{
-				client->state |= CLIENT_LOCKED;
-			}
-		}
-		break;
-		case ECONTINUE:
-			if ((response->state & PARSE_MASK) < PARSE_POSTHEADER)
-				_httpmessage_changestate(response, PARSE_POSTHEADER);
-			if (!(response->state & GENERATE_MASK))
-				_httpmessage_changestate(response, GENERATE_INIT);
-			response->state |= PARSE_CONTINUE;
-			if ((request->mode & HTTPMESSAGE_LOCKED) ||
-				(request->response->mode & HTTPMESSAGE_LOCKED))
-			{
-				client->state |= CLIENT_LOCKED;
-			}
-		break;
-		case EINCOMPLETE:
-			response->state |= PARSE_CONTINUE;
-		break;
-		case EREJECT:
-		{
-			error_connector.arg = client;
-			request->connector = &error_connector;
-			_httpmessage_changestate(response, GENERATE_ERROR);
-			request->response->state &= ~PARSE_CONTINUE;
-			// The response is an error and it is ready to be sent
-			ret = ESUCCESS;
-		}
-		break;
-		default:
-			err("client: connector error");
-		break;
-		}
+	}
+	ret = _httpclient_changeresponsestate(client, response, ret);
+	if (ret == EREJECT)
+	{
+		error_connector.arg = client;
+		request->connector = &error_connector;
+		ret = ESUCCESS;
+	}
+	else if ((request->mode & HTTPMESSAGE_LOCKED) ||
+		(request->response->mode & HTTPMESSAGE_LOCKED))
+	{
+			client->state |= CLIENT_LOCKED;
 	}
 	return ret;
 }
@@ -773,6 +778,218 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
  * EINCOMPLETE : the connection is not ready to send data, and the function should be call again when it is ready.
  * EREJECT : the connection is closing during the sending.
  */
+static int _httpclient_response_generate_error(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	int ret = ESUCCESS;
+	if (response->version == HTTP09)
+	{
+		_httpmessage_changestate(response, GENERATE_CONTENT);
+		ret = ECONTINUE;
+	}
+	else
+	{
+		if (response->header == NULL)
+			response->header = _buffer_create(str_header, MAXCHUNKS_HEADER);
+		buffer_t *buffer = response->header;
+		_httpmessage_buildresponse(response,response->version, buffer);
+		_httpmessage_changestate(response, GENERATE_RESULT);
+		ret = EINCOMPLETE;
+	}
+	response->state &= ~PARSE_CONTINUE;
+	return ret;
+}
+static int _httpclient_response_generate_init(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	int ret = ECONTINUE;
+	if (response->version == HTTP09)
+		_httpmessage_changestate(response, GENERATE_CONTENT);
+	else
+	{
+		if (response->header == NULL)
+			response->header = _buffer_create(str_header, MAXCHUNKS_HEADER);
+		buffer_t *buffer = response->header;
+		if ((response->state & PARSE_MASK) >= PARSE_POSTHEADER)
+		{
+			_httpmessage_changestate(response, GENERATE_RESULT);
+			_httpmessage_buildresponse(response,response->version, buffer);
+			ret = EINCOMPLETE;
+		}
+	}
+	return ret;
+}
+
+static int _httpclient_response_generate_result(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	int ret = ESUCCESS;
+	int sent;
+	/**
+	 * here, it is the call to the sendresp callback from the
+	 * server configuration.
+	 * see http_server_config_t and httpserver_create
+	 */
+	sent = _httpclient_sendpart(client, response->header);
+	if (sent == EREJECT)
+	{
+		ret = EREJECT;
+	}
+	else if (sent == ESUCCESS)
+	{
+		/**
+		 * for error the content must be set before the header
+		 * generation to set the ContentLength
+		 */
+		if ((response->result >= 299) &&
+			(response->content == NULL))
+		{
+			char value[_HTTPMESSAGE_RESULT_MAXLEN];
+			size_t valuelen = _httpmessage_status(response, value, _HTTPMESSAGE_RESULT_MAXLEN);
+			if (valuelen > 0)
+				httpmessage_addcontent(response, "text/plain", value, valuelen);
+			httpmessage_appendcontent(response, "\r\n", 2);
+		}
+
+		_httpmessage_changestate(response, GENERATE_HEADER);
+		_buffer_destroy(response->header);
+		response->header = NULL;
+		int state = request->response->state;
+		_httpmessage_buildheader(response);
+		request->response->state = state;
+		ret = EINCOMPLETE;
+	}
+	return ret;
+}
+
+static int _httpclient_response_generate_header(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	int ret = ESUCCESS;
+	int sent;
+	sent = _httpclient_sendpart(client, response->headers_storage);
+	if (sent == ESUCCESS)
+	{
+		_httpmessage_changestate(response, GENERATE_SEPARATOR);
+		ret = EINCOMPLETE;
+	}
+	else if (sent == EREJECT)
+		ret = EREJECT;
+	return ret;
+}
+
+static int _httpclient_response_generate_separator(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	int ret = ESUCCESS;
+	int size;
+	size = client->client_send(client->send_arg, "\r\n", 2);
+	if (size < 0)
+	{
+		err("client %p SEPARATOR send error %s", client, strerror(errno));
+		ret = EREJECT;
+		return ret;
+	}
+	if (client->ops->flush != NULL)
+		client->ops->flush(client->opsctx);
+	if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
+	{
+		_httpmessage_changestate(response, GENERATE_END);
+		ret = ECONTINUE;
+	}
+	else if (response->content != NULL)
+	{
+		int sent;
+		/**
+		 * send the first part of the content.
+		 * The next loop may append data into the content, but
+		 * the first part has to be already sent
+		 */
+		if (_httpmessage_contentempty(response, 1))
+			response->content_length -= response->content->length;
+		sent = _httpclient_sendpart(client, response->content);
+		if (sent == EREJECT)
+		{
+			ret = EREJECT;
+		}
+		else
+		{
+			_httpmessage_changestate(response, GENERATE_CONTENT);
+			ret = ECONTINUE;
+			response->state |= PARSE_CONTINUE;
+		}
+	}
+	else if (response->state & PARSE_CONTINUE)
+	{
+		_httpmessage_changestate(response, GENERATE_CONTENT);
+		ret = ECONTINUE;
+	}
+	else
+	{
+		_httpmessage_changestate(response, GENERATE_END);
+		ret = ECONTINUE;
+	}
+	return ret;
+}
+
+static int _httpclient_response_generate_content(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	int ret = ESUCCESS;
+	int sent = ESUCCESS;
+	/**
+	 * The module may send data by itself (mod_sendfile).
+	 * In this case the content doesn't existe but the connector
+	 * has to be called
+	 */
+	if (response->content != NULL && response->content->length > 0)
+	{
+		if (!_httpmessage_contentempty(response, 1))
+		{
+
+			/**
+			 * if for any raison the content_length is not the real
+			 * size of the content the following condition must stop
+			 * the request
+			 */
+			response->content_length -=
+				(response->content_length < response->content->length)?
+				response->content_length : response->content->length;
+		}
+		sent = _httpclient_sendpart(client, response->content);
+		ret = ECONTINUE;
+		if (_httpmessage_state(response, PARSE_END))
+			_httpmessage_changestate(response, GENERATE_END);
+		if (sent == EREJECT)
+			ret = EREJECT;
+#ifdef DEBUG
+		static long long sent = 0;
+		sent += response->content->length;
+		if (!_httpmessage_contentempty(response, 1) &&
+			_httpmessage_state(response, PARSE_END))
+		client_dbg("response send content %d %lld %lld", ret, response->content_length, sent);
+#endif
+	}
+	else
+	{
+		if (_httpmessage_state(response, PARSE_END) &&
+			!(response->state & PARSE_CONTINUE))
+		{
+			_httpmessage_changestate(response, GENERATE_END);
+		}
+		ret = ECONTINUE;
+	}
+	return ret;
+}
+
+static int _httpclient_response_generate_end(http_client_t *client, http_message_t *request, http_message_t *response)
+{
+	if (response->content != NULL && response->content->length > 0)
+	{
+		_buffer_shrink(response->content);
+	}
+	const http_connector_list_t *callback = request->connector;
+	const char *name = "server";
+	if (callback)
+		name = callback->name;
+	warn("client: %p response from connector \"%s\" result %d", client, name, request->response->result);
+	return ESUCCESS;
+}
+
 static int _httpclient_response(http_client_t *client, http_message_t *request)
 {
 	int ret = ESUCCESS;
@@ -782,209 +999,25 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 	{
 		case 0:
 		case GENERATE_ERROR:
-		{
-			if (response->version == HTTP09)
-			{
-				_httpmessage_changestate(response, GENERATE_CONTENT);
-				ret = ECONTINUE;
-			}
-			else
-			{
-				if (response->header == NULL)
-					response->header = _buffer_create(str_header, MAXCHUNKS_HEADER);
-				buffer_t *buffer = response->header;
-				_httpmessage_buildresponse(response,response->version, buffer);
-				_httpmessage_changestate(response, GENERATE_RESULT);
-				ret = EINCOMPLETE;
-			}
-			response->state &= ~PARSE_CONTINUE;
-			client->state |= CLIENT_LOCKED;
-		}
+			ret = _httpclient_response_generate_error(client, request, response);
 		break;
 		case GENERATE_INIT:
-		{
-			ret = ECONTINUE;
-			if (response->version == HTTP09)
-			{
-				_httpmessage_changestate(response, GENERATE_CONTENT);
-			}
-			else
-			{
-				if (response->header == NULL)
-					response->header = _buffer_create(str_header, MAXCHUNKS_HEADER);
-				buffer_t *buffer = response->header;
-				if ((response->state & PARSE_MASK) >= PARSE_POSTHEADER)
-				{
-					_httpmessage_changestate(response, GENERATE_RESULT);
-					_httpmessage_buildresponse(response,response->version, buffer);
-					ret = EINCOMPLETE;
-				}
-			}
-		}
+			ret = _httpclient_response_generate_init(client, request, response);
 		break;
 		case GENERATE_RESULT:
-		{
-			int sent;
-			/**
-			 * here, it is the call to the sendresp callback from the
-			 * server configuration.
-			 * see http_server_config_t and httpserver_create
-			 */
-			sent = _httpclient_sendpart(client, response->header);
-			if (sent == EREJECT)
-			{
-				ret = EREJECT;
-			}
-			else if (sent == ESUCCESS)
-			{
-				/**
-				 * for error the content must be set before the header
-				 * generation to set the ContentLength
-				 */
-				if ((response->result >= 299) &&
-					(response->content == NULL))
-				{
-					char value[_HTTPMESSAGE_RESULT_MAXLEN];
-					size_t valuelen = _httpmessage_status(response, value, _HTTPMESSAGE_RESULT_MAXLEN);
-					if (valuelen > 0)
-						httpmessage_addcontent(response, "text/plain", value, valuelen);
-					httpmessage_appendcontent(response, "\r\n", 2);
-				}
-
-				_httpmessage_changestate(response, GENERATE_HEADER);
-				_buffer_destroy(response->header);
-				response->header = NULL;
-				int state = request->response->state;
-				_httpmessage_buildheader(response);
-				request->response->state = state;
-				ret = EINCOMPLETE;
-			}
-		}
+			ret = _httpclient_response_generate_result(client, request, response);
 		break;
 		case GENERATE_HEADER:
-		{
-			int sent;
-			sent = _httpclient_sendpart(client, response->headers_storage);
-			if (sent == ESUCCESS)
-			{
-				_httpmessage_changestate(response, GENERATE_SEPARATOR);
-				ret = EINCOMPLETE;
-			}
-			else if (sent == EREJECT)
-				ret = EREJECT;
-		}
+			ret = _httpclient_response_generate_header(client, request, response);
 		break;
 		case GENERATE_SEPARATOR:
-		{
-			int size;
-			size = client->client_send(client->send_arg, "\r\n", 2);
-			if (size < 0)
-			{
-				err("client %p SEPARATOR send error %s", client, strerror(errno));
-				ret = EREJECT;
-				break;
-			}
-			if (client->ops->flush != NULL)
-				client->ops->flush(client->opsctx);
-			if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
-			{
-				_httpmessage_changestate(response, GENERATE_END);
-				ret = ECONTINUE;
-			}
-			else if (response->content != NULL)
-			{
-				int sent;
-				/**
-				 * send the first part of the content.
-				 * The next loop may append data into the content, but
-				 * the first part has to be already sent
-				 */
-				if (!_httpmessage_contentempty(response, 1))
-					response->content_length -= response->content->length;
-				sent = _httpclient_sendpart(client, response->content);
-				if (sent == EREJECT)
-				{
-					ret = EREJECT;
-				}
-				else
-				{
-					_httpmessage_changestate(response, GENERATE_CONTENT);
-					ret = ECONTINUE;
-					response->state |= PARSE_CONTINUE;
-				}
-			}
-			else if (response->state & PARSE_CONTINUE)
-			{
-				_httpmessage_changestate(response, GENERATE_CONTENT);
-				ret = ECONTINUE;
-			}
-			else
-			{
-				_httpmessage_changestate(response, GENERATE_END);
-				ret = ECONTINUE;
-			}
-		}
+			ret = _httpclient_response_generate_separator(client, request, response);
 		break;
 		case GENERATE_CONTENT:
-		{
-			int sent = ESUCCESS;
-			/**
-			 * The module may send data by itself (mod_sendfile).
-			 * In this case the content doesn't existe but the connector
-			 * has to be called
-			 */
-			if (response->content != NULL && response->content->length > 0)
-			{
-				if (!_httpmessage_contentempty(response, 1))
-				{
-
-					/**
-					 * if for any raison the content_length is not the real
-					 * size of the content the following condition must stop
-					 * the request
-					 */
-					response->content_length -=
-						(response->content_length < response->content->length)?
-						response->content_length : response->content->length;
-				}
-				sent = _httpclient_sendpart(client, response->content);
-				ret = ECONTINUE;
-				if (_httpmessage_state(response, PARSE_END))
-					_httpmessage_changestate(response, GENERATE_END);
-				if (sent == EREJECT)
-					ret = EREJECT;
-#ifdef DEBUG
-				static long long sent = 0;
-				sent += response->content->length;
-				if (!_httpmessage_contentempty(response, 1) &&
-					_httpmessage_state(response, PARSE_END))
-				client_dbg("response send content %d %lld %lld", ret, response->content_length, sent);
-#endif
-			}
-			else
-			{
-				if (_httpmessage_state(response, PARSE_END) &&
-					!(response->state & PARSE_CONTINUE))
-				{
-					_httpmessage_changestate(response, GENERATE_END);
-				}
-				ret = ECONTINUE;
-			}
-		}
+			ret = _httpclient_response_generate_content(client, request, response);
 		break;
 		case GENERATE_END:
-		{
-			if (response->content != NULL && response->content->length > 0)
-			{
-				_buffer_shrink(response->content);
-			}
-			http_connector_list_t *callback = request->connector;
-			const char *name = "server";
-			if (callback)
-				name = callback->name;
-			warn("client: %p response from connector \"%s\" result %d", client, name, request->response->result);
-			ret = ESUCCESS;
-		}
+			ret = _httpclient_response_generate_end(client, request, response);
 		break;
 		default:
 			err("client: bad state %X", response->state & GENERATE_MASK);
