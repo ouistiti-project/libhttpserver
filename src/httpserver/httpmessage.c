@@ -88,6 +88,11 @@ const char str_connection[] = "Connection";
 const char str_contenttype[] = "Content-Type";
 const char str_contentlength[] = "Content-Length";
 
+static const char str_uri[] = "uri";
+static const char str_query[] = "query";
+static const char str_content[] = "content";
+static const char str_headerstorage[] = "headerstorage";
+
 const http_message_method_t default_methods[] = {
 	{ .key = STRING_DCL(str_get), .id = MESSAGE_TYPE_GET, .next = (http_message_method_t *)&default_methods[1]},
 	{ .key = STRING_DCL(str_post), .id = MESSAGE_TYPE_POST, .properties = MESSAGE_ALLOW_CONTENT, .next =(http_message_method_t *) &default_methods[2]},
@@ -210,7 +215,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 		va_end(argv);
 
 		int nbchunks = (length / _buffer_chunksize(-1)) + 1;
-		message->uri = _buffer_create(nbchunks);
+		message->uri = _buffer_create(str_uri, nbchunks);
 
 		_buffer_append(message->uri, url, -1);
 		va_start(argv, url);
@@ -382,7 +387,7 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 
 	if (method == NULL)
 	{
-		err("parse reject method %s", data->offset);
+		err("message: reject method %s", data->offset);
 		data->offset++;
 		next = _httpmesssage_parsefailed(message);
 	}
@@ -402,6 +407,7 @@ static int _httpmessage_pushuri(http_message_t *message, int next, const char *u
 	}
 	return next;
 }
+
 static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_URI;
@@ -411,16 +417,18 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	if (message->uri == NULL)
 	{
 		if (uri[0] == '/')
-			message->uri = _buffer_create(MAXCHUNKS_URI);
+			message->uri = _buffer_create(str_uri, MAXCHUNKS_URI);
 		/**
 		 * empty URI is accepted
 		 */
 		else if (uri[0] == ' ')
-			message->uri = _buffer_create(MAXCHUNKS_URI);
+			message->uri = _buffer_create(str_uri, MAXCHUNKS_URI);
+		else if (uri[0] == '%')
+			message->uri = _buffer_create(str_uri, MAXCHUNKS_URI);
 		else if (uri[0] == '\r')
-			message->uri = _buffer_create(MAXCHUNKS_URI);
+			message->uri = _buffer_create(str_uri, MAXCHUNKS_URI);
 		else if (uri[0] == '\n')
-			message->uri = _buffer_create(MAXCHUNKS_URI);
+			message->uri = _buffer_create(str_uri, MAXCHUNKS_URI);
 		else
 			next = _httpmesssage_parsefailed(message);
 	}
@@ -554,7 +562,7 @@ static int _httpmessage_parsequery(http_message_t *message, buffer_t *data)
 
 	if (message->query_storage == NULL)
 	{
-		message->query_storage = _buffer_create(MAXCHUNKS_URI);
+		message->query_storage = _buffer_create(str_query, MAXCHUNKS_URI);
 	}
 
 	while (data->offset < (data->data + data->length) && next == PARSE_QUERY)
@@ -706,7 +714,7 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 
 	if (message->headers_storage == NULL)
 	{
-		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
+		message->headers_storage = _buffer_create(str_headerstorage, MAXCHUNKS_HEADER);
 	}
 
 	/* store header line as "<key>:<value>\0" */
@@ -867,7 +875,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 
 		if (message->content == NULL)
 		{
-			message->content_storage = _buffer_create(1);
+			message->content_storage = _buffer_create(str_content, 1);
 			message->content = message->content_storage;
 		}
 		_buffer_reset(message->content, 0);
@@ -894,7 +902,7 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 		int nbchunks = MAXCHUNKS_HEADER;
 		if (!_httpmessage_contentempty(message, 1))
 			nbchunks = (message->content_length / _buffer_chunksize(-1) ) + 1;
-		message->query_storage = _buffer_create(nbchunks);
+		message->query_storage = _buffer_create(str_query, nbchunks);
 	}
 	else
 	{
@@ -1233,7 +1241,7 @@ int _httpmessage_fillheaderdb(http_message_t *message)
 	if ((valuelen > 0) && (message->cookies == NULL))
 	{
 		int nbchunks = ((valuelen + 1) / _buffer_chunksize(-1)) + 1;
-		message->cookie_storage = _buffer_create(nbchunks);
+		message->cookie_storage = _buffer_create(str_cookie, nbchunks);
 		_buffer_append(message->cookie_storage, value, valuelen);
 		_buffer_filldb(message->cookie_storage, &message->cookies, '=', ';');
 	}
@@ -1256,7 +1264,7 @@ int httpmessage_addheader(http_message_t *message, const char *key, const char *
 {
 	if (message->headers_storage == NULL)
 	{
-		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
+		message->headers_storage = _buffer_create(str_headerstorage, MAXCHUNKS_HEADER);
 	}
 	int keylen = strlen(key);
 	int valuelen = strlen(value);
@@ -1279,7 +1287,7 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 {
 	if (message->headers_storage == NULL)
 	{
-		message->headers_storage = _buffer_create(MAXCHUNKS_HEADER);
+		message->headers_storage = _buffer_create(str_headerstorage, MAXCHUNKS_HEADER);
 	}
 	/**
 	 * check the key of the current header
@@ -1330,7 +1338,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 	}
 	if (message->content == NULL && content != NULL)
 	{
-		message->content_storage = _buffer_create(MAXCHUNKS_CONTENT);
+		message->content_storage = _buffer_create(str_content, MAXCHUNKS_CONTENT);
 		message->content = message->content_storage;
 	}
 
@@ -1357,7 +1365,7 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
 {
 	if (message->content == NULL && content != NULL)
 	{
-		message->content_storage = _buffer_create(MAXCHUNKS_CONTENT);
+		message->content_storage = _buffer_create(str_content, MAXCHUNKS_CONTENT);
 		message->content = message->content_storage;
 	}
 

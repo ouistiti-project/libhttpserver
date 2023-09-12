@@ -31,6 +31,7 @@
 typedef struct buffer_s buffer_t;
 struct buffer_s
 {
+	const char *name;
 	char *data;
 	char *offset;
 	size_t size;
@@ -40,7 +41,7 @@ struct buffer_s
 
 typedef int (*_buffer_fillcb)(void * cbarg, char *data, size_t size);
 
-buffer_t * _buffer_create(int maxchunks);
+buffer_t * _buffer_create(const char *name, int maxchunks);
 int _buffer_chunksize(int new);
 
 int _buffer_accept(const buffer_t *buffer, size_t length);

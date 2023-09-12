@@ -67,6 +67,9 @@
 
 #define client_dbg(...)
 
+static const char str_sockdata[] = "sockdata";
+static const char str_header[] = "header";
+
 static int _httpclient_thread(http_client_t *client);
 static void _httpclient_destroy(http_client_t *client);
 static int _httpclient_wait(http_client_t *client, int options);
@@ -98,7 +101,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 	client->client_recv = client->ops->recvreq;
 	client->send_arg = client->opsctx;
 	client->recv_arg = client->opsctx;
-	client->sockdata = _buffer_create(1);
+	client->sockdata = _buffer_create(str_sockdata, 1);
 	if (client->sockdata == NULL)
 	{
 		_httpclient_destroy(client);
@@ -392,7 +395,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 	break;
 	case GENERATE_END:
 		if (client->sockdata == NULL)
-			client->sockdata = _buffer_create(MAXCHUNKS_HEADER);
+			client->sockdata = _buffer_create(str_sockdata, MAXCHUNKS_HEADER);
 
 		data = client->sockdata;
 		_buffer_reset(data, 0);
@@ -788,7 +791,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			else
 			{
 				if (response->header == NULL)
-					response->header = _buffer_create(MAXCHUNKS_HEADER);
+					response->header = _buffer_create(str_header, MAXCHUNKS_HEADER);
 				buffer_t *buffer = response->header;
 				_httpmessage_buildresponse(response,response->version, buffer);
 				_httpmessage_changestate(response, GENERATE_RESULT);
@@ -808,7 +811,7 @@ static int _httpclient_response(http_client_t *client, http_message_t *request)
 			else
 			{
 				if (response->header == NULL)
-					response->header = _buffer_create(MAXCHUNKS_HEADER);
+					response->header = _buffer_create(str_header, MAXCHUNKS_HEADER);
 				buffer_t *buffer = response->header;
 				if ((response->state & PARSE_MASK) >= PARSE_POSTHEADER)
 				{

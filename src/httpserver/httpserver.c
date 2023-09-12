@@ -90,6 +90,9 @@ const char str_defaultscheme[] = "http";
 const char str_true[] = "true";
 const char str_false[] = "false";
 
+static const char str_session[] = "session";
+static const char str_methods[] = "methods";
+
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
 /***********************************************************************
@@ -662,7 +665,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, size_t keylen,
 
 		if (server->methods_storage == NULL)
 		{
-			server->methods_storage = _buffer_create(MAXCHUNKS_URI);
+			server->methods_storage = _buffer_create(str_methods, MAXCHUNKS_URI);
 		}
 		else
 			_buffer_append(server->methods_storage, ",", 1);
@@ -888,6 +891,6 @@ http_server_session_t *_httpserver_createsession(const http_server_t *server, co
 	http_server_session_t *session = NULL;
 	session = vcalloc(1, sizeof(*session));
 	if (session)
-		session->storage = _buffer_create(MAXCHUNKS_SESSION);
+		session->storage = _buffer_create(str_session, MAXCHUNKS_SESSION);
 	return session;
 }

@@ -95,11 +95,12 @@ static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
  *  - to store the chunksize into each buffer (takes a lot of place).
  *  - to store into a global variable (looks bad).
  */
-buffer_t * _buffer_create(int maxchunks)
+buffer_t * _buffer_create(const char *name, int maxchunks)
 {
 	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
 	if (buffer == NULL)
 		return NULL;
+	buffer->name = name;
 	/**
 	 * nbchunks is unused here, because is it possible to realloc.
 	 * Embeded version may use the nbchunk with special vcalloc.
@@ -144,7 +145,7 @@ char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
 		int nbchunks = (length / ChunkSize) + 1;
 		if (buffer->maxchunks > -1 && buffer->maxchunks - nbchunks < 0)
 		{
-			err("buffer: impossible to exceed to %d chunks", buffer->maxchunks);
+			err("buffer: %s impossible to exceed to %d chunks", buffer->name, buffer->maxchunks);
 			nbchunks = buffer->maxchunks;
 		}
 		size_t chunksize = ChunkSize * nbchunks;
