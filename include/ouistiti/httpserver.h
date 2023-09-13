@@ -469,7 +469,7 @@ EXPORT_SYMBOL int httpmessage_appendcontent(http_message_t *message, const char 
  *
  * @return the length of data pop into contentpart
  */
-EXPORT_SYMBOL int httpmessage_content(http_message_t *message, const char **contentpart, unsigned long long *contentlenght);
+EXPORT_SYMBOL int httpmessage_content(http_message_t *message, const char **contentpart, size_t *contentlenght);
 
 /**
  * @brief set the Keep-Alive connection
