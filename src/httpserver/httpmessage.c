@@ -1287,7 +1287,7 @@ int httpmessage_addheader(http_message_t *message, const char *key, const char *
 	return ESUCCESS;
 }
 
-int httpmessage_appendheader(http_message_t *message, const char *key, const char *value)
+int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ssize_t valuelen)
 {
 	if (message->headers_storage == NULL)
 	{
@@ -1305,7 +1305,16 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 	 * remove the ending \r\n of the previous header
 	 */
 	_buffer_pop(message->headers_storage, 2);
-	if (_buffer_append(message->headers_storage, value, strlen(value)) < 0)
+	if (value == NULL)
+		return EREJECT;
+	if (valuelen == -1)
+		valuelen = strlen(value);
+
+	if (_buffer_accept(message->headers_storage, valuelen) == ESUCCESS)
+	{
+		_buffer_append(message->headers_storage, value, strlen(value));
+	}
+	else
 	{
 		err("message: headers too long %s", value);
 		_buffer_append(message->headers_storage, "\r\n", 2);
@@ -1337,14 +1346,15 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 	if (content != NULL)
 	{
 		_buffer_reset(message->content, 0);
-		if (length == -1)
-			length = strlen(content);
 		_buffer_append(message->content, content, length);
 	}
 
 	if (_httpmessage_contentempty(message, 1))
 	{
-		message->content_length = length;
+		if (length > -1)
+			message->content_length = length;
+		else if (message->content != NULL)
+			message->content_length = message->content->length;
 	}
 	if (message->content != NULL && _buffer_get(message->content, 0) != NULL )
 	{
