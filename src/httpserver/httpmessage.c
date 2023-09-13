@@ -781,6 +781,14 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 	}
 	else
 	{
+#ifdef DEBUG
+		dbentry_t *entry = message->headers;
+		while (entry != NULL)
+		{
+			dbg("message: headers %s", entry->key.data);
+			entry = entry->next;
+		}
+#endif
 		_buffer_shrink(data);
 		next = PARSE_PRECONTENT;
 		message->state &= ~PARSE_CONTINUE;
@@ -849,7 +857,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 * If the Content-Length header is not set,
 		 * the parser must continue while the socket is opened
 		 */
-		if (_httpmessage_contentempty(message, 1))
+		if (!_httpmessage_contentempty(message, 1))
 		{
 			length -= (data->offset - _buffer_get(data, 0));
 		}
@@ -1449,44 +1457,50 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 {
 	const char *value = NULL;
+	httpmessage_REQUEST2(message, key, &value);
+	return value;
+}
+
+int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value)
+{
 	int valuelen = EREJECT;
-	if (!strcasecmp(key, "uri"))
+	if (!strcasecmp(key, "uri") && (message->uri != NULL))
 	{
-		if (message->uri != NULL)
-		{
-			value = _buffer_get(message->uri, 0);
-			/**
-			 * For security all the first '/' (and %2f == /) are removed.
-			 * The module may use the URI as a path on the file system,
-			 * but an absolute path may be dangerous if the module doesn't
-			 * manage correctly the "root" directory.
-			 *
-			 * /%2f///%2f//etc/password translated to etc/password
-			 *
-			 */
-			/**
-			 * the full URI is necessary for authentication and filter
-			 *
-			while (*value == '/' && *value != '\0') value++;
-			 */
-		}
+		*value = _buffer_get(message->uri, 0);
+		valuelen = _buffer_length(message->uri);
+		/**
+		 * For security all the first '/' (and %2f == /) are removed.
+		 * The module may use the URI as a path on the file system,
+		 * but an absolute path may be dangerous if the module doesn't
+		 * manage correctly the "root" directory.
+		 *
+		 * /%2f///%2f//etc/password translated to etc/password
+		 *
+		 */
+		/**
+		 * the full URI is necessary for authentication and filter
+		 *
+		while (**value == '/' && **value != '\0') *value++;
+		 */
 	}
-	else if (!strcasecmp(key, "query"))
+	else if (!strcasecmp(key, "query") && (message->query_storage != NULL))
 	{
-		if (message->query_storage != NULL)
-			value = _buffer_get(message->query_storage, 0);
+		*value = _buffer_get(message->query_storage, 0);
+		valuelen = _buffer_length(message->query_storage);
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
-		value = message->client->ops->scheme;
+		*value = message->client->ops->scheme;
+		valuelen = EINCOMPLETE;
 	}
 	else if (!strcasecmp(key, "version"))
 	{
-		httpserver_version(message->version, &value);
+		valuelen = httpserver_version(message->version, value);
 	}
 	else if (!strcasecmp(key, "method") && (message->method))
 	{
-		value = message->method->key.data;
+		*value = message->method->key.data;
+		valuelen = message->method->key.length;
 	}
 	else if (!strcasecmp(key, "result"))
 	{
@@ -1495,59 +1509,57 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 		{
 			if (_http_message_result[i]->result == message->result)
 			{
-				value = _http_message_result[i]->status.data;
+				*value = _http_message_result[i]->status.data;
+				valuelen = _http_message_result[i]->status.length;
 				break;
 			}
 			i++;
 		}
 	}
-	else if (!strcasecmp(key, "content"))
+	else if (!strcasecmp(key, "content") && (message->content != NULL))
 	{
-		if (message->content != NULL)
-		{
-			value = _buffer_get(message->content, 0);
-		}
+		*value = _buffer_get(message->content, 0);
+		valuelen = _buffer_length(message->content);
 	}
 	else if (!strcasecmp(key, str_contenttype))
 	{
-		if (message->content_type != NULL)
-		{
-			value = message->content_type;
-		}
-		if (value == NULL)
-		{
-			valuelen = dbentry_search(message->headers, key, &value);
-		}
+		valuelen = dbentry_search(message->headers, key, value);
 	}
 	else if (!strncasecmp(key, "remote_addr", 11))
 	{
 		if (message->client == NULL)
-			return NULL;
+			return EREJECT;
 
 		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
 			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
-		value = host;
+		*value = host;
+		valuelen = EINCOMPLETE;
 	}
 	else if (!strncasecmp(key, "remote_", 7))
 	{
 		if (message->client == NULL)
-			return NULL;
+			return EREJECT;
 		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
 			host, NI_MAXHOST,
 			service, NI_MAXSERV, NI_NUMERICSERV);
 
 		if (!strcasecmp(key + 7, "host"))
-			value = host;
+			*value = host;
 		if (!strcasecmp(key + 7, "port"))
-			value = service;
+			*value = service;
+		if (*value)
+			valuelen = strlen(*value);
 	}
 	else
 	{
-		valuelen = dbentry_search(message->headers, key, &value);
+		valuelen = dbentry_search(message->headers, key, value);
 	}
-	if (value == NULL)
-		value = httpserver_INFO(httpclient_server(message->client), key);
-	return value;
+	if (*value == NULL)
+	{
+		*value = httpserver_INFO(httpclient_server(message->client), key);
+		valuelen = EINCOMPLETE;
+	}
+	return valuelen;
 }
 
 const char *httpmessage_parameter(http_message_t *message, const char *key)
