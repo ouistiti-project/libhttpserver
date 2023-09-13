@@ -133,12 +133,12 @@ int _buffer_accept(const buffer_t *buffer, size_t length)
 	return ESUCCESS;
 }
 
-char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
+int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 {
 	if (length == (size_t)-1)
 		length = strlen(data);
 	if (length == 0)
-		return buffer->offset;
+		return buffer->offset - buffer->data;
 
 	if (buffer->data + buffer->size < buffer->offset + length)
 	{
@@ -153,7 +153,7 @@ char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
 		if (chunksize == 0)
 		{
 			err("buffer: max chunk: %lu", buffer->size / ChunkSize);
-			return NULL;
+			return -1;
 		}
 
 		char *newptr = vrealloc(buffer->data, buffer->size + chunksize);
@@ -165,7 +165,7 @@ char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
 		if (buffer->maxchunks == 0)
 		{
 			err("buffer: out memory block: %lu", buffer->size + chunksize);
-			return NULL;
+			return -1;
 		}
 		if (buffer->maxchunks > -1)
 			buffer->maxchunks -= nbchunks;
@@ -183,7 +183,7 @@ char *_buffer_append(buffer_t *buffer, const char *data, size_t length)
 	buffer->length += length;
 	buffer->offset += length;
 	buffer->data[buffer->length] = '\0';
-	return offset;
+	return offset - buffer->data;
 }
 
 int _buffer_fill(buffer_t *buffer, _buffer_fillcb cb, void * cbarg)

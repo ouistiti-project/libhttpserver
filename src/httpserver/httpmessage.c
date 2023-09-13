@@ -398,8 +398,8 @@ static int _httpmessage_pushuri(http_message_t *message, int next, const char *u
 {
 	if (length > 0)
 	{
-		uri = _buffer_append(message->uri, uri, length);
-		if (uri == NULL)
+		int offset = _buffer_append(message->uri, uri, length);
+		if (offset < 0)
 		{
 			next = _httpmesssage_parsefailed(message);
 			err("message: reject uri too long : %s", _buffer_get(message->uri, 0));
@@ -735,16 +735,16 @@ static int _httpmessage_parseheader(http_message_t *message, buffer_t *data)
 			else
 			{
 				header[length] = '\0';
-				if (_buffer_append(message->headers_storage, header, length + 1) != NULL)
+				if (_buffer_append(message->headers_storage, header, length + 1) < 0)
+				{
+					next = _httpmesssage_parsefailed(message);
+					err("message: header too long!!!");
+				}
+				else
 				{
 					header = data->offset + 1;
 					length = 0;
 					message->state &= ~PARSE_CONTINUE;
-				}
-				else
-				{
-					next = _httpmesssage_parsefailed(message);
-					err("message: header too long!!!");
 				}
 			}
 		}
@@ -1307,7 +1307,7 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 	while (value != NULL)
 	{
 #endif
-		if (_buffer_append(message->headers_storage, value, strlen(value)) == NULL)
+		if (_buffer_append(message->headers_storage, value, strlen(value)) < 0)
 #ifdef USE_STDARG
 		{
 			break;
@@ -1375,7 +1375,7 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
 			length = strlen(content);
 		if (!_httpmessage_contentempty(message, 1))
 			message->content_length += length;
-		if (_buffer_append(message->content, content, length) == NULL)
+		if (_buffer_append(message->content, content, length) < 0)
 			return EREJECT;
 		return message->content->size - _buffer_length(message->content);
 	}

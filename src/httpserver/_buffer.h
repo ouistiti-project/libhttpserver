@@ -45,7 +45,7 @@ buffer_t * _buffer_create(const char *name, int maxchunks);
 int _buffer_chunksize(int new);
 
 int _buffer_accept(const buffer_t *buffer, size_t length);
-char *_buffer_append(buffer_t *buffer, const char *data, size_t length);
+int _buffer_append(buffer_t *buffer, const char *data, size_t length);
 int _buffer_fill(buffer_t *buffer, _buffer_fillcb cb, void * cbarg);
 
 char *_buffer_pop(buffer_t *buffer, size_t length);

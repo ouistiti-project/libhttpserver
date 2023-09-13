@@ -1510,15 +1510,17 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 		{
 			_buffer_deletedb(client->session->storage, entry, 0);
 		}
-		key = _buffer_append(client->session->storage, key, keylen);
+		int keyof = _buffer_append(client->session->storage, key, keylen);
 		_buffer_append(client->session->storage, "=", 1);
-		value = _buffer_append(client->session->storage, value, size);
+		int valueof = _buffer_append(client->session->storage, value, size);
 		_buffer_append(client->session->storage, "\0", 1);
 #if 0
 		dbentry_destroy(client->session->dbfirst);
 		client->session->dbfirst = NULL;
 		_buffer_filldb(client->session->storage, &client->session->dbfirst, '=', '\0');
 #else
+		key = _buffer_get(client->session->storage, keyof);
+		value = _buffer_get(client->session->storage, valueof);
 		_buffer_dbentry(client->session->storage, &client->session->dbfirst, key, keylen, value, client->session->storage->length - 1);
 #endif
 		entry = dbentry_get(client->session->dbfirst, key);
