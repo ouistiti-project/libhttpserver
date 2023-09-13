@@ -36,6 +36,7 @@ struct string_s
 	size_t length;
 };
 
+#define STRING_REF(string) string, sizeof(string)-1
 #define STRING_DCL(string) {.data=string, .size=sizeof(string), .length=sizeof(string)-1}
 string_t *_string_create(const char *pointer, size_t length);
 int _string_store(string_t *str, const char *pointer, size_t length);

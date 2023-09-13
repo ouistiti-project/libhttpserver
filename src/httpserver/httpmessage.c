@@ -187,7 +187,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 			iport = atoi(port);
 		}
 
-		httpmessage_addheader(message, "Host", host);
+		httpmessage_addheader(message, "Host", host, strlen(host));
 		client = httpclient_create(NULL, protocol_ops, protocol_ctx);
 		int ret = _httpclient_connect(client, host, iport);
 		if (ret == EREJECT)
@@ -626,7 +626,7 @@ static int _httpmessage_parsestatus(http_message_t *message, buffer_t *data)
 		message->result = strtol(data->offset, &data->offset, 10);
 		char status[4] = {0};
 		int len = snprintf(status, 4, "%.3d", message->result);
-		httpmessage_addheader(message, "Status", status);
+		httpmessage_addheader(message, "Status", status, len);
 	}
 	else /// the error is normal for CGI
 		err("message: protocol version not supported %s", data->offset);
@@ -1067,16 +1067,16 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 	if (!_httpmessage_contentempty(message, 1))
 	{
 		char content_length[32];
-		snprintf(content_length, 31, "%llu",  message->content_length);
-		httpmessage_addheader(message, str_contentlength, content_length);
+		int length = snprintf(content_length, 31, "%llu",  message->content_length);
+		httpmessage_addheader(message, str_contentlength, content_length, length);
 	}
 	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 	{
-		httpmessage_addheader(message, str_connection, "Keep-Alive");
+		httpmessage_addheader(message, str_connection, STRING_REF("Keep-Alive"));
 	}
 	else
 	{
-		httpmessage_addheader(message, str_connection, "Close");
+		httpmessage_addheader(message, str_connection, STRING_REF("Close"));
 	}
 	message->headers_storage->offset = _buffer_get(message->headers_storage, 0);
 	return message->headers_storage;
@@ -1260,19 +1260,23 @@ int _httpmessage_runconnector(http_message_t *request, http_message_t *response)
 	return ret;
 }
 
-int httpmessage_addheader(http_message_t *message, const char *key, const char *value)
+int httpmessage_addheader(http_message_t *message, const char *key, const char *value, ssize_t valuelen)
 {
+	if (key == NULL)
+	   return EREJECT;
 	if (message->headers_storage == NULL)
 	{
 		message->headers_storage = _buffer_create(str_headerstorage, MAXCHUNKS_HEADER);
 	}
-	int keylen = strlen(key);
-	int valuelen = strlen(value);
+	size_t keylen = strlen(key);
+	if (value != NULL && valuelen == -1)
+		valuelen = strlen(value);
 	if (_buffer_accept(message->headers_storage, keylen + 2 + valuelen + 2) == ESUCCESS)
 	{
 		_buffer_append(message->headers_storage, key, keylen);
 		_buffer_append(message->headers_storage, ": ", 2);
-		_buffer_append(message->headers_storage, value, valuelen);
+		if (value != NULL)
+			_buffer_append(message->headers_storage, value, valuelen);
 		_buffer_append(message->headers_storage, "\r\n", 2);
 	}
 	else
@@ -1317,11 +1321,11 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 	{
 		if (type == NULL)
 		{
-			httpmessage_addheader(message, str_contenttype, "text/plain");
+			httpmessage_addheader(message, str_contenttype, STRING_REF("text/plain"));
 		}
 		else if (strcmp(type, "none"))
 		{
-			httpmessage_addheader(message, str_contenttype, type);
+			httpmessage_addheader(message, str_contenttype, type, -1);
 		}
 	}
 	if (message->content == NULL && content != NULL)
