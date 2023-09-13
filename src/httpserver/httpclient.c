@@ -43,10 +43,6 @@
 #include <time.h>
 #include <signal.h>
 
-#ifdef USE_STDARG
-#include <stdarg.h>
-#endif
-
 #ifdef USE_POLL
 #include <poll.h>
 #else

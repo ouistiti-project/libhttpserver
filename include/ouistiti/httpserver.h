@@ -435,7 +435,7 @@ EXPORT_SYMBOL int httpmessage_addheader(http_message_t *message, const char *key
  * @param key the name of the last header to set
  * @param value several const char * string terminate with a NULL pointer
  */
-EXPORT_SYMBOL int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...);
+EXPORT_SYMBOL int httpmessage_appendheader(http_message_t *message, const char *key, const char *value);
 
 /**
  * @brief add the content to the response message

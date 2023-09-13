@@ -1283,7 +1283,7 @@ int httpmessage_addheader(http_message_t *message, const char *key, const char *
 	return ESUCCESS;
 }
 
-int httpmessage_appendheader(http_message_t *message, const char *key, const char *value, ...)
+int httpmessage_appendheader(http_message_t *message, const char *key, const char *value)
 {
 	if (message->headers_storage == NULL)
 	{
@@ -1301,24 +1301,12 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 	 * remove the ending \r\n of the previous header
 	 */
 	_buffer_pop(message->headers_storage, 2);
-#ifdef USE_STDARG
-	va_list ap;
-	va_start(ap, value);
-	while (value != NULL)
+	if (_buffer_append(message->headers_storage, value, strlen(value)) < 0)
 	{
-#endif
-		if (_buffer_append(message->headers_storage, value, strlen(value)) < 0)
-#ifdef USE_STDARG
-		{
-			break;
-		}
-		value = va_arg(ap, const char *);
+		err("message: headers too long %s", value);
+		_buffer_append(message->headers_storage, "\r\n", 2);
+		return EREJECT;
 	}
-	va_end(ap);
-#else
-		{
-		}
-#endif
 	_buffer_append(message->headers_storage, "\r\n", 2);
 	return ESUCCESS;
 }

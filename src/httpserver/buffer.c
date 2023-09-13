@@ -40,10 +40,6 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#ifdef USE_STDARG
-#include <stdarg.h>
-#endif
-
 #include "valloc.h"
 #include "vthread.h"
 #include "log.h"
