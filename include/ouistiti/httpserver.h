@@ -64,7 +64,9 @@ extern const char EXPORT_SYMBOL str_get[4];
 extern const char EXPORT_SYMBOL str_post[5];
 extern const char EXPORT_SYMBOL str_head[5];
 extern const char EXPORT_SYMBOL str_defaultscheme[5];
-extern const char EXPORT_SYMBOL str_form_urlencoded[];
+extern const char EXPORT_SYMBOL str_form_urlencoded[34];
+extern const char EXPORT_SYMBOL str_contenttype[13];
+extern const char EXPORT_SYMBOL str_contentlength[15];
 
 typedef enum
 {
