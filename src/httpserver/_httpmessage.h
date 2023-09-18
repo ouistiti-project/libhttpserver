@@ -38,6 +38,7 @@
 #endif
 
 #include "dbentry.h"
+#include "_string.h"
 
 #define HTTPMESSAGE_KEEPALIVE 0x01
 #define HTTPMESSAGE_LOCKED 0x02

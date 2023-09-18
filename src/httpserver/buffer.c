@@ -55,7 +55,10 @@
 string_t *_string_create(const char *pointer, size_t length)
 {
 	string_t *str = calloc(1, sizeof(*str));
+	if (pointer == NULL)
+		str->data = calloc(1, length + 1);
 	_string_store(str, pointer, length);
+	str->size = str->length + 1;
 	return str;
 }
 
@@ -69,6 +72,14 @@ int _string_store(string_t *str, const char *pointer, size_t length)
 	return ESUCCESS;
 }
 
+int _string_cpy(string_t *str, const char *source)
+{
+	if (str->data == NULL)
+		return EREJECT;
+	str->length = snprintf((char *)str->data, str->size, "%s", source);
+	return str->length;
+}
+
 size_t _string_length(const string_t *str)
 {
 	return str->length;
@@ -79,9 +90,16 @@ const char *_string_get(const string_t *str)
 	return str->data;
 }
 
-int _string_cmp(const string_t *str, const char *cmp)
+int _string_cmp(const string_t *str, const char *cmp, size_t length)
 {
+	if ((length != (size_t) -1) && (length != str->length))
+		return EREJECT;
 	return strncasecmp(str->data, cmp, str->length);
+}
+
+int _string_empty(const string_t *str)
+{
+	return ! (str->data != NULL && str->data[0] != '\0');
 }
 
 static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;

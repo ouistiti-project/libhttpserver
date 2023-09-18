@@ -138,7 +138,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 	const http_message_method_t *method_it = &default_methods[0];
 	while (method_it != NULL)
 	{
-		if (!_string_cmp(&method_it->key, method))
+		if (!_string_cmp(&method_it->key, method, -1))
 			break;
 		method_it = method_it->next;
 	}
@@ -368,7 +368,7 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 	while (method != NULL)
 	{
 		int length = method->key.length;
-		if (!_string_cmp(&method->key, data->offset) &&
+		if (!_string_cmp(&method->key, data->offset, -1) &&
 			data->offset[length] == ' ')
 		{
 			message->method = method;
@@ -611,7 +611,7 @@ static int _httpmessage_parsestatus(http_message_t *message, buffer_t *data)
 	int version = -1;
 	for (int i = 0; i < sizeof(httpversion)/sizeof(string_t); i++)
 	{
-		if (!_string_cmp(&httpversion[i], data->offset))
+		if (!_string_cmp(&httpversion[i], data->offset, -1))
 		{
 			version = i;
 			message->version = i;
@@ -650,7 +650,7 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 	char *version = data->offset;
 	for (int i = 0; i < sizeof(httpversion)/sizeof(string_t); i++)
 	{
-		if (!_string_cmp(&httpversion[i], version))
+		if (!_string_cmp(&httpversion[i], version, -1))
 		{
 			data->offset += httpversion[i].length;
 			if (*data->offset == '\r')

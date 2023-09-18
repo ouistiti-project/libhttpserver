@@ -647,7 +647,7 @@ void httpserver_addmethod(http_server_t *server, const char *key, size_t keylen,
 	while (method != NULL)
 	{
 		id = method->id;
-		if (!_string_cmp(&method->key, key))
+		if (!_string_cmp(&method->key, key, -1))
 		{
 			break;
 		}
