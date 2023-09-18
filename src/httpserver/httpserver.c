@@ -894,3 +894,9 @@ http_server_session_t *_httpserver_createsession(const http_server_t *server, co
 		session->storage = _buffer_create(str_session, MAXCHUNKS_SESSION);
 	return session;
 }
+
+void _httpserver_dropsession(const http_server_t *server, http_server_session_t *session)
+{
+	_buffer_destroy(session->storage);
+	free(session);
+}

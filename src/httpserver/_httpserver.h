@@ -98,6 +98,7 @@ struct http_server_session_s
 };
 
 http_server_session_t *_httpserver_createsession(const http_server_t *server, const http_client_t *client);
+void _httpserver_dropsession(const http_server_t *server, http_server_session_t *session);
 
 #endif
 

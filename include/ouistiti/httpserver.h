@@ -644,6 +644,8 @@ EXPORT_SYMBOL const void *httpclient_session(http_client_t *client, const char *
 
 EXPORT_SYMBOL const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size);
 
+EXPORT_SYMBOL void httpclient_dropsession(http_client_t *client);
+
 #ifdef HTTPCLIENT_FEATURES
 /**
  * @brief send a request with client
