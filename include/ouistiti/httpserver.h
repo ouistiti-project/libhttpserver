@@ -642,7 +642,7 @@ EXPORT_SYMBOL int httpclient_setsession(http_client_t *client, const char *token
  */
 EXPORT_SYMBOL const void *httpclient_session(http_client_t *client, const char *key, size_t keylen, const void *value, size_t size);
 
-EXPORT_SYMBOL const char *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size);
+EXPORT_SYMBOL const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size);
 
 #ifdef HTTPCLIENT_FEATURES
 /**

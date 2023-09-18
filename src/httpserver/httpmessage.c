@@ -785,7 +785,7 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 		dbentry_t *entry = message->headers;
 		while (entry != NULL)
 		{
-			dbg("message: headers %s", entry->key.data);
+			dbg("message: headers %s", entry->storage->data + entry->key.offset);
 			entry = entry->next;
 		}
 #endif

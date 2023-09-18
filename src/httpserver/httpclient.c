@@ -1476,19 +1476,8 @@ static dbentry_t * _httpclient_sessioninfo(http_client_t *client, const char *ke
 		return NULL;
 	if (key == NULL)
 		return NULL;
-	size_t keylen = strlen(key);
 
-	sessioninfo = client->session->dbfirst;
-
-	while (sessioninfo)
-	{
-		if (!_string_cmp(&sessioninfo->key, key))
-		{
-			//dbg("session: key %s found %s", key, sessioninfo->value);
-			break;
-		}
-		sessioninfo = sessioninfo->next;
-	}
+	sessioninfo = dbentry_get(client->session->dbfirst, key);
 
 	return sessioninfo;
 }
@@ -1504,7 +1493,11 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 			return NULL;
 		if (entry != NULL)
 		{
+#if 0
 			_buffer_deletedb(client->session->storage, entry, 0);
+#else
+			client->session->storage->data[entry->key.offset] = '\0';
+#endif
 		}
 		int keyof = _buffer_append(client->session->storage, key, keylen);
 		_buffer_append(client->session->storage, "=", 1);
@@ -1525,17 +1518,17 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 	{
 		return NULL;
 	}
-	return entry->value.data;
+	return client->session->storage->data + entry->value.offset;
 }
 
-const char *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size)
+const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size)
 {
-	dbentry_t *sessioninfo = _httpclient_sessioninfo(client, key);
-	if (sessioninfo == NULL)
+	dbentry_t *entry = _httpclient_sessioninfo(client, key);
+	if (entry == NULL)
 		return NULL;
 	_buffer_pop(client->session->storage, 1);
 	_buffer_append(client->session->storage, value, size);
 	_buffer_append(client->session->storage, "\0", 1);
-	return (const void *)sessioninfo->value.data;
+	return client->session->storage->data + entry->value.offset;
 }
 

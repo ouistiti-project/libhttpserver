@@ -286,9 +286,10 @@ int _buffer_dbentry(const buffer_t *storage, dbentry_t **db, const char *key, si
 			return -1;
 		while (*key == ' ')
 			key++;
-		entry->key.data = key;
+		entry->storage = storage;
+		entry->key.offset = key - storage->data;
 		entry->key.length = keylen;
-		entry->value.data = value;
+		entry->value.offset = value - storage->data;
 		entry->value.length = valuelen;
 		entry->next = *db;
 		*db = entry;
@@ -339,22 +340,22 @@ int _buffer_serializedb(buffer_t *storage, dbentry_t *entry, char separator, cha
 {
 	while (entry != NULL)
 	{
-		const char *key = _string_get(&entry->key);
-		size_t keylen = _string_length(&entry->key);
-		const char *value = _string_get(&entry->value);
-		size_t valuelen = _string_length(&entry->value);
+		const char *key = storage->data + entry->key.offset;
+		size_t keylen = entry->key.length;
+		const char *value = storage->data + entry->value.offset;
+		size_t valuelen = entry->value.length;
 		if (key < storage->data || (value + valuelen) > (storage->data + storage->length))
 		{
-			err("buffer: unserialized db with %.*s", (int)entry->key.length, entry->key.data);
-			err("buffer:     => %.*s", (int)entry->value.length, entry->value.data);
+			err("buffer: unserialized db with %.*s", (int)entry->key.length, key);
+			err("buffer:     => %.*s", (int)entry->value.length, value);
 			return EREJECT;
 		}
 		if (key[keylen] == '\0')
 		{
-			size_t keyof = (size_t)(key - storage->data);
+			size_t keyof = entry->key.offset;
 			storage->data[keyof + keylen] = separator;
 		}
-		size_t valueof = (size_t)(value - storage->data);
+		size_t valueof = entry->value.offset;
 		if ( valueof < storage->length)
 		{
 			if (valuelen > 0 && (fieldsep == '\r' || fieldsep == '\n') && value[valuelen + 1] == '\0')
@@ -399,10 +400,11 @@ ssize_t dbentry_search(dbentry_t *entry, const char *key, const char **value)
 		*value = NULL;
 	while (entry != NULL)
 	{
-		if (!_string_cmp(&entry->key, key))
+		const char *sto_key = entry->storage->data + entry->key.offset;
+		if (!strncasecmp(sto_key, key, entry->key.length))
 		{
 			if (value != NULL)
-				*value = entry->value.data;
+				*value = entry->storage->data + entry->value.offset;
 			valuelen = entry->value.length;
 			break;
 		}
@@ -419,7 +421,8 @@ dbentry_t *dbentry_get(dbentry_t *entry, const char *key)
 {
 	while (entry != NULL)
 	{
-		if (!_string_cmp(&entry->key, key))
+		const char *sto_key = entry->storage->data + entry->key.offset;
+		if (!strncasecmp(sto_key, key, entry->key.length))
 		{
 			break;
 		}
@@ -432,35 +435,38 @@ int _buffer_deletedb(buffer_t *storage, dbentry_t *entry, int shrink)
 {
 	int ret = EREJECT;
 	size_t length = 0;
-	string_t *value = &entry->value;
-	string_t *key = &entry->key;
-	if (storage->data > key->data ||
-		(storage->data + storage->length) < (value->data + value->length))
+
+	if (storage != entry->storage)
+		return ret;
+
+	char *key = storage->data + entry->key.offset;
+	size_t keylen = entry->key.length;
+	char *value = storage->data + entry->value.offset;
+	size_t valuelen = entry->value.length;
+
+	if ((storage->data + storage->length) < (value + valuelen))
 	{
 		return ret;
 	}
 	/// remove value
-	if (value->data >= storage->data &&
-		value->data + value->length <= storage->data + storage->length)
+	if (value + valuelen <= storage->data + storage->length)
 	{
-		storage->length -= value->length + 1;
-		storage->offset -= value->length + 1;
-		length = storage->length - (value->data - storage->data);
-		char *data = storage->data + (size_t)(value->data - storage->data);
+		storage->length -= valuelen + 1;
+		storage->offset -= valuelen + 1;
+		length = storage->length - entry->value.offset;
 		if (shrink)
-			memcpy(data, value->data + value->length + 1, length);
+			memcpy(value, value + valuelen + 1, length);
 		else
-			memset(data, 0, length);
+			memset(value, 0, length);
 	}
 	/// remove key
-	storage->length -= key->length + 1;
-	storage->offset -= key->length + 1;
-	length = storage->length - (key->data - storage->data);
-	char *data = storage->data + (size_t)(key->data - storage->data);
+	storage->length -= keylen + 1;
+	storage->offset -= keylen + 1;
+	length = storage->length - entry->key.offset;
 	if (shrink)
-		memcpy(data, key->data + key->length + 1, length);
+		memcpy(key, key + keylen + 1, length);
 	else
-		memset(data, 0, length);
+		memset(key, 0, length);
 	ret = ESUCCESS;
 	entry = entry->next;
 	return ret;

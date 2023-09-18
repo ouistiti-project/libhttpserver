@@ -35,7 +35,6 @@
 #endif
 
 #include "uri.h"
-#include "dbentry.h"
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)
@@ -120,7 +119,7 @@ dbentry_t *dbentry_create(char separator, char *string, int storage)
 
 const char *dbentry_value(dbentry_t *entry, char *key)
 {
-	while (entry && _string_cmp(&entry->key, key)) entry = entry->next;
+	while (entry && _string_cmp(&entry->key, key, -1)) entry = entry->next;
 	if (entry)
 		return (const char *)entry->value.data;
 	return NULL;
