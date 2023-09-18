@@ -97,7 +97,10 @@ struct http_server_session_s
 	buffer_t *storage;
 };
 
+typedef int (*checksession_t)(void * arg, http_server_session_t*session);
+
 http_server_session_t *_httpserver_createsession(const http_server_t *server, const http_client_t *client);
+http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, const void *cbarg);
 void _httpserver_dropsession(const http_server_t *server, http_server_session_t *session);
 
 #endif

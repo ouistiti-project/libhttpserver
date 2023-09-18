@@ -900,3 +900,8 @@ void _httpserver_dropsession(const http_server_t *server, http_server_session_t 
 	_buffer_destroy(session->storage);
 	free(session);
 }
+
+http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, const void *cbarg)
+{
+	return NULL;
+}

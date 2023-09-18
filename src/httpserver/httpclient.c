@@ -1454,11 +1454,22 @@ void httpclient_flush(http_client_t *client)
 		client->ops->flush(client->opsctx);
 }
 
+static int _httpclient_checksession(void * arg, http_server_session_t*session)
+{
+	const char *token = (const char *)arg;
+	dbentry_t *entry = dbentry_get(session->dbfirst, "token");
+	if (!strncmp(token, entry->storage->data + entry->value.offset, entry->value.length))
+		return ESUCCESS;
+	return EREJECT;
+}
+
 int httpclient_setsession(http_client_t *client, const char *token)
 {
 	if (client->session)
 		return EREJECT;
-	client->session = _httpserver_createsession(client->server, client);
+	client->session = _httpserver_searchsession(client->server, _httpclient_checksession, (void *)token);
+	if (client->session == NULL)
+		client->session = _httpserver_createsession(client->server, client);
 
 	_buffer_append(client->session->storage, STRING_REF("token="));
 	_buffer_append(client->session->storage, token, -1);
@@ -1470,7 +1481,7 @@ int httpclient_setsession(http_client_t *client, const char *token)
 void httpclient_dropsession(http_client_t *client)
 {
 	if (!client->session)
-		return EREJECT;
+		return;
 	dbentry_t *entry = dbentry_get(client->session->dbfirst, "token");
 	client->session->storage->data[entry->key.offset] = '\0';
 	dbentry_destroy(client->session->dbfirst);
