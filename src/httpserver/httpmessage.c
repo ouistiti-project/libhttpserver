@@ -517,10 +517,13 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			case '?':
 				next = PARSE_QUERY;
 			break;
+#ifdef MESSAGE_URIFRAGID
+			case '#':
+				next = PARSE_URIFRAGID;
+			break;
+#endif
 			case ' ':
-			{
 				next = PARSE_VERSION;
-			}
 			break;
 			case '*':
 				length++;
@@ -553,6 +556,38 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 	next = _httpmessage_pushuri(message, next, uri, length);
 	return next;
 }
+
+#ifdef MESSAGE_URIFRAGID
+static int _httpmessage_parseurifragid(http_message_t *message, buffer_t *data)
+{
+	int next = PARSE_URIFRAGID;
+	int length = 0;
+	const char *uri = data->offset;
+	while (data->offset < (_buffer_get(data, 0) + _buffer_length(data)) && next == PARSE_URIFRAGID)
+	{
+		switch (*data->offset)
+		{
+			case '?':
+				next = PARSE_QUERY;
+			break;
+			case ' ':
+				next = PARSE_VERSION;
+			break;
+			case '\r':
+			case '\n':
+			{
+				next = PARSE_PREHEADER;
+				if (*(data->offset + 1) == '\n')
+					data->offset++;
+			}
+		}
+		if (next != (PARSE_URIFRAGID | PARSE_CONTINUE))
+			data->offset++;
+	}
+
+	return next;
+}
+#endif
 
 static int _httpmessage_parsequery(http_message_t *message, buffer_t *data)
 {
@@ -976,6 +1011,13 @@ int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 				next = _httpmessage_parseuri(message, data);
 			}
 			break;
+#ifdef MESSAGE_URIFRAGID
+			case PARSE_URIFRAGID:
+			{
+				next = _httpmessage_parseurifragid(message, data);
+			}
+			break;
+#endif
 			case PARSE_QUERY:
 			{
 				next = _httpmessage_parsequery(message, data);
