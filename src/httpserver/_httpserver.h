@@ -88,6 +88,7 @@ struct http_server_s
 #endif
 	fd_set fds[3];
 	int numfds;
+	http_server_session_t *sessions;
 	http_server_t *next;
 };
 
@@ -95,13 +96,14 @@ struct http_server_session_s
 {
 	dbentry_t *dbfirst;
 	buffer_t *storage;
+	http_server_session_t *next;
 };
 
 typedef int (*checksession_t)(void * arg, http_server_session_t*session);
 
-http_server_session_t *_httpserver_createsession(const http_server_t *server, const http_client_t *client);
-http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, const void *cbarg);
-void _httpserver_dropsession(const http_server_t *server, http_server_session_t *session);
+http_server_session_t *_httpserver_createsession(http_server_t *server, const http_client_t *client);
+http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg);
+void _httpserver_dropsession(http_server_t *server, http_server_session_t *session);
 
 #endif
 

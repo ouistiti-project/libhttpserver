@@ -886,22 +886,62 @@ const char *httpserver_INFO(http_server_t *server, const char *key)
 	return value;
 }
 
-http_server_session_t *_httpserver_createsession(const http_server_t *server, const http_client_t *client)
+http_server_session_t *_httpserver_createsession(http_server_t *server, const http_client_t *client)
 {
 	http_server_session_t *session = NULL;
 	session = vcalloc(1, sizeof(*session));
 	if (session)
+	{
 		session->storage = _buffer_create(str_session, MAXCHUNKS_SESSION);
+		/**
+		 * the list should be managed with a lock.
+		 * This is the only list directly used by several threads
+		 * at the same time.
+		 * But if concurent race arrives, the server may lost a session.
+		 * The lost session is still able to be destroy, but not found.
+		 * This case allows to have two clients with two different sessions,
+		 * when they should be the same.
+		 * Currently, the session info are build during authentication
+		 * and may be built at each connection.
+		 * A trouble may occure if a request create ID into the session,
+		 * and another one would read this ID.
+		 */
+		session->next = server->sessions;
+		server->sessions = session;
+	}
 	return session;
 }
 
-void _httpserver_dropsession(const http_server_t *server, http_server_session_t *session)
+void _httpserver_dropsession(http_server_t *server, http_server_session_t *session)
 {
+	http_server_session_t *it = server->sessions;
+	if (it == session)
+		server->sessions = session->next;
+	else
+	{
+		while (it->next != NULL)
+		{
+			if (it->next == session)
+			{
+				it->next = session->next;
+				break;
+			}
+			it = it->next;
+		}
+	}
+
 	_buffer_destroy(session->storage);
 	free(session);
 }
 
-http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, const void *cbarg)
+http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg)
 {
+	http_server_session_t *it = server->sessions;
+	while (it != NULL)
+	{
+		if (cb(cbarg, it) == ESUCCESS)
+			return it;
+		it = it->next;
+	}
 	return NULL;
 }
