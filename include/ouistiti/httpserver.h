@@ -561,7 +561,7 @@ EXPORT_SYMBOL const char * httpmessage_REQUEST(http_message_t *message, const ch
 EXPORT_SYMBOL int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value);
 
 /**
- * @brief get value for the session used by the request
+ * @brief get/set value for the session used by the request
  *
  * the value are stored by mod with the same function.
  *
@@ -573,6 +573,19 @@ EXPORT_SYMBOL int httpmessage_REQUEST2(http_message_t *message, const char *key,
  * @return the value of the attribute or NULL
  */
 EXPORT_SYMBOL const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size);
+
+/**
+ * @brief get value for the session used by the request
+ *
+ * the value are stored by mod with the same function.
+ *
+ * @param message the request message received
+ * @param key the name of the attribut
+ * @param value the pointer to return the content
+ *
+ * @return the length of the content
+ */
+EXPORT_SYMBOL size_t httpmessage_SESSION2(http_message_t *message, const char *key, void **value);
 
 /**
  * @brief get value from query parameters and/or POST form data
@@ -628,7 +641,7 @@ void EXPORT_SYMBOL httpclient_destroy(http_client_t *client);
  * 
  * @return EREJECT if the client already has a session otherwise ESUCCESS
  */
-EXPORT_SYMBOL int httpclient_setsession(http_client_t *client, const char *token);
+EXPORT_SYMBOL int httpclient_setsession(http_client_t *client, const char *token, size_t tokenlen);
 
 /**
  * @brief get/set session DB
@@ -642,8 +655,24 @@ EXPORT_SYMBOL int httpclient_setsession(http_client_t *client, const char *token
  */
 EXPORT_SYMBOL const void *httpclient_session(http_client_t *client, const char *key, size_t keylen, const void *value, size_t size);
 
-EXPORT_SYMBOL const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size);
+/**
+ * @brief set session DB
+ * 
+ * @param client the connection that receive the request
+ * @param key the key must be the same as the previous httpclient_session call.
+ * @param value the value to append
+ * @param size the length of the value to store (-1 for null terminated string)
+ * 
+ * @return the value found into the DB or NULL
+ */
+EXPORT_SYMBOL const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, size_t size);
 
+/**
+ * @brief delete session DB
+ * 
+ * @param client the connection that receive the request
+ * 
+ */
 EXPORT_SYMBOL void httpclient_dropsession(http_client_t *client);
 
 #ifdef HTTPCLIENT_FEATURES

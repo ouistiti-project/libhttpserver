@@ -1463,7 +1463,7 @@ static int _httpclient_checksession(void * arg, http_server_session_t*session)
 	return EREJECT;
 }
 
-int httpclient_setsession(http_client_t *client, const char *token)
+int httpclient_setsession(http_client_t *client, const char *token, size_t tokenlen)
 {
 	if (client->session)
 		return EREJECT;

@@ -1362,7 +1362,7 @@ int httpmessage_appendheader(http_message_t *message, const char *key, const cha
 
 	if (_buffer_accept(message->headers_storage, valuelen) == ESUCCESS)
 	{
-		_buffer_append(message->headers_storage, value, strlen(value));
+		_buffer_append(message->headers_storage, value, valuelen);
 	}
 	else
 	{
@@ -1625,6 +1625,21 @@ const char *httpmessage_cookie(http_message_t *message, const char *key)
 const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size)
 {
 	return httpclient_session(message->client, key, strlen(key), value, size);
+}
+
+size_t httpmessage_SESSION2(http_message_t *message, const char *key, void **value)
+{
+	size_t length = 0;
+	http_client_t * client = message->client;
+	if (client->session == NULL)
+		return 0;
+	dbentry_t *entry = dbentry_get(client->session->dbfirst, key);
+	if (entry && value)
+	{
+		*value = client->session->storage->data + entry->value.offset;
+		length = entry->value.length;
+	}
+	return length;
 }
 
 void _httpconnector_add(http_connector_list_t **first,
