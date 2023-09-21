@@ -1454,6 +1454,7 @@ void httpclient_flush(http_client_t *client)
 		client->ops->flush(client->opsctx);
 }
 
+#define SESSION_SEPARATOR " "
 static int _httpclient_checksession(void * arg, http_server_session_t*session)
 {
 	const char *token = (const char *)arg;
@@ -1472,10 +1473,10 @@ int httpclient_setsession(http_client_t *client, const char *token, size_t token
 		client->session = _httpserver_createsession(client->server, client);
 
 	_buffer_append(client->session->storage, STRING_REF("token="));
-	_buffer_append(client->session->storage, token, -1);
-	_buffer_append(client->session->storage, "\0", 1);
+	_buffer_append(client->session->storage, token, tokenlen);
+	_buffer_append(client->session->storage, SESSION_SEPARATOR, 1);
 
-	return _buffer_filldb(client->session->storage, &client->session->dbfirst, '=', '\0');
+	return _buffer_filldb(client->session->storage, &client->session->dbfirst, '=', SESSION_SEPARATOR[0]);
 }
 
 void httpclient_dropsession(http_client_t *client)
@@ -1483,7 +1484,7 @@ void httpclient_dropsession(http_client_t *client)
 	if (!client->session)
 		return;
 	dbentry_t *entry = dbentry_get(client->session->dbfirst, "token");
-	client->session->storage->data[entry->key.offset] = '\0';
+	client->session->storage->data[entry->key.offset] = SESSION_SEPARATOR[0];
 	dbentry_destroy(client->session->dbfirst);
 	_httpserver_dropsession(client->server, client->session);
 	client->session = NULL;
@@ -1518,17 +1519,17 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 #if 0
 			_buffer_deletedb(client->session->storage, entry, 0);
 #else
-			client->session->storage->data[entry->key.offset] = '\0';
+			client->session->storage->data[entry->key.offset] = SESSION_SEPARATOR[0];
 #endif
 		}
 		int keyof = _buffer_append(client->session->storage, key, keylen);
 		_buffer_append(client->session->storage, "=", 1);
 		int valueof = _buffer_append(client->session->storage, value, size);
-		_buffer_append(client->session->storage, "\0", 1);
+		_buffer_append(client->session->storage, SESSION_SEPARATOR, 1);
 #if 0
 		dbentry_destroy(client->session->dbfirst);
 		client->session->dbfirst = NULL;
-		_buffer_filldb(client->session->storage, &client->session->dbfirst, '=', '\0');
+		_buffer_filldb(client->session->storage, &client->session->dbfirst, '=', SESSION_SEPARATOR[0]);
 #else
 		key = _buffer_get(client->session->storage, keyof);
 		value = _buffer_get(client->session->storage, valueof);
@@ -1543,14 +1544,14 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 	return client->session->storage->data + entry->value.offset;
 }
 
-const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, int size)
+const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, size_t size)
 {
 	dbentry_t *entry = _httpclient_sessioninfo(client, key);
 	if (entry == NULL)
 		return NULL;
 	_buffer_pop(client->session->storage, 1);
 	_buffer_append(client->session->storage, value, size);
-	_buffer_append(client->session->storage, "\0", 1);
+	_buffer_append(client->session->storage, SESSION_SEPARATOR, 1);
 	return client->session->storage->data + entry->value.offset;
 }
 
