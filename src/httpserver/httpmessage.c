@@ -1615,11 +1615,16 @@ const char *httpmessage_parameter(http_message_t *message, const char *key)
 	return value;
 }
 
-const char *httpmessage_cookie(http_message_t *message, const char *key)
+size_t httpmessage_cookie(http_message_t *message, const char *key, const char **cookie)
 {
-	const char *value = NULL;
-	dbentry_search(message->cookies, key, &value);
-	return value;
+	size_t length = -1;
+	dbentry_t *entry = dbentry_get(message->cookies, key);
+	if (entry && cookie)
+	{
+		*cookie = message->cookie_storage->data + entry->value.offset;
+		length = entry->value.length;
+	}
+	return length;
 }
 
 const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size)

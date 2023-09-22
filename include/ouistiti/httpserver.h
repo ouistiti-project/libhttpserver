@@ -606,10 +606,11 @@ EXPORT_SYMBOL const char * httpmessage_parameter(http_message_t *message, const 
  *
  * @param message the request message received
  * @param key the name of the attribute
+ * @param cookie the pointer to set to the data
  *
- * @return the value of the cookie or NULL
+ * @return the length of the data
  */
-EXPORT_SYMBOL const char * httpmessage_cookie(http_message_t *message, const char *key);
+EXPORT_SYMBOL size_t httpmessage_cookie(http_message_t *message, const char *key, const char **cookie);
 
 /**********************************************************************/
 typedef struct httpclient_ops_s httpclient_ops_t;
