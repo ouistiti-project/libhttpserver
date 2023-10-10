@@ -1463,36 +1463,7 @@ const char *httpmessage_SERVER(http_message_t *message, const char *key)
 		return NULL;
 	const char *value = NULL;
 
-	if (!strcasecmp(key, "port"))
-	{
-		struct sockaddr_in sin;
-		socklen_t len = sizeof(sin);
-		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
-		{
-			getnameinfo((struct sockaddr *) &sin, len,
-				0, 0,
-				service, NI_MAXSERV, NI_NUMERICSERV);
-			value = service;
-		}
-	}
-	else if (!strcasecmp(key, "addr"))
-	{
-		struct sockaddr_in sin;
-		socklen_t len = sizeof(sin);
-		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
-		{
-			int ret = getnameinfo((struct sockaddr *) &sin, len,
-				host, NI_MAXHOST,
-				0, 0, NI_NUMERICHOST);
-			value = host;
-		}
-		if (value != host)
-		{
-			value = httpclient_server(message->client)->config->addr;
-		}
-	}
-	if (value == NULL)
-		value = httpserver_INFO(httpclient_server(message->client), key);
+	httpmessage_REQUEST2(message, key, &value);
 	return value;
 }
 
@@ -1575,7 +1546,7 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
 			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
 		*value = host;
-		valuelen = EINCOMPLETE;
+		valuelen = strlen(*value);
 	}
 	else if (!strncasecmp(key, "remote_", 7))
 	{
@@ -1592,13 +1563,44 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 		if (*value)
 			valuelen = strlen(*value);
 	}
+	else if (!strcasecmp(key, "port"))
+	{
+		struct sockaddr_in sin;
+		socklen_t len = sizeof(sin);
+		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
+		{
+			getnameinfo((struct sockaddr *) &sin, len,
+				0, 0,
+				service, NI_MAXSERV, NI_NUMERICSERV);
+			*value = service;
+			valuelen = strlen(*value);
+		}
+	}
+	else if (!strcasecmp(key, "addr"))
+	{
+		struct sockaddr_in sin;
+		socklen_t len = sizeof(sin);
+		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
+		{
+			int ret = getnameinfo((struct sockaddr *) &sin, len,
+				host, NI_MAXHOST,
+				0, 0, NI_NUMERICHOST);
+			*value = host;
+			valuelen = strlen(*value);
+		}
+		if (*value != host)
+		{
+			*value = httpclient_server(message->client)->config->addr;
+			valuelen = EINCOMPLETE;
+		}
+	}
 	else
 	{
 		valuelen = dbentry_search(message->headers, key, value);
 	}
-	if (*value == NULL)
+	if (valuelen == EREJECT)
 	{
-		*value = httpserver_INFO(httpclient_server(message->client), key);
+		valuelen = httpserver_INFO2(httpclient_server(message->client), key, value);
 		valuelen = EINCOMPLETE;
 	}
 	return valuelen;

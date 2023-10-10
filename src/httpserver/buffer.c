@@ -409,7 +409,7 @@ void _buffer_destroy(buffer_t *buffer)
 
 ssize_t dbentry_search(dbentry_t *entry, const char *key, const char **value)
 {
-	ssize_t valuelen = -1;
+	ssize_t valuelen = EREJECT;
 	if (value != NULL)
 		*value = NULL;
 	while (entry != NULL)
