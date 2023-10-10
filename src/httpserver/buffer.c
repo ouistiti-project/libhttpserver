@@ -55,11 +55,25 @@
 string_t *_string_create(const char *pointer, size_t length)
 {
 	string_t *str = calloc(1, sizeof(*str));
-	if (pointer == NULL)
-		str->data = calloc(1, length + 1);
-	_string_store(str, pointer, length);
+	_string_alloc(str, pointer, length);
+	return str;	
+}
+
+int _string_alloc(string_t *str, const char *pointer, size_t length)
+{
+	char *data = NULL;
+	str->length =  length;
+	if (length == (size_t) -1)
+		str->length = strlen(pointer);
+	if (str->length > 0)
+		data = calloc(1, str->length + 1);
+	if (pointer != NULL)
+	{
+		str->length = snprintf(data, length + 1, "%s", pointer);
+	}
+	str->data = data;
 	str->size = str->length + 1;
-	return str;
+	return ESUCCESS;
 }
 
 int _string_store(string_t *str, const char *pointer, size_t length)
