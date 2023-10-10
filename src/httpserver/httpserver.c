@@ -428,7 +428,7 @@ static int _httpserver_run(http_server_t *server)
 	server->run = 1;
 	run = 1;
 
-	warn("server %s %d running", server->config->hostname, server->config->port);
+	warn("server %s %d running", server->hostname.data, server->config->port);
 	while(run > 0)
 	{
 		struct timespec *ptimeout = NULL;
@@ -584,6 +584,15 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->config = config;
 	else
 		server->config = &defaultconfig;
+	_string_store(&server->name, httpserver_software, -1);
+	_string_store(&server->hostname, config->hostname, -1);
+	char s_port[5];
+	size_t length = snprintf(s_port, 5, "%.4d", config->port);
+	_string_alloc(&server->s_port, s_port, length); // this is a memory leak, but memory should be release on destroy
+	if (config->service)
+		_string_store(&server->service, config->service, -1);
+	else
+		_string_store(&server->service, server->s_port.data, server->s_port.length);
 	server->ops = httpserver_ops;
 	const http_message_method_t *method = default_methods;
 	while (method)
@@ -812,78 +821,80 @@ static const char default_value[8] = {0};
 static char service[NI_MAXSERV];
 const char *httpserver_INFO(http_server_t *server, const char *key)
 {
-	const char *value = default_value;
+	const char *value;
+	httpserver_INFO2(server, key, &value);
+	return value;
+}
 
-	if (!strcasecmp(key, "name") || !strcasecmp(key, "host") || !strcasecmp(key, "hostname"))
+size_t httpserver_INFO2(http_server_t *server, const char *key, const char **value)
+{
+	size_t valuelen = 0;
+	*value = default_value;
+
+	if (!strcasecmp(key, "name") || !strcasecmp(key, "hostname"))
 	{
-		value = server->config->hostname;
+		*value = server->hostname.data;
+		valuelen = server->hostname.length;
 	}
 	else if (!strcasecmp(key, "domain"))
 	{
-		value = strchr(server->config->hostname, '.');
-		if (value)
-			value ++;
+		*value = strchr(server->hostname.data, '.');
+		if (*value)
+		{
+			*value = *value + 1;
+			valuelen = server->hostname.length - (*value - server->hostname.data);
+		}
 		else
-			value = default_value;
+			*value = default_value;
 	}
 	else if (!strcasecmp(key, "service"))
 	{
-		value = server->config->service;
-		if ( value == NULL)
-		{
-			snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
-			value = service;
-		}
+		*value = server->service.data;
+		valuelen = server->service.length;
 	}
 	else if (!strcasecmp(key, "software"))
 	{
-		value = httpserver_software;
+		*value = server->name.data;
+		valuelen = server->name.length;
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
-		value = server->protocol_ops->scheme;
+		*value = server->protocol_ops->scheme;
+		valuelen = -1;
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		httpserver_version(server->config->version, &value);
+		valuelen = httpserver_version(server->config->version, value);
 	}
 	else if (!strcasecmp(key, "methods"))
 	{
-		value = _buffer_get(server->methods_storage, 0);
+		*value = _buffer_get(server->methods_storage, 0);
+		valuelen = _buffer_length(server->methods_storage);
 	}
 	else if (!strcasecmp(key, "secure"))
 	{
 		if (server->protocol_ops->type & HTTPCLIENT_TYPE_SECURE)
-			value = str_true;
+		{
+			*value = str_true;
+			valuelen = sizeof(str_true) - 1;
+		}
 		else
-			value = str_false;
+		{
+			*value = str_false;
+			valuelen = sizeof(str_false) - 1;
+		}
 	}
 	else if (!strcasecmp(key, "port"))
 	{
-#if 1
-		if (server->protocol_ops->default_port != server->config->port)
-		{
-			snprintf(service, NI_MAXSERV, "%d", server->config->port);
-			value = service;
-		}
-#else
-		struct sockaddr_in sin;
-		socklen_t len = sizeof(sin);
-		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
-		{
-			getnameinfo((struct sockaddr *) &sin, len,
-				0, 0,
-				service, NI_MAXSERV, NI_NUMERICSERV);
-			value = service;
-		}
-#endif
+		*value = server->s_port.data;
+		valuelen = server->s_port.length;
 	}
 	else if (!strcasecmp(key, "chunksize"))
 	{
-		snprintf(service, 8, "%.7u", server->config->chunksize);
-		value = service;
+		valuelen = snprintf(service, 8, "%.7u", server->config->chunksize);
+		*value = service;
 	}
-	return value;
+	return valuelen;
 }
 
 http_server_session_t *_httpserver_createsession(http_server_t *server, const http_client_t *client)

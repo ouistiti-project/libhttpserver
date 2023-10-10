@@ -39,6 +39,7 @@
 
 #include "vthread.h"
 #include "dbentry.h"
+#include "_string.h"
 
 typedef struct buffer_s buffer_t;
 typedef struct http_connector_list_s http_connector_list_t;
@@ -70,6 +71,7 @@ struct http_server_mod_s
 
 struct http_server_s
 {
+	string_t name;
 	int sock;
 	int type;
 	int run;
@@ -81,6 +83,9 @@ struct http_server_s
 	const httpserver_ops_t *ops;
 	const httpclient_ops_t *protocol_ops;
 	void *protocol;
+	string_t hostname;
+	string_t s_port;
+	string_t service;
 	http_message_method_t *methods;
 	buffer_t *methods_storage;
 #ifdef USE_POLL
