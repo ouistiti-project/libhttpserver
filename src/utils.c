@@ -378,7 +378,7 @@ static int utils_runentry(utils_parsestring_t *entry, const char *value, size_t 
 	return entry->result;
 }
 
-int utils_parsestring(const char *string, int listlength, utils_parsestring_t list[])
+int utils_parsestring(const char *string, size_t stringlen, int listlength, utils_parsestring_t list[])
 {
 	int ret = ESUCCESS;
 	int listit;
@@ -389,7 +389,7 @@ int utils_parsestring(const char *string, int listlength, utils_parsestring_t li
 	}
 
 	int length, i;
-	length = strlen(string);
+	length = stringlen;
 	for (i = 0; i < length; i++)
 	{
 		//dbg("search %s", string + i);

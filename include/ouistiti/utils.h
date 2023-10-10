@@ -55,7 +55,7 @@ struct utils_parsestring_s
 	int result;
 };
 typedef struct utils_parsestring_s utils_parsestring_t;
-int utils_parsestring(const char *string, int listlength, utils_parsestring_t list[]);
+int utils_parsestring(const char *string, size_t stringlen, int listlength, utils_parsestring_t list[]);
 
 /**
  * @brief get value of each cookie of the request
