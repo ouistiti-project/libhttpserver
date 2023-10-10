@@ -32,8 +32,8 @@ typedef struct string_s string_t;
 struct string_s
 {
 	const char *data;
-	size_t size;
 	size_t length;
+	size_t size;
 };
 
 #define STRING_REF(string) string, sizeof(string)-1

@@ -41,6 +41,7 @@ extern const char str_applicationjavascript[];
 extern const char str_applicationoctetstream[];
 
 const char *utils_getmime(const char *path);
+size_t utils_getmime2(const char *filepath, const char **value);
 void utils_addmime(const char *ext, const char*mime);
 
 char *utils_urldecode(const char *encoded, size_t length);
