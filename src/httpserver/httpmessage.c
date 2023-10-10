@@ -1103,6 +1103,7 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 	if (message->result > 399)
 		message->mode &= ~HTTPMESSAGE_KEEPALIVE;
 	header->offset = (char *)_buffer_get(header, 0);
+	_httpmessage_changestate(message, GENERATE_RESULT);
 	return ESUCCESS;
 }
 
@@ -1313,7 +1314,12 @@ int _httpmessage_runconnector(http_message_t *request, http_message_t *response)
 int httpmessage_addheader(http_message_t *message, const char *key, const char *value, ssize_t valuelen)
 {
 	if (key == NULL)
-	   return EREJECT;
+		return EREJECT;
+	if ((message->state & GENERATE_MASK) >= GENERATE_SEPARATOR)
+	{
+		warn("message: result generated, header %s too late", key);
+		return EREJECT;
+	}
 	if (message->headers_storage == NULL)
 	{
 		message->headers_storage = _buffer_create(str_headerstorage, MAXCHUNKS_HEADER);

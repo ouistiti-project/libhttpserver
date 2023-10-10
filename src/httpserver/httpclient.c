@@ -803,7 +803,6 @@ static int _httpclient_response_generate_error(http_client_t *client, http_messa
 			response->header = _buffer_create(str_header, MAXCHUNKS_HEADER);
 		buffer_t *buffer = response->header;
 		_httpmessage_buildresponse(response,response->version, buffer);
-		_httpmessage_changestate(response, GENERATE_RESULT);
 		ret = EINCOMPLETE;
 	}
 	response->state &= ~PARSE_CONTINUE;
@@ -821,7 +820,6 @@ static int _httpclient_response_generate_init(http_client_t *client, http_messag
 		buffer_t *buffer = response->header;
 		if ((response->state & PARSE_MASK) >= PARSE_POSTHEADER)
 		{
-			_httpmessage_changestate(response, GENERATE_RESULT);
 			_httpmessage_buildresponse(response,response->version, buffer);
 			ret = EINCOMPLETE;
 		}
