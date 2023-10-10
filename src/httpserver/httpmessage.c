@@ -1401,8 +1401,15 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 
 	if (content != NULL)
 	{
-		_buffer_reset(message->content, 0);
-		_buffer_append(message->content, content, length);
+		buffer_t *buffer = message->content;
+		_buffer_reset(buffer, 0);
+		if (length == -1)
+			length = strlen(content);
+		length = (buffer->size < length)? buffer->size - 1: length;
+		char *offset = memcpy(buffer->offset, content, length);
+		buffer->length += length;
+		buffer->offset += length;
+		buffer->data[buffer->length] = '\0';
 	}
 
 	if (_httpmessage_contentempty(message, 1))
