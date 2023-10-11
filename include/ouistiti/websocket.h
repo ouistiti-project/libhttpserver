@@ -34,7 +34,6 @@ typedef int (*onclose_t)(void *arg, int status);
 typedef int (*onping_t)(void *arg, char *message);
 
 #define WS_TEXT 153
-#define WS_AUTO -1
 #define WS_BLOB 0
 struct websocket_s
 {
