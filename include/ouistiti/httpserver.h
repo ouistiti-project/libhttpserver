@@ -584,7 +584,7 @@ EXPORT_SYMBOL int httpmessage_REQUEST2(http_message_t *message, const char *key,
  *
  * @return the value of the attribute or NULL
  */
-EXPORT_SYMBOL const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size);
+EXPORT_SYMBOL const void *httpmessage_SESSION(http_message_t *message, const char *key, void *value, int size) __attribute__ ((deprecated));
 
 /**
  * @brief get value for the session used by the request
