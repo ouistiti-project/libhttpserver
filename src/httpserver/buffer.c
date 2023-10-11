@@ -63,7 +63,7 @@ int _string_alloc(string_t *str, const char *pointer, size_t length)
 {
 	char *data = NULL;
 	str->length =  length;
-	if (length == (size_t) -1)
+	if (pointer && length == (size_t) -1)
 		str->length = strlen(pointer);
 	if (str->length > 0)
 		data = calloc(1, str->length + 1);
@@ -79,7 +79,7 @@ int _string_alloc(string_t *str, const char *pointer, size_t length)
 int _string_store(string_t *str, const char *pointer, size_t length)
 {
 	str->data = pointer;
-	if (length == (size_t) -1)
+	if (pointer && length == (size_t) -1)
 		str->length = strlen(pointer);
 	else
 		str->length = length;
