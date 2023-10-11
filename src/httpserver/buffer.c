@@ -164,7 +164,7 @@ int _buffer_accept(const buffer_t *buffer, size_t length)
 int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 {
 	if (length == (size_t)-1)
-		length = strlen(data);
+		length = strnlen(data, ChunkSize);
 	if (length == 0)
 		return buffer->offset - buffer->data;
 
