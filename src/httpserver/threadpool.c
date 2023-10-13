@@ -157,14 +157,19 @@ int threadpool_isrunning(threadpool_t *pool, int id)
 	thread_t *it;
 	if (id == -1)
 	{
+		int ret = 0;
 		for (it = pool->threads; it != NULL; it = it->next)
 		{
+			pthread_mutex_lock(&it->mutex);
 			if (it->state == E_RUNNING)
 			{
-				return 1;
+				ret = 1;
+				pthread_mutex_unlock(&it->mutex);
+				break;
 			}
+			pthread_mutex_unlock(&it->mutex);
 		}
-		return 0;
+		return ret;
 	}
 	for (it = pool->threads; it != NULL && it->id != id; it = it->next);
 	if (it == NULL)
@@ -174,12 +179,19 @@ int threadpool_isrunning(threadpool_t *pool, int id)
 
 void threadpool_destroy(threadpool_t *pool)
 {
-	for (thread_t *it = pool->threads; it != NULL; it = it->next)
+	thread_t *next = NULL;
+	for (thread_t *it = pool->threads; it != NULL; it = next)
 	{
+		next = it->next;
 		pthread_mutex_lock(&it->mutex);
 		it->state = E_STOPPED;
 		pthread_mutex_unlock(&it->mutex);
 		pthread_cond_signal(&it->cond);
 		pthread_cancel(it->thread);
+		pthread_join(it->thread, NULL);
+		pthread_cond_destroy(&it->cond);
+		pthread_mutex_destroy(&it->mutex);
+		free(it);
 	}
+	free(pool);
 }

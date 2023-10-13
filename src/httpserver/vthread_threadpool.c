@@ -77,9 +77,10 @@ void vthread_init(int maxthreads)
 
 void vthread_uninit(vthread_t thread)
 {
-	if (! threadpool_isrunning(g_pool, -1))
+	if (g_pool && ! threadpool_isrunning(g_pool, -1))
 	{
 		threadpool_destroy(g_pool);
+		g_pool = NULL;
 	}
 }
 
