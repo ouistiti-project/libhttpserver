@@ -494,32 +494,32 @@ static int _tcpserver_start(http_server_t *server)
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
 
-#ifdef HAVE_GETNAMEINFO
 	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
-#endif
 	if (status != 0) {
 		warn("socket interface not found : %s", hstrerror(status));
-		result = &hints;
+		rp = &hints;
 #ifdef USE_IPV6
-		if (result->ai_family == AF_INET6)
+		if (rp->ai_family == AF_INET6)
 		{
 			saddr_in6.sin6_flowinfo = 0;
 			saddr_in6.sin6_addr = in6addr_any;
-			result->ai_addr = (struct sockaddr *)&saddr_in6;
-			result->ai_addrlen = sizeof(saddr_in6);
+			rp->ai_addr = (struct sockaddr *)&saddr_in6;
+			rp->ai_addrlen = sizeof(saddr_in6);
 		}
-		else if (result->ai_family == AF_INET)
+		else if (rp->ai_family == AF_INET)
 #endif
 		{
 			memset(&saddr_in, 0, sizeof(saddr_in));
 			saddr_in.sin_family = AF_INET;
 			saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
-			result->ai_addr = (struct sockaddr *)&saddr_in;
-			result->ai_addrlen = sizeof(saddr_in);
+			rp->ai_addr = (struct sockaddr *)&saddr_in;
+			rp->ai_addrlen = sizeof(saddr_in);
 		}
 	}
+	else
+		rp = result;
 
-	for (rp = result; rp != NULL; rp = rp->ai_next)
+	for (; rp != NULL; rp = rp->ai_next)
 	{
 		server->sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if (server->sock == -1)
@@ -551,10 +551,7 @@ static int _tcpserver_start(http_server_t *server)
 		}
 		server->ops->close(server);
 	}
-#ifdef HAVE_GETNAMEINFO
-	if (result != &hints)
-		freeaddrinfo(result);
-#endif
+	freeaddrinfo(result);
 
 	if (status == 0)
 	{
