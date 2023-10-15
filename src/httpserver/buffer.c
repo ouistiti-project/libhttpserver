@@ -52,6 +52,14 @@
 
 #define buffer_dbg(...)
 
+#define MAX_STRING 256
+
+static size_t _string_len(string_t *str, const char *pointer)
+{
+	if (str->size == 0) str->size = MAX_STRING;
+	return strnlen(pointer, str->size);
+}
+
 string_t *_string_create(const char *pointer, size_t length)
 {
 	string_t *str = calloc(1, sizeof(*str));
@@ -64,7 +72,7 @@ int _string_alloc(string_t *str, const char *pointer, size_t length)
 	char *data = NULL;
 	str->length =  length;
 	if (pointer && length == (size_t) -1)
-		str->length = strlen(pointer);
+		str->length = _string_len(str, pointer);
 	if (str->length > 0)
 		data = calloc(1, str->length + 1);
 	if (pointer != NULL)
@@ -80,7 +88,7 @@ int _string_store(string_t *str, const char *pointer, size_t length)
 {
 	str->data = pointer;
 	if (pointer && length == (size_t) -1)
-		str->length = strlen(pointer);
+		str->length = _string_len(str, pointer);
 	else
 		str->length = length;
 	return ESUCCESS;
