@@ -101,7 +101,7 @@ struct addrinfo
 
 static void *tcpclient_create(void *config, http_client_t *clt)
 {
-	http_server_t *server = (http_server_t *)config;
+	const http_server_t *server = (http_server_t *)config;
 	if (server && server->sock < 0)
 		return NULL;
 
@@ -141,8 +141,8 @@ static int tcpclient_connect(void *ctl, const char *addr, int port)
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
 
-	char strport[10];
-	sprintf(strport, "%9d", port);
+	char strport[5];
+	snprintf(strport, 5, "%4d", port);
 	struct addrinfo *result;
 	int ret = getaddrinfo(addr, strport, &hints, &result);
 	if (ret != 0)
@@ -180,9 +180,9 @@ static int tcpclient_connect(void *ctl, const char *addr, int port)
 #define tcpclient_connect NULL
 #endif
 
-static int tcpclient_recv(void *ctl, char *data, int length)
+static int tcpclient_recv(void *ctl, char *data, size_t length)
 {
-	http_client_t *client = (http_client_t *)ctl;
+	const http_client_t *client = (http_client_t *)ctl;
 	int ret = recv(client->sock, data, length, MSG_NOSIGNAL);
 #ifdef TCPDUMP
 	ret = write(1, data, ret);
@@ -202,7 +202,7 @@ static int tcpclient_recv(void *ctl, char *data, int length)
 	return ret;
 }
 
-static int tcpclient_send(void *ctl, const char *data, int length)
+static int tcpclient_send(void *ctl, const char *data, size_t length)
 {
 	int ret;
 	http_client_t *client = (http_client_t *)ctl;
@@ -430,15 +430,19 @@ const httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.scheme = str_defaultscheme,
 	.default_port = 80,
 	.type = 0,
-	.create = tcpclient_create,
-	.connect = tcpclient_connect,
-	.recvreq = tcpclient_recv,
-	.sendresp = tcpclient_send,
-	.wait = tcpclient_wait,
-	.status = tcpclient_status,
-	.flush = tcpclient_flush,
-	.disconnect = tcpclient_disconnect,
-	.destroy = tcpclient_destroy,
+	.create = &tcpclient_create,
+#ifdef HTTPCLIENT_FEATURES
+	.connect = &tcpclient_connect,
+#else
+	.connect = NULL,
+#endif
+	.recvreq = &tcpclient_recv,
+	.sendresp = &tcpclient_send,
+	.wait = &tcpclient_wait,
+	.status = &tcpclient_status,
+	.flush = &tcpclient_flush,
+	.disconnect = &tcpclient_disconnect,
+	.destroy = &tcpclient_destroy,
 };
 
 #ifdef TCP_SIGHANDLER
@@ -490,32 +494,32 @@ static int _tcpserver_start(http_server_t *server)
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
 
-#ifdef HAVE_GETNAMEINFO
 	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
-#endif
 	if (status != 0) {
 		warn("socket interface not found : %s", hstrerror(status));
-		result = &hints;
+		rp = &hints;
 #ifdef USE_IPV6
-		if (result->ai_family == AF_INET6)
+		if (rp->ai_family == AF_INET6)
 		{
 			saddr_in6.sin6_flowinfo = 0;
 			saddr_in6.sin6_addr = in6addr_any;
-			result->ai_addr = (struct sockaddr *)&saddr_in6;
-			result->ai_addrlen = sizeof(saddr_in6);
+			rp->ai_addr = (struct sockaddr *)&saddr_in6;
+			rp->ai_addrlen = sizeof(saddr_in6);
 		}
-		else if (result->ai_family == AF_INET)
+		else if (rp->ai_family == AF_INET)
 #endif
 		{
 			memset(&saddr_in, 0, sizeof(saddr_in));
 			saddr_in.sin_family = AF_INET;
 			saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
-			result->ai_addr = (struct sockaddr *)&saddr_in;
-			result->ai_addrlen = sizeof(saddr_in);
+			rp->ai_addr = (struct sockaddr *)&saddr_in;
+			rp->ai_addrlen = sizeof(saddr_in);
 		}
 	}
+	else
+		rp = result;
 
-	for (rp = result; rp != NULL; rp = rp->ai_next)
+	for (; rp != NULL; rp = rp->ai_next)
 	{
 		server->sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if (server->sock == -1)
@@ -547,10 +551,7 @@ static int _tcpserver_start(http_server_t *server)
 		}
 		server->ops->close(server);
 	}
-#ifdef HAVE_GETNAMEINFO
-	if (result != &hints)
-		freeaddrinfo(result);
-#endif
+	freeaddrinfo(result);
 
 	if (status == 0)
 	{
@@ -620,9 +621,7 @@ static void _tcpserver_close(http_server_t *server)
 	while (client != NULL)
 	{
 		http_client_t *next = client->next;
-		client->ops->disconnect(client->opsctx);
 		httpclient_destroy(client);
-		//client->ops->destroy(client->opsctx);
 		client = next;
 	}
 	server->clients = NULL;
@@ -640,9 +639,9 @@ static void _tcpserver_close(http_server_t *server)
 //httpserver_ops_t *tcpops = &(httpserver_ops_t)
 httpserver_ops_t *httpserver_ops = &(httpserver_ops_t)
 {
-	.start = _tcpserver_start,
-	.createclient = _tcpserver_createclient,
-	.close = _tcpserver_close,
+	.start = &_tcpserver_start,
+	.createclient = &_tcpserver_createclient,
+	.close = &_tcpserver_close,
 };
 
 //httpserver_ops_t *httpserver_ops __attribute__ ((weak, alias ("tcpops")));

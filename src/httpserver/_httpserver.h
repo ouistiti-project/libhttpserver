@@ -39,6 +39,7 @@
 
 #include "vthread.h"
 #include "dbentry.h"
+#include "_string.h"
 
 typedef struct buffer_s buffer_t;
 typedef struct http_connector_list_s http_connector_list_t;
@@ -70,6 +71,7 @@ struct http_server_mod_s
 
 struct http_server_s
 {
+	string_t name;
 	int sock;
 	int type;
 	int run;
@@ -81,14 +83,17 @@ struct http_server_s
 	const httpserver_ops_t *ops;
 	const httpclient_ops_t *protocol_ops;
 	void *protocol;
+	string_t hostname;
+	string_t s_port;
+	string_t service;
 	http_message_method_t *methods;
 	buffer_t *methods_storage;
 #ifdef USE_POLL
 	struct pollfd *poll_set;
-#else
-	fd_set fds[3];
 #endif
+	fd_set fds[3];
 	int numfds;
+	http_server_session_t *sessions;
 	http_server_t *next;
 };
 
@@ -96,7 +101,14 @@ struct http_server_session_s
 {
 	dbentry_t *dbfirst;
 	buffer_t *storage;
+	http_server_session_t *next;
 };
+
+typedef int (*checksession_t)(void * arg, http_server_session_t*session);
+
+http_server_session_t *_httpserver_createsession(http_server_t *server, const http_client_t *client);
+http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg);
+void _httpserver_dropsession(http_server_t *server, http_server_session_t *session);
 
 #endif
 

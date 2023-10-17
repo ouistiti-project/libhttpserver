@@ -39,7 +39,7 @@ vthread_fork_CFLAGS+=-DHAVE_SCHED_YIELD
 
 lib-$(DLIB_URI)+=uri
 slib-$(SLIB_URI)+=uri
-hostslib-y+=uri
+hostslib-$(LIBURI_DEPRECATED)+=uri
 
 uri_SOURCES+=uri.c
 uri_CFLAGS+=-I../../include/ouistiti

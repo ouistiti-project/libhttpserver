@@ -31,26 +31,37 @@
 typedef struct buffer_s buffer_t;
 struct buffer_s
 {
+	const char *name;
 	char *data;
 	char *offset;
-	int size;
-	int length;
+	size_t size;
+	size_t length;
 	int maxchunks;
 };
 
-buffer_t * _buffer_create(int maxchunks);
+typedef int (*_buffer_fillcb)(void * cbarg, char *data, size_t size);
+
+buffer_t * _buffer_create(const char *name, int maxchunks);
 int _buffer_chunksize(int new);
-int _buffer_accept(buffer_t *buffer, int length);
-char *_buffer_append(buffer_t *buffer, const char *data, int length);
-char *_buffer_pop(buffer_t *buffer, int length);
-void _buffer_shrink(buffer_t *buffer, int reset);
-void _buffer_reset(buffer_t *buffer);
+
+int _buffer_accept(const buffer_t *buffer, size_t length);
+int _buffer_append(buffer_t *buffer, const char *data, size_t length);
+int _buffer_fill(buffer_t *buffer, _buffer_fillcb cb, void * cbarg);
+
+char *_buffer_pop(buffer_t *buffer, size_t length);
+void _buffer_shrink(buffer_t *buffer);
+void _buffer_reset(buffer_t *buffer, size_t offset);
 int _buffer_rewindto(buffer_t *buffer, char needle);
-int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value);
+
+const char *_buffer_get(const buffer_t *buffer, size_t from);
+size_t _buffer_length(const buffer_t *buffer);
+int _buffer_empty(const buffer_t *buffer);
+int _buffer_full(const buffer_t *buffer);
+
 int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep);
-int _buffer_empty(buffer_t *buffer);
-int _buffer_full(buffer_t *buffer);
-char _buffer_last(buffer_t *buffer);
+int _buffer_dbentry(const buffer_t *storage, dbentry_t **db, const char *key, size_t keylen, const char * value, size_t end);
+int _buffer_serializedb(buffer_t *storage, dbentry_t *entry, char separator, char fieldsep);
+int _buffer_deletedb(buffer_t *storage, dbentry_t *entry, int shrink);
 void _buffer_destroy(buffer_t *buffer);
 
 #endif

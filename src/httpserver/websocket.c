@@ -214,15 +214,6 @@ int websocket_framed(int type, char *in, int inlength, char *out, int *outlength
 	}
 	else
 */
-	if (type == WS_AUTO)
-	{
-		int tlen = strlen(in);
-		if ((in[inlength - 1] == '\0' && tlen == inlength - 1)
-			|| (in[inlength] == '\0' && tlen == inlength))
-			type = WS_TEXT;
-		else
-			type = WS_BLOB;
-	}
 	length = inlength;
 	if (type == WS_TEXT)
 	{

@@ -38,6 +38,7 @@
 #endif
 
 #include "dbentry.h"
+#include "_string.h"
 
 #define HTTPMESSAGE_KEEPALIVE 0x01
 #define HTTPMESSAGE_LOCKED 0x02
@@ -78,8 +79,8 @@ struct http_message_s
 	enum {
 		PARSE_INIT,
 		PARSE_URI = 0x0001,
-		PARSE_URIENCODED = 0x0002,
-		PARSE_URIDOUBLEDOT = 0x0003,
+		PARSE_URIFRAGID = 0x0002,
+		PARSE_QUERY = 0x0003,
 		PARSE_VERSION = 0x0004,
 		PARSE_STATUS = 0x0005,
 		PARSE_PREHEADER = 0x0006,
@@ -111,10 +112,8 @@ struct http_message_s
 	http_message_version_e version;
 	buffer_t *headers_storage;
 	dbentry_t *headers;
-	char *query;
 	buffer_t *query_storage;
 	dbentry_t *queries;
-	const char *cookie;
 	buffer_t *cookie_storage;
 	dbentry_t *cookies;
 	void *private;
@@ -125,7 +124,7 @@ struct http_message_s
 struct _http_message_result_s
 {
 	int result;
-	char *status;
+	string_t status;
 };
 typedef struct _http_message_result_s _http_message_result_t;
 
@@ -134,7 +133,7 @@ extern const _http_message_result_t *_http_message_result[];
 typedef struct http_message_method_s http_message_method_t;
 struct http_message_method_s
 {
-	const char *key;
+	string_t key;
 	short id;
 	short properties;
 	http_message_method_t *next;
@@ -156,136 +155,139 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 buffer_t *_httpmessage_buildheader(http_message_t *message);
 int _httpmessage_parserequest(http_message_t *message, buffer_t *data);
 int _httpmessage_fillheaderdb(http_message_t *message);
-char *_httpmessage_status(http_message_t *message);
+size_t _httpmessage_status(const http_message_t *message, char *status, size_t statuslen);
 int _httpmessage_changestate(http_message_t *message, int new);
 int _httpmessage_state(http_message_t *message, int check);
 int _httpmessage_contentempty(http_message_t *message, int unset);
 int _httpmessage_runconnector(http_message_t *request, http_message_t *response);
 
+#define _HTTPMESSAGE_RESULT_DEFINE(_id, _status) &(_http_message_result_t){.result = _id, .status.data = _status, .status.length = sizeof(_status) - 1}
+#define _HTTPMESSAGE_RESULT_MAXLEN 40
+
 #ifdef _HTTPMESSAGE_
 const _http_message_result_t *_http_message_result[] =
 {
 #if defined(RESULT_100)
-	&(_http_message_result_t){.result = RESULT_100, .status = " 100 Continue"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_100, " 100 Continue"),
 #endif
 #if defined(RESULT_101)
-	&(_http_message_result_t){.result = RESULT_101, .status = " 101 Switching Protocols"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_101, " 101 Switching Protocols"),
 #endif
-	&(_http_message_result_t){.result = RESULT_200, .status = " 200 OK"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_200, " 200 OK"),
 #if defined(RESULT_201)
-	&(_http_message_result_t){.result = RESULT_201, .status = " 201 Created"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_201, " 201 Created"),
 #endif
 #if defined(RESULT_202)
-	&(_http_message_result_t){RESULT_202, .status = " 202 Accepted"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_202, " 202 Accepted"),
 #endif
 #if defined(RESULT_203)
-	&(_http_message_result_t){.result = RESULT_203, .status = " 203 Non-Authoritative Information"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_203, " 203 Non-Authoritative Information"),
 #endif
 #if defined(RESULT_204)
-	&(_http_message_result_t){.result = RESULT_204, .status = " 204 No Content"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_204, " 204 No Content"),
 #endif
 #if defined(RESULT_205)
-	&(_http_message_result_t){.result = RESULT_205, .status = " 205 Reset Content"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_205, " 205 Reset Content"),
 #endif
 #if defined(RESULT_206)
-	&(_http_message_result_t){.result = RESULT_206, .status = " 206 Partial Content"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_206, " 206 Partial Content"),
 #endif
 #if defined(RESULT_300)
-	&(_http_message_result_t){.result = RESULT_300, .status = " 300 Multiple Choices"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_300, " 300 Multiple Choices"),
 #endif
 #if defined(RESULT_301)
-	&(_http_message_result_t){.result = RESULT_301, .status = " 301 Moved Permanently"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_301, " 301 Moved Permanently"),
 #endif
 #if defined(RESULT_302)
-	&(_http_message_result_t){.result = RESULT_302, .status = " 302 Found"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_302, " 302 Found"),
 #endif
 #if defined(RESULT_303)
-	&(_http_message_result_t){.result = RESULT_303, .status = " 303 See Other"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_303, " 303 See Other"),
 #endif
 #if defined(RESULT_304)
-	&(_http_message_result_t){.result = RESULT_304, .status = " 304 Not Modified"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_304, " 304 Not Modified"),
 #endif
 #if defined(RESULT_305)
-	&(_http_message_result_t){.result = RESULT_305, .status = " 305 Use Proxy"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_305, " 305 Use Proxy"),
 #endif
 #if defined(RESULT_307)
-	&(_http_message_result_t){.result = RESULT_307, .status = " 307 Temporary Redirect"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_307, " 307 Temporary Redirect"),
 #endif
-	&(_http_message_result_t){.result = RESULT_400, .status = " 400 Bad Request"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_400, " 400 Bad Request"),
 #if defined(RESULT_401)
-	&(_http_message_result_t){.result = RESULT_401, .status = " 401 Unauthorized"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_401, " 401 Unauthorized"),
 #endif
 #if defined(RESULT_402)
-	&(_http_message_result_t){.result = RESULT_402, .status = " 402 Payment Required"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_402, " 402 Payment Required"),
 #endif
 #if defined(RESULT_403)
-	&(_http_message_result_t){.result = RESULT_403, .status = " 403 Forbidden"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_403, " 403 Forbidden"),
 #endif
 #if defined(RESULT_404)
-	&(_http_message_result_t){.result = RESULT_404, .status = " 404 File Not Found"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_404, " 404 File Not Found"),
 #endif
 #if defined(RESULT_405)
-	&(_http_message_result_t){.result = RESULT_405, .status = " 405 Method Not Allowed"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_405, " 405 Method Not Allowed"),
 #endif
 #if defined(RESULT_406)
-	&(_http_message_result_t){.result = RESULT_406, .status = " 406 Not Acceptable"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_406, " 406 Not Acceptable"),
 #endif
 #if defined(RESULT_407)
-	&(_http_message_result_t){.result = RESULT_407, .status = " 407 Proxy Authentication Required"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_407, " 407 Proxy Authentication Required"),
 #endif
 #if defined(RESULT_408)
-	&(_http_message_result_t){.result = RESULT_408, .status = " 408 Request Timeout"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_408, " 408 Request Timeout"),
 #endif
 #if defined(RESULT_409)
-	&(_http_message_result_t){.result = RESULT_409, .status = " 409 Conflict"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_409, " 409 Conflict"),
 #endif
 #if defined(RESULT_410)
-	&(_http_message_result_t){.result = RESULT_410, .status = " 410 Gone"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_410, " 410 Gone"),
 #endif
 #if defined(RESULT_411)
-	&(_http_message_result_t){.result = RESULT_411, .status = " 411 Length Required"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_411, " 411 Length Required"),
 #endif
 #if defined(RESULT_412)
-	&(_http_message_result_t){.result = RESULT_412, .status = " 412 Precondition Failed"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_412, " 412 Precondition Failed"),
 #endif
 #if defined(RESULT_413)
-	&(_http_message_result_t){.result = RESULT_413, .status = " 413 Request Entity Too Large"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_413, " 413 Request Entity Too Large"),
 #endif
 #if defined(RESULT_414)
-	&(_http_message_result_t){.result = RESULT_414, .status = " 414 Request URI too long"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_414, " 414 Request URI too long"),
 #endif
 #if defined(RESULT_415)
-	&(_http_message_result_t){.result = RESULT_415, .status = " 415 Unsupported Media Type"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_415, " 415 Unsupported Media Type"),
 #endif
 #if defined(RESULT_416)
-	&(_http_message_result_t){.result = RESULT_416, .status = " 416 Range Not Satisfiable"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_416, " 416 Range Not Satisfiable"),
 #endif
 #if defined(RESULT_417)
-	&(_http_message_result_t){.result = RESULT_417, .status = " 417 Expectation Failed"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_417, " 417 Expectation Failed"),
 #endif
 #if defined(RESULT_500)
-	&(_http_message_result_t){.result = RESULT_500, .status = " 500 Internal Server Error"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_500, " 500 Internal Server Error"),
 #endif
 #if defined(RESULT_501)
-	&(_http_message_result_t){.result = RESULT_501, .status = " 501 Not Implemented"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_501, " 501 Not Implemented"),
 #endif
 #if defined(RESULT_502)
-	&(_http_message_result_t){.result = RESULT_502, .status = " 502 Bad Gateway"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_502, " 502 Bad Gateway"),
 #endif
 #if defined(RESULT_503)
-	&(_http_message_result_t){.result = RESULT_503, .status = " 503 Service Unavailable"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_503, " 503 Service Unavailable"),
 #endif
 #if defined(RESULT_504)
-	&(_http_message_result_t){.result = RESULT_504, .status = " 504 Gateway Timeout"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_504, " 504 Gateway Timeout"),
 #endif
 #if defined(RESULT_505)
-	&(_http_message_result_t){.result = RESULT_505, .status = " 505 HTTP Version Not Supported"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_505, " 505 HTTP Version Not Supported"),
 #endif
 #if defined(RESULT_506)
-	&(_http_message_result_t){.result = RESULT_506, .status = " 506 Variant Also Negotiates"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_506, " 506 Variant Also Negotiates"),
 #endif
 #if defined(RESULT_511)
-	&(_http_message_result_t){.result = RESULT_511, .status = " 511 Network Authentication Required"},
+	_HTTPMESSAGE_RESULT_DEFINE(RESULT_511, " 511 Network Authentication Required"),
 #endif
 	NULL
 };

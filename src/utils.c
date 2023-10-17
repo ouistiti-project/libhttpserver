@@ -48,11 +48,19 @@ const char str_imagejpeg[] = "image/jpeg";
 const char str_applicationjavascript[] = "application/javascript";
 const char str_applicationoctetstream[] = "application/octet-stream";
 
+#define STRING_REF(string) string, sizeof(string)-1
+typedef struct string_s string_t;
+struct string_s
+{
+	const char *data;
+	size_t length;
+};
+
 typedef struct mime_entry_s mime_entry_t;
 struct mime_entry_s
 {
 	const char *ext;
-	const char *mime;
+	string_t mime;
 	mime_entry_t *next;
 };
 
@@ -61,35 +69,35 @@ static mime_entry_t *mime_entry = NULL;
 static const mime_entry_t *mime_default =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = "*",
-	.mime = str_applicationoctetstream,
+	.mime = STRING_REF(str_applicationoctetstream),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".text",
-	.mime = str_textplain,
+	.mime = STRING_REF(str_textplain),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".html,.xhtml,.htm",
-	.mime = str_texthtml,
+	.mime = STRING_REF(str_texthtml),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".css",
-	.mime = str_textcss,
+	.mime = STRING_REF(str_textcss),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".json",
-	.mime = str_textjson,
+	.mime = STRING_REF(str_textjson),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".js",
-	.mime = str_applicationjavascript,
+	.mime = STRING_REF(str_applicationjavascript),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".png",
-	.mime = str_imagepng,
+	.mime = STRING_REF(str_imagepng),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".jpg",
-	.mime = str_imagejpeg,
+	.mime = STRING_REF(str_imagejpeg),
 	.next = NULL
 }}}}}}}};
 
@@ -99,7 +107,8 @@ void utils_addmime(const char *ext, const char*mime)
 {
 	mime_entry_t *entry = calloc(1, sizeof(*entry));
 	entry->ext = ext;
-	entry->mime = mime;
+	entry->mime.data = mime;
+	entry->mime.length = strlen(mime);
 	mime_entry_t *last = mime_entry;
 	if (last)
 	{
@@ -128,12 +137,23 @@ static const mime_entry_t *_utils_getmime(const mime_entry_t *entry, const char 
 
 const char *utils_getmime(const char *filepath)
 {
+	const char *value = NULL;
+	utils_getmime2(filepath, &value);
+	return value;
+}
+
+size_t utils_getmime2(const char *filepath, const char **value)
+{
 	const mime_entry_t *mime = _utils_getmime(mime_default->next, filepath);
 	if (mime == NULL)
 		mime = _utils_getmime(mime_entry, filepath);
 	if (mime)
-		return mime->mime;
-	return mime_default->mime;
+	{
+		*value = mime->mime.data;
+		return mime->mime.length;
+	}
+	*value = mime_default->mime.data;
+	return mime_default->mime.length;
 }
 
 
@@ -358,7 +378,7 @@ static int utils_runentry(utils_parsestring_t *entry, const char *value, size_t 
 	return entry->result;
 }
 
-int utils_parsestring(const char *string, int listlength, utils_parsestring_t list[])
+int utils_parsestring(const char *string, size_t stringlen, int listlength, utils_parsestring_t list[])
 {
 	int ret = ESUCCESS;
 	int listit;
@@ -369,7 +389,7 @@ int utils_parsestring(const char *string, int listlength, utils_parsestring_t li
 	}
 
 	int length, i;
-	length = strlen(string);
+	length = stringlen;
 	for (i = 0; i < length; i++)
 	{
 		//dbg("search %s", string + i);

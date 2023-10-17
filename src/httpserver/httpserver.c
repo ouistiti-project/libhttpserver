@@ -42,10 +42,7 @@
 #include <sys/resource.h>
 #include <time.h>
 #include <signal.h>
-
-#ifdef USE_STDARG
-#include <stdarg.h>
-#endif
+#include <sys/ioctl.h>
 
 #ifdef USE_POLL
 #include <poll.h>
@@ -93,6 +90,9 @@ const char str_defaultscheme[] = "http";
 const char str_true[] = "true";
 const char str_false[] = "false";
 
+static const char str_session[] = "session";
+static const char str_methods[] = "methods";
+
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
 /***********************************************************************
@@ -118,7 +118,7 @@ static int _httpserver_prepare(http_server_t *server)
 	int checksockets = 1;
 	maxfd = server->sock;
 
-	http_client_t *client = server->clients;
+	const http_client_t *client = server->clients;
 #ifndef VTHREAD
 	client = server->clients;
 	while (client != NULL)
@@ -189,9 +189,28 @@ static int _httpserver_prepare(http_server_t *server)
 	return maxfd;
 }
 
-# include <sys/ioctl.h>
+static http_client_t *_httpserver_removeclient(http_server_t *server, http_client_t *client)
+{
+#ifdef VTHREAD
+	vthread_join(client->thread, NULL);
+#endif
+	http_client_t *client2 = server->clients;
+	if (client == server->clients)
+	{
+		server->clients = client->next;
+		client2 = server->clients;
+	}
+	else
+	{
+		while (client2->next != client) client2 = client2->next;
+		client2->next = client->next;
+		client2 = client2->next;
+	}
+	httpclient_destroy(client);
+	return client2;
+}
 
-static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
+static int _httpserver_checkclients(http_server_t *server, const fd_set *prfds, const fd_set *pwfds, const fd_set *pefds)
 {
 	int ret = 0;
 	http_client_t *client = server->clients;
@@ -234,45 +253,22 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 		if (FD_ISSET(httpclient_socket(client), prfds) ||
 			client->request_queue != NULL)
 		{
-			client->state |= CLIENT_RUNNING;
-			int run_ret;
-			do
-			{
-				int ret;
-				run_ret = _httpclient_run(client);
-				if (run_ret == ESUCCESS)
-					client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
-			}
-			while (run_ret == EINCOMPLETE && client->request_queue == NULL);
+			ret = _httpclient_run(client);
 		}
 
-		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
-#else
-
-		if ((!vthread_exist(client->thread)) ||
-			((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD))
 #endif
+		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 		{
 			warn("client %p died", client);
-#ifdef VTHREAD
-			vthread_join(client->thread, NULL);
-#endif
-
-			http_client_t *client2 = server->clients;
-			if (client == server->clients)
-			{
-				server->clients = client->next;
-				client2 = server->clients;
-			}
-			else
-			{
-				while (client2->next != client) client2 = client2->next;
-				client2->next = client->next;
-				client2 = client2->next;
-			}
-			httpclient_destroy(client);
-			client = client2;
+			client = _httpserver_removeclient(server, client);
 		}
+#ifdef VTHREAD
+		else if (!vthread_exist(client->thread))
+		{
+			warn("client %p died", client);
+			client = _httpserver_removeclient(server, client);
+		}
+#endif
 		else
 		{
 			ret++;
@@ -284,23 +280,57 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, fd_set
 	return ret;
 }
 
-#ifdef DEBUG
-static int _debug_nbclients = 0;
-static int _debug_maxclients = 0;
+static int _httpserver_addclient(http_server_t *server, http_client_t *client)
+{
+	int ret = EREJECT;
+
+	ret = _httpserver_setmod(server, client);
+#ifdef VTHREAD
+	if (ret == ESUCCESS)
+	{
+		vthread_attr_t attr;
+		client->state &= ~CLIENT_STOPPED;
+		client->state |= CLIENT_STARTED;
+		ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client));
+		if (!vthread_sharedmemory(client->thread))
+		{
+			/**
+			 * To disallow the reception of SIGPIPE during the
+			 * "send" call, the socket into the parent process
+			 * must be closed.
+			 * Or the tcpserver must disable SIGPIPE
+			 * during the sending, but in this case
+			 * it is impossible to recceive real SIGPIPE.
+			 */
+			close(client->sock);
+		}
+	}
 #endif
+	if (ret == ESUCCESS)
+	{
+		client->next = server->clients;
+		server->clients = client;
+	}
+	else
+	{
+		/**
+		 * One module rejected the new client socket.
+		 * It may be a bug or a module checking the client
+		 * like "clientfilter"
+		 */
+		warn("server: connection refused by modules");
+		httpclient_shutdown(client);
+		httpclient_destroy(client);
+	}
+	return ret;
+}
+
 static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
 {
 	int ret = ESUCCESS;
-	int count = 0;
 
 	if (server->sock == -1)
 		return EREJECT;
-
-	count = _httpserver_checkclients(server, prfds, pwfds, pefds);
-#ifdef DEBUG
-	_debug_maxclients = (_debug_maxclients > count)? _debug_maxclients: count;
-	server_dbg("nb clients %d / %d / %d", count, _debug_maxclients, _debug_nbclients);
-#endif
 
 	if (FD_ISSET(server->sock, pefds))
 	{
@@ -308,95 +338,17 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 		FD_CLR(server->sock, prfds);
 	}
 
-	if ((count + 1) > server->config->maxclients)
+	if (FD_ISSET(server->sock, prfds))
 	{
-		ret = EINCOMPLETE;
-		//err("maxclients");
-#ifdef VTHREAD
-		vthread_yield(server->thread);
-		usleep(server->config->keepalive * 1000000);
-#else
-		/**
-		 * It may be possible to call _httpserver_checkserver
-		 * and create a recursion of the function while at least
-		 * one client doesn't die. But if the clients never die,
-		 * it becomes an infinite loop.
-		 */
-		ret = _httpserver_checkclients(server, prfds, pwfds, pefds);
-#endif
-	}
-	else if (FD_ISSET(server->sock, prfds))
-	{
-		http_client_t *client = NULL;
-		do
+		http_client_t *client = server->ops->createclient(server);
+
+		if (client != NULL)
 		{
-			client = server->ops->createclient(server);
-
-			if (client != NULL)
-			{
-				ret = _httpserver_setmod(server, client);
-#ifdef VTHREAD
-				if (ret == ESUCCESS)
-				{
-					vthread_attr_t attr;
-					client->state &= ~CLIENT_STOPPED;
-					client->state |= CLIENT_STARTED;
-					ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client));
-					if (!vthread_sharedmemory(client->thread))
-					{
-						/**
-						 * To disallow the reception of SIGPIPE during the
-						 * "send" call, the socket into the parent process
-						 * must be closed.
-						 * Or the tcpserver must disable SIGPIPE
-						 * during the sending, but in this case
-						 * it is impossible to recceive real SIGPIPE.
-						 */
-						close(client->sock);
-					}
-				}
-#endif
-				if (ret == ESUCCESS)
-				{
-					client->next = server->clients;
-					server->clients = client;
-
-#ifdef DEBUG
-					_debug_nbclients++;
-#endif
-					count++;
-				}
-				else
-				{
-					/**
-					 * One module rejected the new client socket.
-					 * It may be a bug or a module checking the client
-					 * like "clientfilter"
-					 */
-					warn("server: connection refused by modules");
-					httpclient_shutdown(client);
-					httpclient_destroy(client);
-				}
-			}
-			else
-				warn("server: client connection error");
+			_httpserver_addclient(server, client);
+			/// the return of this function talk about the client not the server
 		}
-		while (client != NULL && count < server->config->maxclients);
-		/**
-		 * this loop generates more exception on the server socket.
-		 * The exception is handled and should not generate trouble.
-		 *
-		 * this loop cheks there aren't more than one connection in
-		 * the same time.
-		 * The second "createclient" call generates the message:
-		 * "tcpserver accept error Resource temporarily unavailable"
-		 */
-
-		if ((count + 1) > server->config->maxclients)
-		{
-			warn("server: too many clients");
-			ret = EINCOMPLETE;
-		}
+		else
+			warn("server: client connection error");
 	}
 
 	return ret;
@@ -413,6 +365,61 @@ static int _httpserver_connect(http_server_t *server)
 }
 #endif
 
+static int _httpserver_select(http_server_t *server, int maxfd, fd_set *prfds, fd_set *pwfds, fd_set *pefds, struct timespec *ptimeout)
+{
+	int nbselect = 0;
+#ifdef USE_POLL
+	if (maxfd > 0)
+		//nbselect = ppoll(server->poll_set, server->numfds, ptimeout, NULL);
+		nbselect = poll(server->poll_set, server->numfds, WAIT_TIMER * 1000);
+
+	if (nbselect > 0)
+	{
+		int j;
+		for (j = 0; j < server->numfds; j++)
+		{
+			if (server->poll_set[j].revents & POLLIN)
+			{
+				FD_SET(server->poll_set[j].fd, &server->fds[0]);
+				server->poll_set[j].revents &= ~POLLIN;
+			}
+			if (server->poll_set[j].revents & POLLOUT)
+			{
+				FD_SET(server->poll_set[j].fd, &server->fds[1]);
+				server->poll_set[j].revents &= ~POLLOUT;
+			}
+			if (server->poll_set[j].revents & POLLERR)
+			{
+				FD_SET(server->poll_set[j].fd, &server->fds[0]);
+				FD_SET(server->poll_set[j].fd, &server->fds[2]);
+			}
+			if (server->poll_set[j].revents & POLLHUP)
+			{
+				if (server->poll_set[j].fd == server->sock)
+				{
+					nbselect = -1;
+					server->run = 0;
+					errno = ECONNABORTED;
+				}
+				else
+				{
+					FD_SET(server->poll_set[j].fd, &server->fds[0]);
+					FD_SET(server->poll_set[j].fd, &server->fds[2]);
+				}
+				server->poll_set[j].revents &= ~POLLHUP;
+			}
+			if (server->poll_set[j].revents)
+				err("server %p fd %d poll %x", server, server->poll_set[j].fd, server->poll_set[j].revents);
+		}
+	}
+#else
+	if (maxfd > 0)
+		nbselect = pselect(maxfd +1, &server->fds[0],
+					&server->fds[1], &server->fds[2], ptimeout, NULL);
+#endif
+	return nbselect;
+}
+
 static int _httpserver_run(http_server_t *server)
 {
 	int ret = ESUCCESS;
@@ -421,23 +428,17 @@ static int _httpserver_run(http_server_t *server)
 	server->run = 1;
 	run = 1;
 
-	warn("server %s %d running", server->config->hostname, server->config->port);
+	warn("server %s %d running", server->hostname.data, server->config->port);
 	while(run > 0)
 	{
 		struct timespec *ptimeout = NULL;
 		int maxfd = 0;
 		fd_set *prfds, *pwfds, *pefds;
-#ifdef USE_POLL
-		fd_set rfds, wfds, efds;
 
-		prfds = &rfds;
-		pwfds = &wfds;
-		pefds = &efds;
-#else
 		prfds = &server->fds[0];
 		pwfds = &server->fds[1];
 		pefds = &server->fds[2];
-#endif
+
 		FD_ZERO(prfds);
 		FD_ZERO(pwfds);
 		FD_ZERO(pefds);
@@ -459,56 +460,8 @@ static int _httpserver_run(http_server_t *server)
 		else
 			maxfd = lastfd;
 
-		int nbselect = server->numfds;
-#ifdef USE_POLL
-		if (maxfd > 0)
-			//nbselect = ppoll(server->poll_set, server->numfds, ptimeout, NULL);
-			nbselect = poll(server->poll_set, server->numfds, WAIT_TIMER * 1000);
+		int nbselect = _httpserver_select(server, maxfd, prfds, pwfds, pefds, ptimeout);
 
-		if (nbselect > 0)
-		{
-			int j;
-			for (j = 0; j < server->numfds; j++)
-			{
-				if (server->poll_set[j].revents & POLLIN)
-				{
-					FD_SET(server->poll_set[j].fd, &rfds);
-					server->poll_set[j].revents &= ~POLLIN;
-				}
-				if (server->poll_set[j].revents & POLLOUT)
-				{
-					FD_SET(server->poll_set[j].fd, &wfds);
-					server->poll_set[j].revents &= ~POLLOUT;
-				}
-				if (server->poll_set[j].revents & POLLERR)
-				{
-					FD_SET(server->poll_set[j].fd, &rfds);
-					FD_SET(server->poll_set[j].fd, &efds);
-				}
-				if (server->poll_set[j].revents & POLLHUP)
-				{
-					if (server->poll_set[j].fd == server->sock)
-					{
-						nbselect = -1;
-						server->run = 0;
-						errno = ECONNABORTED;
-					}
-					else
-					{
-						FD_SET(server->poll_set[j].fd, &rfds);
-						FD_SET(server->poll_set[j].fd, &efds);
-					}
-					server->poll_set[j].revents &= ~POLLHUP;
-				}
-				if (server->poll_set[j].revents)
-					err("server %p fd %d poll %x", server, server->poll_set[j].fd, server->poll_set[j].revents);
-			}
-		}
-#else
-		if (maxfd > 0)
-			nbselect = pselect(maxfd +1, &server->fds[0],
-						&server->fds[1], &server->fds[2], ptimeout, NULL);
-#endif
 		server_dbg("server: events %d", nbselect);
 		if (nbselect == 0)
 		{
@@ -583,7 +536,20 @@ static int _httpserver_run(http_server_t *server)
 		}
 		else if (nbselect > 0)
 		{
-			ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+			int count = 0;
+			count = _httpserver_checkclients(server, prfds, pwfds, pefds);
+			if (count < server->config->maxclients)
+				ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+			else
+			{
+				ret = EINCOMPLETE;
+				warn("server: too many clients");
+#ifdef VTHREAD
+				vthread_yield(server->thread);
+				usleep(server->config->keepalive * 1000000);
+#endif
+			}
+
 			if (ret == EREJECT)
 			{
 				server->run = 0;
@@ -592,6 +558,7 @@ static int _httpserver_run(http_server_t *server)
 			vthread_yield(server->thread);
 #endif
 		}
+		/// server->run may be changed from parent thread
 		if (!server->run)
 		{
 			run--;
@@ -617,11 +584,20 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		server->config = config;
 	else
 		server->config = &defaultconfig;
+	_string_store(&server->name, httpserver_software, -1);
+	_string_store(&server->hostname, config->hostname, -1);
+	char s_port[5];
+	size_t length = snprintf(s_port, 5, "%.4d", config->port);
+	_string_alloc(&server->s_port, s_port, length); // this is a memory leak, but memory should be release on destroy
+	if (config->service)
+		_string_store(&server->service, config->service, -1);
+	else
+		_string_store(&server->service, server->s_port.data, server->s_port.length);
 	server->ops = httpserver_ops;
 	const http_message_method_t *method = default_methods;
 	while (method)
 	{
-		httpserver_addmethod(server, method->key, method->properties);
+		httpserver_addmethod(server, method->key.data, method->key.length, method->properties);
 		method = method->next;
 	}
 	vthread_init(server->config->maxclients);
@@ -663,7 +639,7 @@ http_server_t *httpserver_dup(http_server_t *server)
 	const http_message_method_t *method = default_methods;
 	while (method)
 	{
-		httpserver_addmethod(vserver, method->key, method->properties);
+		httpserver_addmethod(vserver, method->key.data, method->key.length, method->properties);
 		method = method->next;
 	}
 
@@ -673,14 +649,14 @@ http_server_t *httpserver_dup(http_server_t *server)
 	return vserver;
 }
 
-void httpserver_addmethod(http_server_t *server, const char *key, short properties)
+void httpserver_addmethod(http_server_t *server, const char *key, size_t keylen, short properties)
 {
 	short id = -1;
 	http_message_method_t *method = server->methods;
 	while (method != NULL)
 	{
 		id = method->id;
-		if (!strcmp(method->key, key))
+		if (!_string_cmp(&method->key, key, -1))
 		{
 			break;
 		}
@@ -691,10 +667,18 @@ void httpserver_addmethod(http_server_t *server, const char *key, short properti
 		method = vcalloc(1, sizeof(*method));
 		if (method == NULL)
 			return;
-		method->key = key;
+		_string_store(&method->key, key, keylen);
 		method->id = id + 1;
 		method->next = server->methods;
 		server->methods = method;
+
+		if (server->methods_storage == NULL)
+		{
+			server->methods_storage = _buffer_create(str_methods, MAXCHUNKS_URI);
+		}
+		else
+			_buffer_append(server->methods_storage, ",", 1);
+		_buffer_append(server->methods_storage, method->key.data, method->key.length);
 	}
 	if (properties != method->properties)
 	{
@@ -785,6 +769,7 @@ void httpserver_disconnect(http_server_t *server)
 {
 	server->run = 0;
 	server->ops->close(server);
+	vthread_yield(server->thread);
 }
 
 void httpserver_destroy(http_server_t *server)
@@ -793,6 +778,7 @@ void httpserver_destroy(http_server_t *server)
 	if (server->thread)
 	{
 		vthread_join(server->thread, NULL);
+		vthread_uninit(server->thread);
 		server->thread = NULL;
 	}
 #endif
@@ -814,11 +800,7 @@ void httpserver_destroy(http_server_t *server)
 	while (method)
 	{
 		http_message_method_t *next = (http_message_method_t *) method->next;
-		/**
-		 * default_method must not be freed
-		 * prefere to have memory leaks
-		 */
-		/*vfree(method);*/
+		vfree(method);
 		method = next;
 	}
 	if (server->methods_storage != NULL)
@@ -839,88 +821,138 @@ static const char default_value[8] = {0};
 static char service[NI_MAXSERV];
 const char *httpserver_INFO(http_server_t *server, const char *key)
 {
-	const char *value = default_value;
+	const char *value;
+	httpserver_INFO2(server, key, &value);
+	return value;
+}
 
-	if (!strcasecmp(key, "name") || !strcasecmp(key, "host") || !strcasecmp(key, "hostname"))
+size_t httpserver_INFO2(http_server_t *server, const char *key, const char **value)
+{
+	size_t valuelen = 0;
+	*value = default_value;
+
+	if (!strcasecmp(key, "name") || !strcasecmp(key, "hostname"))
 	{
-		value = server->config->hostname;
+		*value = server->hostname.data;
+		valuelen = server->hostname.length;
 	}
 	else if (!strcasecmp(key, "domain"))
 	{
-		value = strchr(server->config->hostname, '.');
-		if (value)
-			value ++;
+		*value = strchr(server->hostname.data, '.');
+		if (*value)
+		{
+			*value = *value + 1;
+			valuelen = server->hostname.length - (*value - server->hostname.data);
+		}
 		else
-			value = default_value;
+			*value = default_value;
 	}
 	else if (!strcasecmp(key, "service"))
 	{
-		value = server->config->service;
-		if ( value == NULL)
-		{
-			snprintf(service, NI_MAXSERV, "%d", server->protocol_ops->default_port);
-			value = service;
-		}
+		*value = server->service.data;
+		valuelen = server->service.length;
 	}
 	else if (!strcasecmp(key, "software"))
 	{
-		value = httpserver_software;
+		*value = server->name.data;
+		valuelen = server->name.length;
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
-		value = server->protocol_ops->scheme;
+		*value = server->protocol_ops->scheme;
+		valuelen = -1;
 	}
 	else if (!strcasecmp(key, "protocol"))
 	{
-		value = httpversion[(server->config->version & HTTPVERSION_MASK)];
+		valuelen = httpserver_version(server->config->version, value);
 	}
 	else if (!strcasecmp(key, "methods"))
 	{
-		if (server->methods_storage == NULL)
-		{
-			server->methods_storage = _buffer_create(MAXCHUNKS_URI);
-			const http_message_method_t *method = server->methods;
-			while (method)
-			{
-				_buffer_append(server->methods_storage, method->key, -1);
-				if (method->next != NULL)
-					_buffer_append(server->methods_storage, ",", -1);
-				method = method->next;
-			}
-		}
-		value = server->methods_storage->data;
+		*value = _buffer_get(server->methods_storage, 0);
+		valuelen = _buffer_length(server->methods_storage);
 	}
 	else if (!strcasecmp(key, "secure"))
 	{
 		if (server->protocol_ops->type & HTTPCLIENT_TYPE_SECURE)
-			value = str_true;
+		{
+			*value = str_true;
+			valuelen = sizeof(str_true) - 1;
+		}
 		else
-			value = str_false;
+		{
+			*value = str_false;
+			valuelen = sizeof(str_false) - 1;
+		}
 	}
 	else if (!strcasecmp(key, "port"))
 	{
-#if 1
-		if (server->protocol_ops->default_port != server->config->port)
-		{
-			snprintf(service, NI_MAXSERV, "%d", server->config->port);
-			value = service;
-		}
-#else
-		struct sockaddr_in sin;
-		socklen_t len = sizeof(sin);
-		if (getsockname(server->sock, (struct sockaddr *)&sin, &len) == 0)
-		{
-			getnameinfo((struct sockaddr *) &sin, len,
-				0, 0,
-				service, NI_MAXSERV, NI_NUMERICSERV);
-			value = service;
-		}
-#endif
+		*value = server->s_port.data;
+		valuelen = server->s_port.length;
 	}
 	else if (!strcasecmp(key, "chunksize"))
 	{
-		snprintf(service, 8, "%.7u", server->config->chunksize);
-		value = service;
+		valuelen = snprintf(service, 8, "%.7u", server->config->chunksize);
+		*value = service;
 	}
-	return value;
+	return valuelen;
+}
+
+http_server_session_t *_httpserver_createsession(http_server_t *server, const http_client_t *client)
+{
+	http_server_session_t *session = NULL;
+	session = vcalloc(1, sizeof(*session));
+	if (session)
+	{
+		session->storage = _buffer_create(str_session, MAXCHUNKS_SESSION);
+		/**
+		 * the list should be managed with a lock.
+		 * This is the only list directly used by several threads
+		 * at the same time.
+		 * But if concurent race arrives, the server may lost a session.
+		 * The lost session is still able to be destroy, but not found.
+		 * This case allows to have two clients with two different sessions,
+		 * when they should be the same.
+		 * Currently, the session info are build during authentication
+		 * and may be built at each connection.
+		 * A trouble may occure if a request create ID into the session,
+		 * and another one would read this ID.
+		 */
+		session->next = server->sessions;
+		server->sessions = session;
+	}
+	return session;
+}
+
+void _httpserver_dropsession(http_server_t *server, http_server_session_t *session)
+{
+	http_server_session_t *it = server->sessions;
+	if (it == session)
+		server->sessions = session->next;
+	else
+	{
+		while (it->next != NULL)
+		{
+			if (it->next == session)
+			{
+				it->next = session->next;
+				break;
+			}
+			it = it->next;
+		}
+	}
+
+	_buffer_destroy(session->storage);
+	free(session);
+}
+
+http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg)
+{
+	http_server_session_t *it = server->sessions;
+	while (it != NULL)
+	{
+		if (cb(cbarg, it) == ESUCCESS)
+			return it;
+		it = it->next;
+	}
+	return NULL;
 }

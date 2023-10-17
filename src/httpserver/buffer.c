@@ -40,10 +40,6 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#ifdef USE_STDARG
-#include <stdarg.h>
-#endif
-
 #include "valloc.h"
 #include "vthread.h"
 #include "log.h"
@@ -51,9 +47,82 @@
 #include "_httpserver.h"
 #include "_httpmessage.h"
 #include "_buffer.h"
+#include "_string.h"
 #include "dbentry.h"
 
 #define buffer_dbg(...)
+
+#define MAX_STRING 256
+
+static size_t _string_len(string_t *str, const char *pointer)
+{
+	if (str->size == 0) str->size = MAX_STRING;
+	return strnlen(pointer, str->size);
+}
+
+string_t *_string_create(const char *pointer, size_t length)
+{
+	string_t *str = calloc(1, sizeof(*str));
+	_string_alloc(str, pointer, length);
+	return str;	
+}
+
+int _string_alloc(string_t *str, const char *pointer, size_t length)
+{
+	char *data = NULL;
+	str->length =  length;
+	if (pointer && length == (size_t) -1)
+		str->length = _string_len(str, pointer);
+	if (str->length > 0)
+		data = calloc(1, str->length + 1);
+	if (pointer != NULL)
+	{
+		str->length = snprintf(data, length + 1, "%s", pointer);
+	}
+	str->data = data;
+	str->size = str->length + 1;
+	return ESUCCESS;
+}
+
+int _string_store(string_t *str, const char *pointer, size_t length)
+{
+	str->data = pointer;
+	if (pointer && length == (size_t) -1)
+		str->length = _string_len(str, pointer);
+	else
+		str->length = length;
+	return ESUCCESS;
+}
+
+int _string_cpy(string_t *str, const char *source)
+{
+	if (str->data == NULL)
+		return EREJECT;
+	str->length = snprintf((char *)str->data, str->size, "%s", source);
+	return str->length;
+}
+
+size_t _string_length(const string_t *str)
+{
+	return str->length;
+}
+
+const char *_string_get(const string_t *str)
+{
+	return str->data;
+}
+
+int _string_cmp(const string_t *str, const char *cmp, size_t length)
+{
+	if ((length != (size_t) -1) && (length != str->length))
+		return EREJECT;
+	return strncasecmp(str->data, cmp, str->length);
+}
+
+int _string_empty(const string_t *str)
+{
+	return ! (str->data != NULL && str->data[0] != '\0');
+}
 
 static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
 /**
@@ -62,11 +131,12 @@ static int ChunkSize = HTTPMESSAGE_CHUNKSIZE;
  *  - to store the chunksize into each buffer (takes a lot of place).
  *  - to store into a global variable (looks bad).
  */
-buffer_t * _buffer_create(int maxchunks)
+buffer_t * _buffer_create(const char *name, int maxchunks)
 {
 	buffer_t *buffer = vcalloc(1, sizeof(*buffer));
 	if (buffer == NULL)
 		return NULL;
+	buffer->name = name;
 	/**
 	 * nbchunks is unused here, because is it possible to realloc.
 	 * Embeded version may use the nbchunk with special vcalloc.
@@ -91,7 +161,7 @@ int _buffer_chunksize(int new)
 	return ChunkSize;
 }
 
-int _buffer_accept(buffer_t *buffer, int length)
+int _buffer_accept(const buffer_t *buffer, size_t length)
 {
 	if ((buffer->data + buffer->size < buffer->offset + length) &&
 		(buffer->maxchunks * ChunkSize < length))
@@ -99,24 +169,27 @@ int _buffer_accept(buffer_t *buffer, int length)
 	return ESUCCESS;
 }
 
-char *_buffer_append(buffer_t *buffer, const char *data, int length)
+int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 {
-	if (length == -1)
-		length = strlen(data);
+	if (length == (size_t)-1)
+		length = strnlen(data, ChunkSize);
 	if (length == 0)
-		return buffer->offset;
+		return buffer->offset - buffer->data;
 
 	if (buffer->data + buffer->size < buffer->offset + length)
 	{
 		int nbchunks = (length / ChunkSize) + 1;
 		if (buffer->maxchunks > -1 && buffer->maxchunks - nbchunks < 0)
+		{
+			err("buffer: %s impossible to exceed to %d chunks", buffer->name, buffer->maxchunks);
 			nbchunks = buffer->maxchunks;
-		int chunksize = ChunkSize * nbchunks;
+		}
+		size_t chunksize = ChunkSize * nbchunks;
 
 		if (chunksize == 0)
 		{
-			err("buffer: max chunk: %d", buffer->size / ChunkSize);
-			return NULL;
+			err("buffer: max chunk: %lu", buffer->size / ChunkSize);
+			return -1;
 		}
 
 		char *newptr = vrealloc(buffer->data, buffer->size + chunksize);
@@ -127,15 +200,15 @@ char *_buffer_append(buffer_t *buffer, const char *data, int length)
 		}
 		if (buffer->maxchunks == 0)
 		{
-			err("buffer: out memory block: %d", buffer->size + chunksize);
-			return NULL;
+			err("buffer: out memory block: %lu", buffer->size + chunksize);
+			return -1;
 		}
 		if (buffer->maxchunks > -1)
 			buffer->maxchunks -= nbchunks;
 		buffer->size += chunksize;
 		if (newptr != buffer->data)
 		{
-			char *offset = buffer->offset;
+			const char *offset = buffer->offset;
 			buffer->offset = newptr + (offset - buffer->data);
 			buffer->data = newptr;
 		}
@@ -146,10 +219,21 @@ char *_buffer_append(buffer_t *buffer, const char *data, int length)
 	buffer->length += length;
 	buffer->offset += length;
 	buffer->data[buffer->length] = '\0';
-	return offset;
+	return offset - buffer->data;
 }
 
-char *_buffer_pop(buffer_t *buffer, int length)
+int _buffer_fill(buffer_t *buffer, _buffer_fillcb cb, void * cbarg)
+{
+	int size = cb(cbarg, buffer->offset, buffer->size - buffer->length - 1);
+	if (size > 0)
+	{
+		buffer->length += size;
+		buffer->data[buffer->length] = 0;
+	}
+	return size;
+}
+
+char *_buffer_pop(buffer_t *buffer, size_t length)
 {
 	length = (length < buffer->length)? length: buffer->length;
 	buffer->length -= length;
@@ -158,7 +242,7 @@ char *_buffer_pop(buffer_t *buffer, int length)
 	return buffer->offset;
 }
 
-void _buffer_shrink(buffer_t *buffer, int reset)
+void _buffer_shrink(buffer_t *buffer)
 {
 	buffer->length -= (buffer->offset - buffer->data);
 	while (buffer->length > 0 && (*(buffer->offset) == 0))
@@ -168,41 +252,55 @@ void _buffer_shrink(buffer_t *buffer, int reset)
 	}
 	memcpy(buffer->data, buffer->offset, buffer->length);
 	buffer->data[buffer->length] = '\0';
-	if (!reset)
-		buffer->offset = buffer->data + buffer->length;
-	else
-		buffer->offset = buffer->data;
+	buffer->offset = buffer->data;
 }
 
-void _buffer_reset(buffer_t *buffer)
+void _buffer_reset(buffer_t *buffer, size_t offset)
 {
-	buffer->offset = buffer->data;
-	buffer->length = 0;
+	buffer->offset = buffer->data + offset;
+	buffer->length = offset;
+	*(buffer->offset) = '\0';
 }
 
 int _buffer_rewindto(buffer_t *buffer, char needle)
 {
 	int ret = EINCOMPLETE;
-	while (buffer->offset > buffer->data && *(buffer->offset) != needle)
+	char *offset = buffer->data + buffer->length;
+	while (offset > buffer->data && *offset != needle)
 	{
-		buffer->offset--;
-		buffer->length--;
+		offset--;
 	}
-	if (*(buffer->offset) == needle)
+	if (*offset == needle)
 	{
-		*buffer->offset = '\0';
+		*offset = '\0';
+		buffer->offset = offset;
+		buffer->length = buffer->offset - buffer->data;
 		ret = ESUCCESS;
 	}
 	return ret;
 }
 
-int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * value)
+const char *_buffer_get(const buffer_t *buffer, size_t from)
 {
+	if (from <= buffer->length)
+		return buffer->data + from;
+	return NULL;
+}
+
+int _buffer_dbentry(const buffer_t *storage, dbentry_t **db, const char *key, size_t keylen, const char * value, size_t end)
+{
+	size_t valuelen = 0;
 	if (key[0] != 0)
 	{
 		if (value == NULL)
 		{
 			value = str_true;
+			valuelen = 3;
+		}
+		else
+		{
+			valuelen = storage->data + end - value;
+			storage->data[end] = '\0';
 		}
 		dbentry_t *entry;
 		entry = vcalloc(1, sizeof(dbentry_t));
@@ -210,68 +308,104 @@ int _buffer_dbentry(buffer_t *storage, dbentry_t **db, char *key, const char * v
 			return -1;
 		while (*key == ' ')
 			key++;
-		entry->key = key;
-		entry->value = value;
+		entry->storage = storage;
+		entry->key.offset = key - storage->data;
+		entry->key.length = keylen;
+		entry->value.offset = value - storage->data;
+		entry->value.length = valuelen;
 		entry->next = *db;
 		*db = entry;
-		buffer_dbg("fill \t%s\t%s", key, value);
+		buffer_dbg("fill \t%.*s\t%.*s", keylen, key, valuelen, value);
 	}
 	return 0;
 }
 
 int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char fieldsep)
 {
-	int i;
-	char *key = storage->data;
-	const char *value = NULL;
+	char *key = NULL;
+	char *value = NULL;
 	int count = 0;
+	size_t keylen = 0;
 
-	for (i = 0; i < storage->length; i++)
+	for (int i = 0; i < storage->length; i++)
 	{
-		if (storage->data[i] == '\n')
+		if (key == NULL && storage->data[i] > 0x19 && storage->data[i] < 0x7f)
+			key = storage->data + i;
+		if ((storage->data[i] == '\r') || (storage->data[i] == '\n'))
 			storage->data[i] = '\0';
-		if (storage->data[i] == separator && value == NULL)
+		if (key != NULL && storage->data[i] == separator && value == NULL)
 		{
-			storage->data[i] = '\0';
+			keylen = storage->data + i - key;
 			value = storage->data + i + 1;
 			while (*value == ' ')
 				value++;
 		}
-		else if ((storage->data[i] == '\0') ||
-				(storage->data[i] == fieldsep))
+		else if (storage->data[i] == fieldsep || storage->data[i] == '\0')
 		{
-			storage->data[i] = '\0';
-			if (_buffer_dbentry(storage, db, key, value) < 0)
+			if (key != NULL && _buffer_dbentry(storage, db, key, keylen, value, i) < 0)
 				return -1;
 			else
 				count++;
-			key = storage->data + i + 1;
+			key = NULL;
+			keylen = 0;
 			value = NULL;
 		}
 	}
-	if (_buffer_dbentry(storage, db, key, value) < 0)
+	if (key != NULL && _buffer_dbentry(storage, db, key, keylen, value, storage->length - 1) < 0)
 		return -1;
 	else
 		count++;
 	return count;
 }
 
-int _buffer_empty(buffer_t *buffer)
+int _buffer_serializedb(buffer_t *storage, dbentry_t *entry, char separator, char fieldsep)
+{
+	while (entry != NULL)
+	{
+		const char *key = storage->data + entry->key.offset;
+		size_t keylen = entry->key.length;
+		const char *value = storage->data + entry->value.offset;
+		size_t valuelen = entry->value.length;
+		if (key < storage->data || (value + valuelen) > (storage->data + storage->length))
+		{
+			err("buffer: unserialized db with %.*s", (int)entry->key.length, key);
+			err("buffer:     => %.*s", (int)entry->value.length, value);
+			return EREJECT;
+		}
+		if (key[keylen] == '\0')
+		{
+			size_t keyof = entry->key.offset;
+			storage->data[keyof + keylen] = separator;
+		}
+		size_t valueof = entry->value.offset;
+		if ( valueof < storage->length)
+		{
+			if (valuelen > 0 && (fieldsep == '\r' || fieldsep == '\n') && value[valuelen + 1] == '\0')
+			{
+				storage->data[valueof + valuelen] = '\r';
+				storage->data[valueof + valuelen + 1] = '\n';
+			}
+			else if (valuelen > 0)
+				storage->data[valueof + valuelen] = fieldsep;
+		}
+		entry = entry->next;
+	}
+	return ESUCCESS;
+}
+
+size_t _buffer_length(const buffer_t *buffer)
+{
+	return buffer->length;
+}
+
+int _buffer_empty(const buffer_t *buffer)
 {
 	return (buffer->length <= buffer->offset - buffer->data);
 }
 
-int _buffer_full(buffer_t *buffer)
+int _buffer_full(const buffer_t *buffer)
 {
 	return (buffer->length == buffer->size);
-}
-
-char _buffer_last(buffer_t *buffer)
-{
-	if (buffer->length > 0)
-		return *(buffer->offset - 1);
-	else
-		return 0;
 }
 
 void _buffer_destroy(buffer_t *buffer)
@@ -281,14 +415,19 @@ void _buffer_destroy(buffer_t *buffer)
 	vfree(buffer);
 }
 
-const char *dbentry_search(dbentry_t *entry, const char *key)
+ssize_t dbentry_search(dbentry_t *entry, const char *key, const char **value)
 {
-	const char *value = NULL;
+	ssize_t valuelen = EREJECT;
+	if (value != NULL)
+		*value = NULL;
 	while (entry != NULL)
 	{
-		if (!strcasecmp(entry->key, key))
+		const char *sto_key = entry->storage->data + entry->key.offset;
+		if (!strncasecmp(sto_key, key, entry->key.length))
 		{
-			value = entry->value;
+			if (value != NULL)
+				*value = entry->storage->data + entry->value.offset;
+			valuelen = entry->value.length;
 			break;
 		}
 		entry = entry->next;
@@ -297,41 +436,62 @@ const char *dbentry_search(dbentry_t *entry, const char *key)
 	{
 		buffer_dbg("dbentry %s not found", key);
 	}
-	return value;
+	return valuelen;
 }
 
-void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep)
+dbentry_t *dbentry_get(dbentry_t *entry, const char *key)
 {
-	dbentry_revert_t *entry = (dbentry_revert_t *)constentry;
 	while (entry != NULL)
 	{
-		int i = 0;
-		while ((entry->key[i]) != '\0') i++;
-		(entry->key)[i] = separator;
-
-		if (entry->key < entry->value)
+		const char *sto_key = entry->storage->data + entry->key.offset;
+		if (!strncasecmp(sto_key, key, entry->key.length))
 		{
-			int i = 0;
-			while ((entry->value[i]) != '\0') i++;
-			if ((fieldsep == '\r' || fieldsep == '\n') && entry->value[i + 1] == '\0')
-			{
-				(entry->value)[i] = '\r';
-				(entry->value)[i + 1] = '\n';
-			}
-			else
-				(entry->value)[i] = fieldsep;
+			break;
 		}
-		else
-		{
-			if ((fieldsep == '\r' || fieldsep == '\n') && entry->key[i + 1] == '\0')
-			{
-				(entry->key)[i] = '\r';
-				(entry->key)[i + 1] = '\n';
-			}
-		}
-
 		entry = entry->next;
 	}
+	return entry;
+}
+
+int _buffer_deletedb(buffer_t *storage, dbentry_t *entry, int shrink)
+{
+	int ret = EREJECT;
+	size_t length = 0;
+
+	if (storage != entry->storage)
+		return ret;
+
+	char *key = storage->data + entry->key.offset;
+	size_t keylen = entry->key.length;
+	char *value = storage->data + entry->value.offset;
+	size_t valuelen = entry->value.length;
+
+	if ((storage->data + storage->length) < (value + valuelen))
+	{
+		return ret;
+	}
+	/// remove value
+	if (value + valuelen <= storage->data + storage->length)
+	{
+		storage->length -= valuelen + 1;
+		storage->offset -= valuelen + 1;
+		length = storage->length - entry->value.offset;
+		if (shrink)
+			memcpy(value, value + valuelen + 1, length);
+		else
+			memset(value, 0, length);
+	}
+	/// remove key
+	storage->length -= keylen + 1;
+	storage->offset -= keylen + 1;
+	length = storage->length - entry->key.offset;
+	if (shrink)
+		memcpy(key, key + keylen + 1, length);
+	else
+		memset(key, 0, length);
+	ret = ESUCCESS;
+	entry = entry->next;
+	return ret;
 }
 
 void dbentry_destroy(dbentry_t *entry)

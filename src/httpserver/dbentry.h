@@ -28,28 +28,27 @@
 #ifndef DBENTRY_H
 #define DBENTRY_H
 
+typedef struct dbentry_s dbentry_t;
+
+#include "_buffer.h"
+
 struct dbentry_s
 {
-	char *storage;
-	const char *key;
-	const char *value;
+	const buffer_t *storage;
+	struct{
+		size_t offset;
+		size_t length;
+	} key;
+	struct{
+		size_t offset;
+		size_t length;
+	} value;
 	struct dbentry_s *next;
 };
 
-typedef struct dbentry_s dbentry_t;
-
-struct dbentry_revert_s
-{
-	char *storage;
-	char *key;
-	char *value;
-	struct dbentry_revert_s *next;
-};
-
-typedef struct dbentry_revert_s dbentry_revert_t;
-
-const char *dbentry_search(dbentry_t *entry, const char *key);
+ssize_t dbentry_search(dbentry_t *entry, const char *key, const char **value);
 void dbentry_destroy(dbentry_t *entry);
 void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep);
+dbentry_t *dbentry_get(dbentry_t *entry, const char *key);
 
 #endif

@@ -1,10 +1,9 @@
 /*****************************************************************************
- * websocket.h: Simple websocket framing support
- * this file is part of https://github.com/ouistiti-project/libhttpserver
+ * _string.h: string object private data
  *****************************************************************************
  * Copyright (C) 2016-2017
  *
- * Authors: Marc Chalain <marc.chalain@gmail.com>
+ * Authors: Marc Chalain <marc.chalain@gmail.com
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -26,36 +25,26 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
-#ifndef __WEBSOCKET_H__
-#define __WEBSOCKET_H__
+#ifndef __STRING_H__
+#define __STRING_H__
 
-#define MAX_FRAGMENTHEADER_SIZE 14
-typedef int (*onclose_t)(void *arg, int status);
-typedef int (*onping_t)(void *arg, char *message);
-
-#define WS_TEXT 153
-#define WS_BLOB 0
-struct websocket_s
+typedef struct string_s string_t;
+struct string_s
 {
-	int type;
-	int mtu;
-	onclose_t onclose;
-	onping_t onping;
-	onping_t onpong;
+	const char *data;
+	size_t length;
+	size_t size;
 };
-typedef struct websocket_s websocket_t;
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-void websocket_init(websocket_t *config);
-int websocket_unframed(char *in, int inlength, char *out, void *arg);
-int websocket_framed(int type, char *in, int inlength, char *out, int *outlength, void *arg);
-
-#ifdef __cplusplus
-}
-#endif
+#define STRING_REF(string) string, sizeof(string)-1
+#define STRING_DCL(string) {.data=string, .size=sizeof(string), .length=sizeof(string)-1}
+string_t *_string_create(const char *pointer, size_t length);
+int _string_alloc(string_t *str, const char *pointer, size_t length);
+int _string_store(string_t *str, const char *pointer, size_t length);
+int _string_cpy(string_t *str, const char *source);
+size_t _string_length(const string_t *str);
+const char *_string_get(const string_t *str);
+int _string_cmp(const string_t *str, const char *cmp, size_t length);
+int _string_empty(const string_t *str);
 
 #endif
