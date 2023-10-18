@@ -426,11 +426,11 @@ const char *cookie_get(http_message_t *request, const char *key)
 {
 	const char *value = NULL;
 	const char *cookie = NULL;
-	cookie = httpmessage_REQUEST(request, str_Cookie);
+	size_t cookielen = httpmessage_REQUEST2(request, str_Cookie, &cookie);
 	if (cookie != NULL)
 	{
 		key = strstr(cookie, key);
-		const char *end = cookie + strlen(cookie);
+		const char *end = cookie + cookielen;
 		const char *value = key;
 		if (key != NULL)
 		{
@@ -450,7 +450,9 @@ const char *cookie_get(http_message_t *request, const char *key)
 
 int cookie_set(http_message_t *response, const char *key, const char *value, ...)
 {
-	httpmessage_addheader(response, str_SetCookie, key);
-	return httpmessage_appendheader(response, str_SetCookie, "=", value, NULL);
+	httpmessage_addheader(response, str_SetCookie, key, -1);
+	httpmessage_appendheader(response, str_SetCookie, STRING_REF("="));
+	httpmessage_appendheader(response, str_SetCookie, value, -1);
+	return ESUCCESS;
 }
 #endif
