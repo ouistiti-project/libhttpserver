@@ -1614,7 +1614,7 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 	if (valuelen == EREJECT)
 	{
 		valuelen = httpserver_INFO2(httpclient_server(message->client), key, value);
-		valuelen = EINCOMPLETE;
+	//	valuelen = EINCOMPLETE;
 	}
 	return valuelen;
 }
