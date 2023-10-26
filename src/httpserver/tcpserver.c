@@ -233,21 +233,17 @@ static int tcpclient_wait(void *ctl, int options)
 #if defined(VTHREAD) && !defined(BLOCK_SOCKET)
 	struct timespec *ptimeout = NULL;
 	struct timespec timeout;
-	int ttimeout = -1;
 	if (options & WAIT_SEND)
 	{
 		timeout.tv_sec = 0;
 		timeout.tv_nsec = 10000000;
 		ptimeout = &timeout;
-		ptimeout = NULL;
-		ttimeout = 10;
 	}
 	else
 	{
 		timeout.tv_sec = WAIT_TIMER;
 		timeout.tv_nsec = 0;
 		ptimeout = &timeout;
-		ttimeout = WAIT_TIMER * 1000;
 	}
 
 	fd_set fds;
@@ -270,6 +266,7 @@ static int tcpclient_wait(void *ctl, int options)
 	sigset_t sigmask;
 	sigemptyset(&sigmask);
 	sigaddset(&sigmask, SIGCHLD);
+	int ttimeout = (ptimeout->tv_sec * 1000) + (ptimeout->tv_nsec / 100000000);
 	//ret = ppoll(poll_set, numfds, ptimeout, NULL);
 	ret = poll(poll_set, numfds, ttimeout);
 	if (poll_set[0].revents & POLLIN)
@@ -531,7 +528,6 @@ static int _tcpserver_start(http_server_t *server)
 				warn("setsockopt(SO_REUSEPORT) failed");
 #endif
 
-		int ret;
 #ifdef USE_IPV6
 		if (rp->ai_family == AF_INET6)
 		{

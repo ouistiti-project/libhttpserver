@@ -69,10 +69,6 @@
 
 extern httpserver_ops_t *httpserver_ops;
 
-static void _http_addconnector(http_connector_list_t **first,
-						http_connector_t func, void *funcarg,
-						int priority, const char *name);
-
 /********************************************************************/
 static http_server_config_t defaultconfig = {
 	.addr = NULL,
@@ -118,9 +114,8 @@ static int _httpserver_prepare(http_server_t *server)
 	int checksockets = 1;
 	maxfd = server->sock;
 
-	const http_client_t *client = server->clients;
 #ifndef VTHREAD
-	client = server->clients;
+	const http_client_t *client = server->clients;
 	while (client != NULL)
 	{
 		if (httpclient_socket(client) > 0)
