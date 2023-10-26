@@ -886,7 +886,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 *  httpmessage_content
 		 */
 		size_t length = _buffer_length(data);
-		message_dbg("message: content (%d): %.*s", length, length, data->offset);
+		message_dbg("message: content (%lu): %.*s", length, (int)length, data->offset);
 
 		/**
 		 * If the Content-Length header is not set,
@@ -1406,7 +1406,7 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 		if (length == -1)
 			length = strnlen(content, buffer->size - 1);
 		length = (buffer->size < length)? buffer->size - 1: length;
-		char *offset = memcpy(buffer->offset, content, length);
+		memcpy(buffer->offset, content, length);
 		buffer->length += length;
 		buffer->offset += length;
 		buffer->data[buffer->length] = '\0';
@@ -1593,13 +1593,16 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
+		host[0] = '\0';
 		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
 		{
-			int ret = getnameinfo((struct sockaddr *) &sin, len,
+			if (!getnameinfo((struct sockaddr *) &sin, len,
 				host, NI_MAXHOST,
-				0, 0, NI_NUMERICHOST);
-			*value = host;
-			valuelen = strlen(*value);
+				0, 0, NI_NUMERICHOST))
+			{
+				*value = host;
+				valuelen = strlen(*value);
+			}
 		}
 		if (*value != host)
 		{
