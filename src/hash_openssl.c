@@ -30,6 +30,7 @@
 #include <openssl/conf.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <openssl/err.h>
 
 #include "hash.h"
 #include "log.h"
@@ -92,6 +93,10 @@ const hash_t *hash_macsha256 = &(const hash_t)
 	.finish = HMAC_finish,
 };
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+EVP_MAC *g_mac = NULL;
+OSSL_PARAM g_mac_params[3];
+#endif
 
 static void *MD5_init()
 {
@@ -134,28 +139,77 @@ static int HASH_finish(void *ctx, char *out)
 {
 	EVP_MD_CTX *pctx = (EVP_MD_CTX *)ctx;
 	unsigned int len = 0;
-	EVP_DigestFinal_ex(pctx, out, &len);
+	EVP_DigestFinal_ex(pctx, (unsigned char *)out, &len);
 	EVP_MD_CTX_destroy(pctx);
 	return 0;
 }
 
 static void *HMAC_initkey(const char *key, size_t keylen)
 {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	EVP_MAC_CTX *pctx = NULL;
+	pctx = EVP_MAC_CTX_new(g_mac);
+	if (pctx && ! EVP_MAC_init(pctx, (const unsigned char *)key, keylen, g_mac_params))
+	{
+		err("hash: initialization error");
+		ERR_print_errors_fp(stderr);
+		pctx = NULL;
+	}
+#else
 	HMAC_CTX *pctx = HMAC_CTX_new();
 	HMAC_Init_ex(pctx, key, keylen, EVP_sha256(), NULL);
+#endif
 	return pctx;
 }
 
 static void HMAC_update(void *ctx, const char *input, size_t len)
 {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	EVP_MAC_update(ctx, (const unsigned char *)input, len);
+#else
 	HMAC_Update(ctx, input, len);
+#endif
 }
 
 static int HMAC_finish(void *ctx, char *output)
 {
-	int len = 32;
-	HMAC_Final(ctx, output, &len);
+	size_t len = HASH_MAX_SIZE;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	EVP_MAC_final(ctx, NULL, &len, HASH_MAX_SIZE);
+	EVP_MAC_final(ctx, (unsigned char *)output, &len, HASH_MAX_SIZE);
+	EVP_MAC_CTX_free(ctx);
+#else
+	HMAC_Final(ctx, output, (unsigned int *)&len);
 	HMAC_CTX_free(ctx);
-	return len;
+#endif
+	return (int)len;
 }
 
+static void __attribute__ ((constructor))_init(void)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	const char *cipher = getenv("OUISTITI_MAC_CIPHER");
+	const char *digest = getenv("OUISTITI_MAC_DIGEST");
+	g_mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+
+	size_t params_n = 0;
+
+	if (cipher != NULL)
+		g_mac_params[params_n++] =
+			OSSL_PARAM_construct_utf8_string("cipher", (char*)cipher, 0);
+	if (digest != NULL)
+		g_mac_params[params_n++] =
+			OSSL_PARAM_construct_utf8_string("digest", (char*)digest, 0);
+	else
+		g_mac_params[params_n++] =
+			OSSL_PARAM_construct_utf8_string("digest", "SHA256", 0);
+	g_mac_params[params_n] = OSSL_PARAM_construct_end();
+#endif
+}
+
+static void __attribute__ ((destructor))_finit(void)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	EVP_MAC_free(g_mac);
+#endif
+}
