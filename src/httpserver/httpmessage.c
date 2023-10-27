@@ -1109,13 +1109,15 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 
 buffer_t *_httpmessage_buildheader(http_message_t *message)
 {
+	int headers_contains_length = 0;
 	if (message->headers != NULL)
 	{
+		headers_contains_length = dbentry_search(message->headers, str_contentlength, NULL);
 		_buffer_serializedb(message->headers_storage, message->headers, ':', '\n');
 		dbentry_destroy(message->headers);
 		message->headers = NULL;
 	}
-	if (!_httpmessage_contentempty(message, 1))
+	if (!_httpmessage_contentempty(message, 1) && ! headers_contains_length)
 	{
 		char content_length[32];
 		int length = snprintf(content_length, 31, "%llu",  message->content_length);
