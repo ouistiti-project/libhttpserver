@@ -1395,9 +1395,11 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 			httpmessage_addheader(message, str_contenttype, type, -1);
 		}
 	}
+	if (message->content_storage == NULL)
+		message->content_storage = _buffer_create(str_content, MAXCHUNKS_CONTENT);
 	if (message->content == NULL && content != NULL)
 	{
-		message->content_storage = _buffer_create(str_content, MAXCHUNKS_CONTENT);
+		_buffer_reset(message->content_storage, 0);
 		message->content = message->content_storage;
 	}
 
