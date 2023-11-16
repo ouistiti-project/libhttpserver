@@ -95,7 +95,7 @@ const hash_t *hash_macsha256 = &(const hash_t)
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
 EVP_MAC *g_mac = NULL;
-OSSL_PARAM g_mac_params[3];
+OSSL_PARAM g_mac_params[4];
 #endif
 
 static void *MD5_init()
