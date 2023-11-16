@@ -22,6 +22,7 @@ typedef struct
 	char result;
 	int stepcount;
 	const char *encoding;
+	char trailing_char;
 } base64_encodestate;
 
 void base64_init_encodestate(base64_encodestate* state_in);
