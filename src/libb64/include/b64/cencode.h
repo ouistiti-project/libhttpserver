@@ -25,7 +25,10 @@ typedef struct
 	char trailing_char;
 } base64_encodestate;
 
-void base64_init_encodestate(base64_encodestate* state_in);
+extern const char base64_encoding_std[];
+extern const char base64_encoding_url[];
+
+void base64_init_encodestate(base64_encodestate* state_in, const char *encoding);
 
 char base64_encode_value(char value_in, base64_encodestate* state_in);
 
