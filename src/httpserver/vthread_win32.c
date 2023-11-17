@@ -32,7 +32,7 @@
 #include <windows.h>
 #include <tchar.h>
 
-#include "log.h"
+#include "ouistiti/log.h"
 #include "valloc.h"
 #include "vthread.h"
 

@@ -30,8 +30,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 
-#include "log.h"
-#include "websocket.h"
+#include "ouistiti/log.h"
+#include "ouistiti/websocket.h"
 
 /*********************************************************************/
 struct frame_s

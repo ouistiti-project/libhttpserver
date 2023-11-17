@@ -29,7 +29,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-#include "log.h"
+#include "ouistiti/log.h"
 #include "threadpool.h"
 
 typedef struct thread_s thread_t;

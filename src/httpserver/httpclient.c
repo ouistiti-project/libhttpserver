@@ -53,8 +53,8 @@
 
 #include "valloc.h"
 #include "vthread.h"
-#include "log.h"
-#include "httpserver.h"
+#include "ouistiti/log.h"
+#include "ouistiti/httpserver.h"
 #include "_httpserver.h"
 #include "_httpclient.h"
 #include "_httpmessage.h"

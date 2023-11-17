@@ -31,8 +31,8 @@
 # include <wolfssl/wolfcrypt/sha.h>
 # include <wolfssl/wolfcrypt/sha256.h>
 
-#include "hash.h"
-#include "log.h"
+#include "ouistiti/hash.h"
+#include "ouistiti/log.h"
 
 static void *MD5_init();
 static void MD5_update(void *ctx, const char *in, size_t len);

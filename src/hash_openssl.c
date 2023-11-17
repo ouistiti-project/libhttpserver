@@ -32,8 +32,8 @@
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 
-#include "hash.h"
-#include "log.h"
+#include "ouistiti/hash.h"
+#include "ouistiti/log.h"
 
 static void *MD5_init();
 static void *SHA1_init();
