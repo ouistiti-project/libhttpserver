@@ -77,6 +77,7 @@ ifeq ($(LIBB64),y)
     ouihash_LDFLAGS+=-L$(LIBB64_DIR)/src -L$(LIBB64_DIR)/src
     ouihash_SOURCES+=$(LIBB64_DIR)/src/cdecode.c
     ouihash_SOURCES+=$(LIBB64_DIR)/src/cencode.c
+    ouihash_SOURCES+=$(LIBB64_DIR)/src/cencode32.c
   else
     ouihash_LIBS-$(LIBB64)+=b64
   endif
