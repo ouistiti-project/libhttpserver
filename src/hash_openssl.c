@@ -115,7 +115,6 @@ const hash_t *hash_macsha1 = &(const hash_t)
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
 EVP_MAC *g_mac = NULL;
-OSSL_PARAM g_mac_params[4];
 #endif
 
 static void *MD5_init()
@@ -238,22 +237,7 @@ static int HMAC_length(void *ctx)
 static void __attribute__ ((constructor))_init(void)
 {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
-	const char *cipher = getenv("OUISTITI_MAC_CIPHER");
-	const char *digest = getenv("OUISTITI_MAC_DIGEST");
 	g_mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
-
-	size_t params_n = 0;
-
-	if (cipher != NULL)
-		g_mac_params[params_n++] =
-			OSSL_PARAM_construct_utf8_string("cipher", (char*)cipher, 0);
-	if (digest != NULL)
-		g_mac_params[params_n++] =
-			OSSL_PARAM_construct_utf8_string("digest", (char*)digest, 0);
-	else
-		g_mac_params[params_n++] =
-			OSSL_PARAM_construct_utf8_string("digest", "SHA256", 0);
-	g_mac_params[params_n] = OSSL_PARAM_construct_end();
 #endif
 }
 
