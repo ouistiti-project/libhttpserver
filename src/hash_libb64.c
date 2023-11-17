@@ -28,8 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hash.h"
-#include "log.h"
+#include "ouistiti/hash.h"
+#include "ouistiti/log.h"
 
 # include "b64/cencode.h"
 # include "b64/cdecode.h"

@@ -35,8 +35,8 @@
 # include <mbedtls/base64.h>
 # include <mbedtls/md.h>
 
-#include "hash.h"
-#include "log.h"
+#include "ouistiti/hash.h"
+#include "ouistiti/log.h"
 
 #define err(format, ...) fprintf(stderr, "\x1B[31m"format"\x1B[0m\n",  ##__VA_ARGS__)
 #define warn(format, ...) fprintf(stderr, "\x1B[35m"format"\x1B[0m\n",  ##__VA_ARGS__)

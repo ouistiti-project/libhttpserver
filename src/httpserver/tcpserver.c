@@ -72,8 +72,8 @@ extern "C" {
 #endif
 
 #include "../../compliant.h"
-#include "log.h"
-#include "httpserver.h"
+#include "ouistiti/log.h"
+#include "ouistiti/httpserver.h"
 #include "_httpserver.h"
 #include "_httpclient.h"
 
