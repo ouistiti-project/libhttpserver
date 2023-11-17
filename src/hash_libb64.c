@@ -60,67 +60,19 @@ const base64_t *base64_urlencoding = &(const base64_t)
 
 static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen)
 {
-#ifdef __LIBB64_URLENCODING
-	LIBB64_URLENCODING=0;
-#endif
+	base64_encodestate state;
+	base64_init_encodestate(&state, base64_encoding_std);
 
-	int ret;
-	ret = BASE64_encode(in, inlen, out, outlen);
-#ifndef __LIBB64_URLENCODING
-	char *offset = out;
-	while (*offset != '\0')
-	{
-		switch (*offset)
-		{
-			case '\n':
-				cnt = offset - out;
-				offset--;
-			break;
-		}
-		offset++;
-		printf("a\r");
-	}
-#endif
-	return ret;
+	int cnt = base64_encode_block(in, inlen, out, &state);
+	cnt += base64_encode_blockend(out + cnt, &state);
+
+	return cnt;
 }
 
 static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen)
 {
-#ifdef __LIBB64_URLENCODING
-	LIBB64_URLENCODING=1;
-#endif
-
-	int ret;
-	ret = BASE64_encode(in, inlen, out, outlen);
-#ifndef __LIBB64_URLENCODING
-	char *offset = out;
-	while (*offset != '\0')
-	{
-		switch (*offset)
-		{
-			case '\n':
-			case '=':
-				*offset = '\0';
-				cnt = offset - out;
-				offset--;
-			break;
-			case '/':
-				*offset = '_';
-			break;
-			case '+':
-				*offset = '-';
-			break;
-		}
-		offset++;
-	}
-#endif
-	return ret;
-}
-
-static int BASE64_encode(const char *in, size_t inlen, char *out, size_t outlen)
-{
 	base64_encodestate state;
-	base64_init_encodestate(&state);
+	base64_init_encodestate(&state, base64_encoding_url);
 
 	int cnt = base64_encode_block(in, inlen, out, &state);
 	cnt += base64_encode_blockend(out + cnt, &state);
