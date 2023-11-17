@@ -67,6 +67,7 @@ struct hash_s
 	void *(*initkey)(const char *key, size_t keylen);
 	void (*update)(void *ctx, const char *in, size_t len);
 	int (*finish)(void *ctx, char *out);
+	int (*length)(void *ctx);
 };
 
 extern const hash_t *hash_md5;

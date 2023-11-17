@@ -112,6 +112,7 @@ const hash_t *hash_macsha256 = &(const hash_t)
 	.initkey = &HMAC_initkey,
 	.update = &HMAC_update,
 	.finish = &HMAC_finish,
+	.length = &HMAC_length,
 };
 
 static void *MD5_init()
@@ -260,6 +261,10 @@ static void HMAC_update(void *ctx, const char *input, size_t len)
 {
 	mbedtls_md_context_t *pctx = (mbedtls_md_context_t *)ctx;
 	mbedtls_md_hmac_update(pctx, input, len);
+};
+static int HMAC_length(void *ctx)
+{
+	return mbedtls_md_get_size(ctx);
 };
 static int HMAC_finish(void *ctx, char *output)
 {
