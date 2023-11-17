@@ -42,6 +42,12 @@
 #define dbg(...)
 #endif
 
+static void *BASE64_init();
+static void *BASE64_initurl();
+static size_t BASE64_update(void *pstate, unsigned char *out, const unsigned char *in, size_t inlen);
+static size_t BASE64_finish(void *pstate, unsigned char *out);
+static size_t BASE64_length(void *pstate, size_t inlen);
+
 static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen);
 static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen);
 static int BASE64_encode(const char *in, size_t inlen, char *out, size_t outlen);
@@ -49,14 +55,54 @@ static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen)
 const base64_t *base64 = &(const base64_t)
 {
 	.encode = &BASE64_encode1,
+	.encoder = {
+		.init = BASE64_init,
+		.update = BASE64_update,
+		.finish = BASE64_finish,
+	},
 	.decode = &BASE64_decode,
 };
 
 const base64_t *base64_urlencoding = &(const base64_t)
 {
 	.encode = &BASE64_encode2,
+	.encoder = {
+		.init = BASE64_initurl,
+		.update = BASE64_update,
+		.finish = BASE64_finish,
+		.length = BASE64_length,
+	},
 	.decode = &BASE64_decode,
 };
+
+static void *BASE64_init()
+{
+	base64_encodestate *pstate = calloc(1, sizeof(*pstate));
+	base64_init_encodestate(pstate, base64_encoding_std);
+	return pstate;
+}
+
+static void *BASE64_initurl()
+{
+	base64_encodestate *pstate = calloc(1, sizeof(*pstate));
+	base64_init_encodestate(pstate, base64_encoding_url);
+	return pstate;
+}
+
+static size_t BASE64_update(void *pstate, unsigned char *out, const unsigned char *in, size_t inlen)
+{
+	return base64_encode_block(in, inlen, out, pstate);
+}
+
+static size_t BASE64_finish(void *pstate, unsigned char *out)
+{
+	return base64_encode_blockend(out, pstate);
+}
+
+static size_t BASE64_length(void *pstate, size_t inlen)
+{
+	return inlen + ((size_t)(inlen + 2) / 3);
+}
 
 static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen)
 {
