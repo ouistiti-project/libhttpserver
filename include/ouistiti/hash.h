@@ -76,5 +76,6 @@ extern const hash_t *hash_sha224;
 extern const hash_t *hash_sha256;
 extern const hash_t *hash_sha512;
 extern const hash_t *hash_macsha256;
+extern const hash_t *hash_macsha1;
 
 #endif
