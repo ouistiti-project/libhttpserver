@@ -6,22 +6,13 @@ For details, see http://sourceforge.net/projects/libb64
 */
 #include <b64/cencode.h>
 
-int LIBB64_URLENCODING = 0;
-static const char encoding_std[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\0";
-static const char encoding_url[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=";
+const char base64_encoding_std[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+const char base64_encoding_url[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_\0";
 
-void base64_init_encodestate(base64_encodestate* state_in)
+void base64_init_encodestate(base64_encodestate* state_in, const char *encoding)
 {
-	if (LIBB64_URLENCODING)
-	{
-		state_in->encoding = encoding_url;
-		state_in->trailing_char = encoding_url[64];
-	}
-	else
-	{
-		state_in->encoding = encoding_std;
-		state_in->trailing_char = encoding_url[64];
-	}
+	state_in->encoding = encoding;
+	state_in->trailing_char = encoding[64];
 	state_in->step = step_A;
 	state_in->result = 0;
 	state_in->stepcount = 0;
