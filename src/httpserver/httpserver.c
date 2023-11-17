@@ -833,7 +833,8 @@ size_t httpserver_INFO2(http_server_t *server, const char *key, const char **val
 	}
 	else if (!strcasecmp(key, "domain"))
 	{
-		*value = strchr(server->hostname.data, '.');
+		if (server->hostname.data)
+			*value = strchr(server->hostname.data, '.');
 		if (*value)
 		{
 			*value = *value + 1;
