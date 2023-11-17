@@ -41,10 +41,12 @@ static void *SHA256_init();
 static void *SHA512_init();
 static void HASH_update(void *ctx, const char *in, size_t len);
 static int HASH_finish(void *ctx, char *out);
+static int HASH_length(void *ctx);
 
 static void *HMAC_initkey(const char *key, size_t keylen);
 static void HMAC_update(void *ctx, const char *in, size_t len);
 static int HMAC_finish(void *ctx, char *out);
+static int HMAC_length(void *ctx);
 
 const hash_t *hash_md5 = &(const hash_t)
 {
@@ -54,6 +56,7 @@ const hash_t *hash_md5 = &(const hash_t)
 	.init = MD5_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
+	.length = HASH_length,
 };
 const hash_t *hash_sha1 = &(const hash_t)
 {
@@ -63,6 +66,7 @@ const hash_t *hash_sha1 = &(const hash_t)
 	.init = SHA1_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
+	.length = HASH_length,
 };
 const hash_t *hash_sha224 = NULL;
 const hash_t *hash_sha256 = &(const hash_t)
@@ -73,6 +77,7 @@ const hash_t *hash_sha256 = &(const hash_t)
 	.init = SHA256_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
+	.length = HASH_length,
 };
 const hash_t *hash_sha512 = &(const hash_t)
 {
@@ -82,6 +87,7 @@ const hash_t *hash_sha512 = &(const hash_t)
 	.init = SHA512_init,
 	.update = HASH_update,
 	.finish = HASH_finish,
+	.length = HASH_length,
 };
 const hash_t *hash_macsha256 = &(const hash_t)
 {
@@ -91,6 +97,7 @@ const hash_t *hash_macsha256 = &(const hash_t)
 	.initkey = HMAC_initkey,
 	.update = HMAC_update,
 	.finish = HMAC_finish,
+	.length = HMAC_length,
 };
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
@@ -144,6 +151,11 @@ static int HASH_finish(void *ctx, char *out)
 	return 0;
 }
 
+static int HASH_length(void *ctx)
+{
+	return EVP_MD_CTX_get_size(ctx);
+}
+
 static void *HMAC_initkey(const char *key, size_t keylen)
 {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
@@ -183,6 +195,15 @@ static int HMAC_finish(void *ctx, char *output)
 	HMAC_CTX_free(ctx);
 #endif
 	return (int)len;
+}
+
+static int HMAC_length(void *ctx)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	return EVP_MAC_CTX_get_mac_size(ctx);
+#else
+	return HMAC_size((ctx);
+#endif
 }
 
 static void __attribute__ ((constructor))_init(void)
