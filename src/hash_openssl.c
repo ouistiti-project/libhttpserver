@@ -43,7 +43,9 @@ static void HASH_update(void *ctx, const char *in, size_t len);
 static int HASH_finish(void *ctx, char *out);
 static int HASH_length(void *ctx);
 
-static void *HMAC_initkey(const char *key, size_t keylen);
+static void *HMACSHA256_initkey(const char *key, size_t keylen);
+static void *HMACSHA1_initkey(const char *key, size_t keylen);
+static void *HMAC_initkey(const char *digest, const char *key, size_t keylen);
 static void HMAC_update(void *ctx, const char *in, size_t len);
 static int HMAC_finish(void *ctx, char *out);
 static int HMAC_length(void *ctx);
@@ -94,7 +96,18 @@ const hash_t *hash_macsha256 = &(const hash_t)
 	.size = 32,
 	.name = "HMACSHA256",
 	.nameid = '5',
-	.initkey = HMAC_initkey,
+	.initkey = HMACSHA256_initkey,
+	.update = HMAC_update,
+	.finish = HMAC_finish,
+	.length = HMAC_length,
+};
+
+const hash_t *hash_macsha1 = &(const hash_t)
+{
+	.size = 20,
+	.name = "HMACSHA1",
+	.nameid = '5',
+	.initkey = HMACSHA1_initkey,
 	.update = HMAC_update,
 	.finish = HMAC_finish,
 	.length = HMAC_length,
@@ -156,12 +169,28 @@ static int HASH_length(void *ctx)
 	return EVP_MD_CTX_get_size(ctx);
 }
 
-static void *HMAC_initkey(const char *key, size_t keylen)
+static void *HMACSHA256_initkey(const char *key, size_t keylen)
+{
+	return HMAC_initkey("SHA256", key, keylen);
+}
+
+static void *HMACSHA1_initkey(const char *key, size_t keylen)
+{
+	return HMAC_initkey("SHA1", key, keylen);
+}
+
+static void *HMAC_initkey(const char *digest, const char *key, size_t keylen)
 {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
 	EVP_MAC_CTX *pctx = NULL;
 	pctx = EVP_MAC_CTX_new(g_mac);
-	if (pctx && ! EVP_MAC_init(pctx, (const unsigned char *)key, keylen, g_mac_params))
+
+	OSSL_PARAM hmac_params[2];
+	hmac_params[0] =
+			OSSL_PARAM_construct_utf8_string("digest", (char *)digest, 0);
+	hmac_params[1] = OSSL_PARAM_construct_end();
+
+	if (pctx && ! EVP_MAC_init(pctx, (const unsigned char *)key, keylen, hmac_params))
 	{
 		err("hash: initialization error");
 		ERR_print_errors_fp(stderr);
