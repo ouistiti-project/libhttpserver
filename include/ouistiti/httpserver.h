@@ -238,7 +238,7 @@ EXPORT_SYMBOL extern char * httpserver_software;
  */
 EXPORT_SYMBOL http_server_t * httpserver_create(http_server_config_t *config);
 
-EXPORT_SYMBOL http_server_t * httpserver_dup(http_server_t *server);
+EXPORT_SYMBOL http_server_t * httpserver_dup(http_server_t *server, http_server_config_t *config);
 
 /**
  * @brief get value for different attributs of the server
