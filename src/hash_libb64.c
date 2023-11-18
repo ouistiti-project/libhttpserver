@@ -146,3 +146,45 @@ static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen)
 	return cnt;
 }
 
+static int BASE32_encode(const char *in, size_t inlen, char *out, size_t outlen)
+{
+	base64_encodestate state;
+	base32_init_encodestate(&state, base32_encoding_std);
+
+	int cnt = base32_encode_block(in, inlen, out, &state);
+	cnt += base32_encode_blockend(out + cnt, &state);
+
+	return cnt;
+}
+
+static void *BASE32_init()
+{
+	base64_encodestate *pstate = calloc(1, sizeof(*pstate));
+	base32_init_encodestate(pstate, base32_encoding_std);
+	return pstate;
+}
+
+static size_t BASE32_update(void *pstate, unsigned char *out, const unsigned char *in, size_t inlen)
+{
+	return base32_encode_block(in, inlen, out, pstate);
+}
+
+static size_t BASE32_finish(void *pstate, unsigned char *out)
+{
+	return base32_encode_blockend(out, pstate);
+}
+
+static size_t BASE32_length(void *pstate, size_t inlen)
+{
+	return inlen + ((size_t)(inlen + 4) / 2);
+}
+
+const base64_t *base32 = &(const base64_t)
+{
+	.encode = &BASE32_encode,
+	.encoder = {
+		.init = BASE32_init,
+		.update = BASE32_update,
+		.finish = BASE32_finish,
+	},
+};
