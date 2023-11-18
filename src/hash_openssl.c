@@ -35,6 +35,10 @@
 #include "ouistiti/hash.h"
 #include "ouistiti/log.h"
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000
+#define DEPRECATED_OPENSSL
+#endif
+
 static void *MD5_init();
 static void *SHA1_init();
 static void *SHA256_init();
@@ -113,7 +117,7 @@ const hash_t *hash_macsha1 = &(const hash_t)
 	.length = HMAC_length,
 };
 
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#ifndef DEPRECATED_OPENSSL
 EVP_MAC *g_mac = NULL;
 #endif
 
@@ -180,7 +184,7 @@ static void *HMACSHA1_initkey(const char *key, size_t keylen)
 
 static void *HMAC_initkey(const char *digest, const char *key, size_t keylen)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#ifndef DEPRECATED_OPENSSL
 	EVP_MAC_CTX *pctx = NULL;
 	pctx = EVP_MAC_CTX_new(g_mac);
 
@@ -204,7 +208,7 @@ static void *HMAC_initkey(const char *digest, const char *key, size_t keylen)
 
 static void HMAC_update(void *ctx, const char *input, size_t len)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#ifndef DEPRECATED_OPENSSL
 	EVP_MAC_update(ctx, (const unsigned char *)input, len);
 #else
 	HMAC_Update(ctx, input, len);
@@ -214,7 +218,7 @@ static void HMAC_update(void *ctx, const char *input, size_t len)
 static int HMAC_finish(void *ctx, char *output)
 {
 	size_t len = HASH_MAX_SIZE;
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#ifndef DEPRECATED_OPENSSL
 	EVP_MAC_final(ctx, NULL, &len, HASH_MAX_SIZE);
 	EVP_MAC_final(ctx, (unsigned char *)output, &len, HASH_MAX_SIZE);
 	EVP_MAC_CTX_free(ctx);
@@ -227,23 +231,23 @@ static int HMAC_finish(void *ctx, char *output)
 
 static int HMAC_length(void *ctx)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#ifndef DEPRECATED_OPENSSL
 	return EVP_MAC_CTX_get_mac_size(ctx);
 #else
-	return HMAC_size((ctx);
+	return HMAC_size(ctx);
 #endif
 }
 
 static void __attribute__ ((constructor))_init(void)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#ifndef DEPRECATED_OPENSSL
 	g_mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
 #endif
 }
 
 static void __attribute__ ((destructor))_finit(void)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#ifndef DEPRECATED_OPENSSL
 	EVP_MAC_free(g_mac);
 #endif
 }
