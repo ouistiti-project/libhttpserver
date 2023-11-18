@@ -178,7 +178,8 @@ int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 
 	if (buffer->data + buffer->size < buffer->offset + length)
 	{
-		int nbchunks = (length / ChunkSize) + 1;
+		size_t available = buffer->size - (buffer->offset - buffer->data);
+		int nbchunks = ((length - available) / ChunkSize) + 1;
 		if (buffer->maxchunks > -1 && buffer->maxchunks - nbchunks < 0)
 		{
 			err("buffer: %s impossible to exceed to %d chunks", buffer->name, buffer->maxchunks);
@@ -203,7 +204,7 @@ int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 			err("buffer: out memory block: %lu", buffer->size + chunksize);
 			return -1;
 		}
-		if (buffer->maxchunks > -1)
+		if (buffer->maxchunks > 0)
 			buffer->maxchunks -= nbchunks;
 		buffer->size += chunksize;
 		if (newptr != buffer->data)
@@ -213,7 +214,8 @@ int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 			buffer->data = newptr;
 		}
 
-		length = (length > chunksize)? (chunksize - 1): length;
+		available = buffer->size - (buffer->offset - buffer->data);
+		length = (length > available)? (available - 1): length;
 	}
 	char *offset = memcpy(buffer->offset, data, length);
 	buffer->length += length;
