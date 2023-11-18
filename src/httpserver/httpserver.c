@@ -622,14 +622,14 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	return server;
 }
 
-http_server_t *httpserver_dup(http_server_t *server)
+http_server_t *httpserver_dup(http_server_t *server, http_server_config_t *config)
 {
 	http_server_t *vserver;
 
 	vserver = vcalloc(1, sizeof(*vserver));
 	if (vserver == NULL)
 		return NULL;
-	vserver->config = server->config;
+	vserver->config = config;
 	vserver->ops = server->ops;
 	const http_message_method_t *method = default_methods;
 	while (method)
