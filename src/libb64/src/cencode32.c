@@ -141,6 +141,8 @@ int base32_encode_blockend(char* code_out, base64_encodestate* state_in)
 		break;
 	}
 	*codechar = '\0';
+	while (*codechar == '\0') codechar--;
+	codechar++;
 
 	return codechar - code_out;
 }
