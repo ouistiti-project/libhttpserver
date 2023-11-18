@@ -843,6 +843,20 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	if ((message->method->properties & MESSAGE_ALLOW_CONTENT) &&
 			content_type != NULL && !strncasecmp(content_type, str_form_urlencoded, length))
 	{
+		/**
+		 * message mix query data inside the URI and Content
+		 */
+		if (message->query_storage == NULL)
+		{
+			int nbchunks = MAXCHUNKS_HEADER;
+			if (!_httpmessage_contentempty(message, 1))
+				nbchunks = (message->content_length / _buffer_chunksize(-1) ) + 1;
+			message->query_storage = _buffer_create(str_query, nbchunks);
+		}
+		else
+		{
+			_buffer_append(message->query_storage, "&", 1);
+		}
 		next = PARSE_POSTCONTENT;
 		message->state &= ~PARSE_CONTINUE;
 	}
@@ -937,23 +951,10 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	int next = PARSE_POSTCONTENT;
 	const char *query = data->offset;
 	int length = _buffer_length(data) - (data->offset - _buffer_get(data, 0));
-	/**
-	 * message mix query data inside the URI and Content
-	 */
-	if (message->query_storage == NULL)
-	{
-		int nbchunks = MAXCHUNKS_HEADER;
-		if (!_httpmessage_contentempty(message, 1))
-			nbchunks = (message->content_length / _buffer_chunksize(-1) ) + 1;
-		message->query_storage = _buffer_create(str_query, nbchunks);
-	}
-	else
-	{
-		_buffer_append(message->query_storage, "&", 1);
-	}
 	_buffer_append(message->query_storage, query, length);
 	if (message->content_length <= length)
 	{
+		dbg("message: query %s", message->query_storage->data);
 		_buffer_rewindto(message->query_storage, '\n');
 		_buffer_rewindto(message->query_storage, '\r');
 		data->offset += message->content_length;
