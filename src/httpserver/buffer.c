@@ -331,7 +331,7 @@ int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char field
 
 	for (int i = 0; i < storage->length; i++)
 	{
-		if (key == NULL && storage->data[i] > 0x19 && storage->data[i] < 0x7f)
+		if (key == NULL && storage->data[i] > 0x20 && storage->data[i] < 0x7f)
 			key = storage->data + i;
 		if ((storage->data[i] == '\r') || (storage->data[i] == '\n'))
 			storage->data[i] = '\0';
