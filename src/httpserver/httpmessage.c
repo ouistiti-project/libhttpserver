@@ -1516,7 +1516,11 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 	else if (!strcasecmp(key, "query") && (message->query_storage != NULL))
 	{
 		if (message->queries)
+		{
 			_buffer_serializedb(message->query_storage , message->queries, '=', '&');
+			dbentry_destroy(message->queries);
+			message->queries = NULL;
+		}
 		*value = _buffer_get(message->query_storage, 0);
 		valuelen = _buffer_length(message->query_storage);
 	}
@@ -1634,7 +1638,10 @@ size_t httpmessage_parameter(http_message_t *message, const char *key, const cha
 	{
 		_buffer_filldb(message->query_storage, &message->queries, '=', '&');
 	}
-	return dbentry_search(message->queries, key, value);
+	ssize_t valuelen = dbentry_search(message->queries, key, value);
+	if (valuelen == EREJECT)
+		return 0;
+	return (size_t)valuelen;
 }
 
 size_t httpmessage_cookie(http_message_t *message, const char *key, const char **cookie)
