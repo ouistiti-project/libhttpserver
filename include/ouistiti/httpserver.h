@@ -606,10 +606,11 @@ EXPORT_SYMBOL size_t httpmessage_SESSION2(http_message_t *message, const char *k
  *
  * @param message the request message received
  * @param key the name of the attribute
+ * @param value the pointer to pass with the value of the parameter
  *
- * @return the value of the paramater or NULL
+ * @return the value's size of the paramater or 0
  */
-EXPORT_SYMBOL const char * httpmessage_parameter(http_message_t *message, const char *key);
+EXPORT_SYMBOL size_t httpmessage_parameter(http_message_t *message, const char *key, const char **value);
 
 /**
  * @brief get value from Cookie header

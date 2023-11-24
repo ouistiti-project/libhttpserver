@@ -353,7 +353,7 @@ int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char field
 			value = NULL;
 		}
 	}
-	if (key != NULL && _buffer_dbentry(storage, db, key, keylen, value, storage->length - 1) < 0)
+	if (key != NULL && _buffer_dbentry(storage, db, key, keylen, value, storage->length) < 0)
 		return -1;
 	else
 		count++;

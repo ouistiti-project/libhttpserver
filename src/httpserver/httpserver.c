@@ -913,13 +913,14 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, const ht
 		 * A trouble may occure if a request create ID into the session,
 		 * and another one would read this ID.
 		 */
+		session->ref = 1;
 		session->next = server->sessions;
 		server->sessions = session;
 	}
 	return session;
 }
 
-void _httpserver_dropsession(http_server_t *server, http_server_session_t *session)
+static void _httpserver_deletesession(http_server_t *server, http_server_session_t *session)
 {
 	http_server_session_t *it = server->sessions;
 	if (it == session)
@@ -937,8 +938,17 @@ void _httpserver_dropsession(http_server_t *server, http_server_session_t *sessi
 		}
 	}
 
+	dbentry_destroy(session->dbfirst);
+	session->dbfirst = NULL;
 	_buffer_destroy(session->storage);
 	free(session);
+}
+
+void _httpserver_dropsession(http_server_t *server, http_server_session_t *session)
+{
+	session->ref--;
+	if (session->ref == 0)
+		_httpserver_deletesession(server, session);
 }
 
 http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg)
