@@ -101,6 +101,7 @@ struct http_server_session_s
 {
 	dbentry_t *dbfirst;
 	buffer_t *storage;
+	int ref;
 	http_server_session_t *next;
 };
 

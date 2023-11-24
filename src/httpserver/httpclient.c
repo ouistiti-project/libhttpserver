@@ -126,15 +126,7 @@ static void _httpclient_destroy(http_client_t *client)
 	}
 	if (client->session)
 	{
-		dbentry_t *db = client->session->dbfirst;
-		while (db)
-		{
-			dbentry_t *next = db->next;
-			free(db);
-			db = next;
-		}
-		vfree(client->session->storage);
-		vfree(client->session);
+		httpclient_dropsession(client);
 	}
 	if (client->sockdata)
 		_buffer_destroy(client->sockdata);
@@ -744,6 +736,7 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
 	{
 		buffer->offset = buffer->data;
 		int size = 0;
+
 		while (buffer->length > 0)
 		{
 			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
@@ -1457,8 +1450,10 @@ static int _httpclient_checksession(void * arg, http_server_session_t*session)
 {
 	const char *token = (const char *)arg;
 	dbentry_t *entry = dbentry_get(session->dbfirst, "token");
-	if (!strncmp(token, entry->storage->data + entry->value.offset, entry->value.length))
+	if (entry && !strncmp(token, entry->storage->data + entry->value.offset, entry->value.length))
+	{
 		return ESUCCESS;
+	}
 	return EREJECT;
 }
 
@@ -1469,6 +1464,8 @@ int httpclient_setsession(http_client_t *client, const char *token, size_t token
 	client->session = _httpserver_searchsession(client->server, _httpclient_checksession, (void *)token);
 	if (client->session == NULL)
 		client->session = _httpserver_createsession(client->server, client);
+	else
+		client->session->ref++;
 
 	_buffer_append(client->session->storage, STRING_REF("token="));
 	_buffer_append(client->session->storage, token, tokenlen);
@@ -1481,9 +1478,7 @@ void httpclient_dropsession(http_client_t *client)
 {
 	if (!client->session)
 		return;
-	dbentry_t *entry = dbentry_get(client->session->dbfirst, "token");
-	client->session->storage->data[entry->key.offset] = SESSION_SEPARATOR[0];
-	dbentry_destroy(client->session->dbfirst);
+
 	_httpserver_dropsession(client->server, client->session);
 	client->session = NULL;
 }
@@ -1547,6 +1542,14 @@ const void *httpclient_appendsession(http_client_t *client, const char *key, con
 	dbentry_t *entry = _httpclient_sessioninfo(client, key);
 	if (entry == NULL)
 		return NULL;
+	void *valueend = client->session->storage->data + entry->value.offset + entry->value.length;
+	if (valueend + sizeof(SESSION_SEPARATOR[0]) + 1 != client->session->storage->offset)
+	{
+		// Lost the current value of the entry. May be the buffer should be shrink...
+		_buffer_append(client->session->storage, client->session->storage->data + entry->value.offset, entry->value.length);
+		entry->value.offset = client->session->storage->offset - entry->value.length - client->session->storage->data;
+		_buffer_append(client->session->storage, SESSION_SEPARATOR, 1);
+	}
 	_buffer_pop(client->session->storage, 1);
 	_buffer_append(client->session->storage, value, size);
 	_buffer_append(client->session->storage, SESSION_SEPARATOR, 1);
