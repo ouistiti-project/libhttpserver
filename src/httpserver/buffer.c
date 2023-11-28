@@ -52,7 +52,7 @@
 
 #define buffer_dbg(...)
 
-#define MAX_STRING 256
+#define MAX_STRING (HTTPMESSAGE_CHUNKSIZE * MAXCHUNKS_URI)
 
 static size_t _string_len(string_t *str, const char *pointer)
 {
@@ -104,6 +104,8 @@ int _string_cpy(string_t *str, const char *source)
 
 size_t _string_length(const string_t *str)
 {
+	if (str->data && str->length == (size_t) -1)
+		((string_t*)str)->length = strnlen(str->data, MAX_STRING);
 	return str->length;
 }
 
@@ -317,7 +319,7 @@ int _buffer_dbentry(const buffer_t *storage, dbentry_t **db, const char *key, si
 		entry->value.length = valuelen;
 		entry->next = *db;
 		*db = entry;
-		buffer_dbg("fill \t%.*s\t%.*s", keylen, key, valuelen, value);
+		buffer_dbg("fill \t%.*s\t%.*s", (int)keylen, key, (int)valuelen, value);
 	}
 	return 0;
 }
@@ -455,6 +457,8 @@ dbentry_t *dbentry_get(dbentry_t *entry, const char *key)
 	return entry;
 }
 
+#if 0
+//used only in httpclient and disabled
 int _buffer_deletedb(buffer_t *storage, dbentry_t *entry, int shrink)
 {
 	int ret = EREJECT;
@@ -495,6 +499,7 @@ int _buffer_deletedb(buffer_t *storage, dbentry_t *entry, int shrink)
 	entry = entry->next;
 	return ret;
 }
+#endif
 
 void dbentry_destroy(dbentry_t *entry)
 {
