@@ -109,8 +109,8 @@ int httpserver_version(http_message_version_e versionid, const char **version)
 	if ((versionid & HTTPVERSION_MASK) < HTTPVERSIONS)
 	{
 		if (version)
-			*version = httpversion[(versionid & HTTPVERSION_MASK)].data;
-		return httpversion[(versionid & HTTPVERSION_MASK)].length;
+			*version = _string_get(&httpversion[(versionid & HTTPVERSION_MASK)]);
+		return _string_length(&httpversion[(versionid & HTTPVERSION_MASK)]);
 	}
 	return -1;
 }
@@ -255,16 +255,6 @@ http_message_t * _httpmessage_create(http_client_t *client, http_message_t *pare
 	return message;
 }
 
-void _httpmessage_reset(http_message_t *message)
-{
-	if (message->uri)
-		_buffer_reset(message->uri, 0);
-	if (message->content)
-		_buffer_reset(message->content, 0);
-	if (message->headers_storage)
-		_buffer_reset(message->headers_storage, 0);
-}
-
 void _httpmessage_destroy(http_message_t *message)
 {
 	if (message->response)
@@ -367,7 +357,7 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 	const http_message_method_t *method = httpclient_server(message->client)->methods;
 	while (method != NULL)
 	{
-		int length = method->key.length;
+		int length = _string_length(&method->key);
 		if (!_string_cmp(&method->key, data->offset, -1) &&
 			data->offset[length] == ' ')
 		{
@@ -650,7 +640,7 @@ static int _httpmessage_parsestatus(http_message_t *message, buffer_t *data)
 		{
 			version = i;
 			message->version = i;
-			data->offset += httpversion[i].length;
+			data->offset += _string_length(&httpversion[i]);
 			data->offset++;
 			break;
 		}
@@ -687,7 +677,7 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 	{
 		if (!_string_cmp(&httpversion[i], version, -1))
 		{
-			data->offset += httpversion[i].length;
+			data->offset += _string_length(&httpversion[i]);
 			if (*data->offset == '\r')
 				data->offset++;
 			if (*data->offset == '\n')
@@ -730,8 +720,8 @@ static int _httpmessage_parsepreheader(http_message_t *message, buffer_t *data)
 		 */
 		const char *service = httpserver_INFO(httpclient_server(message->client), "service");
 		warn("new request %.*s %.*s from \"%s\" service",
-				(int)message->method->key.length, message->method->key.data,
-				(int)message->uri->length, message->uri->data, service);
+				(int)_string_length(&message->method->key), _string_get(&message->method->key),
+				(int)_buffer_length(message->uri), _buffer_get(message->uri, 0), service);
 	}
 	else if (message->uri == NULL)
 	{
@@ -1093,7 +1083,7 @@ int _httpmessage_buildresponse(http_message_t *message, int version, buffer_t *h
 	http_message_version_e _version = message->version;
 	if (message->version > (version & HTTPVERSION_MASK))
 		_version = (version & HTTPVERSION_MASK);
-	_buffer_append(header, httpversion[_version].data, httpversion[_version].length);
+	_buffer_append(header, _string_get(&httpversion[_version]), _string_length(&httpversion[_version]));
 
 	char status[_HTTPMESSAGE_RESULT_MAXLEN];
 	size_t len = _httpmessage_status(message, status, _HTTPMESSAGE_RESULT_MAXLEN);
@@ -1240,10 +1230,10 @@ size_t _httpmessage_status(const http_message_t *message, char *status, size_t s
 		{
 			if (status != NULL)
 			{
-				statuslen = (_http_message_result[i]->status.length > statuslen)? statuslen: _http_message_result[i]->status.length + 1;
-				memcpy(status, _http_message_result[i]->status.data, statuslen);
+				statuslen = (_string_length(&_http_message_result[i]->status) > statuslen)? statuslen: _string_length(&_http_message_result[i]->status) + 1;
+				memcpy(status, _string_get(&_http_message_result[i]->status), statuslen);
 			}
-			return _http_message_result[i]->status.length;
+			return _string_length(&_http_message_result[i]->status);
 		}
 		i++;
 	}
@@ -1535,8 +1525,8 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 	}
 	else if (!strcasecmp(key, "method") && (message->method))
 	{
-		*value = message->method->key.data;
-		valuelen = message->method->key.length;
+		*value = _string_get(&message->method->key);
+		valuelen = _string_length(&message->method->key);
 	}
 	else if (!strcasecmp(key, "result"))
 	{
@@ -1545,8 +1535,8 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 		{
 			if (_http_message_result[i]->result == message->result)
 			{
-				*value = _http_message_result[i]->status.data;
-				valuelen = _http_message_result[i]->status.length;
+				*value = _string_get(&_http_message_result[i]->status);
+				valuelen = _string_length(&_http_message_result[i]->status);
 				break;
 			}
 			i++;

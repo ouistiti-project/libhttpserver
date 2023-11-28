@@ -252,18 +252,15 @@ static int _httpserver_checkclients(http_server_t *server, const fd_set *prfds, 
 		}
 
 #endif
-		if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
-		{
-			warn("client %p died", client);
-			client = _httpserver_removeclient(server, client);
-		}
+		if (((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 #ifdef VTHREAD
-		else if (!vthread_exist(client->thread))
+			|| (!vthread_exist(client->thread))
+			)
+#endif
 		{
 			warn("client %p died", client);
 			client = _httpserver_removeclient(server, client);
 		}
-#endif
 		else
 		{
 			ret++;

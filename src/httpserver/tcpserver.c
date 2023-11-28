@@ -363,7 +363,7 @@ static int tcpclient_wait(void *ctl, int options)
 
 static int tcpclient_status(void *ctl)
 {
-	http_client_t *client = (http_client_t *)ctl;
+	const http_client_t *client = (http_client_t *)ctl;
 	if (client->sock < 0)
 		return EREJECT;
 	int nbbytes = 0;
@@ -381,7 +381,7 @@ static int tcpclient_status(void *ctl)
 
 static void tcpclient_flush(void *ctl)
 {
-	http_client_t *client = (http_client_t *)ctl;
+	const http_client_t *client = (http_client_t *)ctl;
 
 	setsockopt(client->sock, IPPROTO_TCP, TCP_NODELAY, (char *) &(int) {1}, sizeof(int));
 }
