@@ -39,14 +39,14 @@
 #define utils_dbg(...)
 
 const char str_location[] = "Location";
-const char str_textplain[] = "text/plain";
-const char str_texthtml[] = "text/html";
-const char str_textcss[] = "text/css";
-const char str_textjson[] = "text/json";
-const char str_imagepng[] = "image/png";
-const char str_imagejpeg[] = "image/jpeg";
-const char str_applicationjavascript[] = "application/javascript";
-const char str_applicationoctetstream[] = "application/octet-stream";
+const char str_mime_textplain[] = "text/plain";
+const char str_mime_texthtml[] = "text/html";
+const char str_mime_textcss[] = "text/css";
+const char str_mime_textjson[] = "text/json";
+const char str_mime_imagepng[] = "image/png";
+const char str_mime_imagejpeg[] = "image/jpeg";
+const char str_mime_applicationjavascript[] = "application/javascript";
+const char str_mime_applicationoctetstream[] = "application/octet-stream";
 
 #define STRING_REF(string) string, sizeof(string)-1
 typedef struct string_s string_t;
@@ -69,35 +69,35 @@ static mime_entry_t *mime_entry = NULL;
 static const mime_entry_t *mime_default =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = "*",
-	.mime = STRING_REF(str_applicationoctetstream),
+	.mime = STRING_REF(str_mime_applicationoctetstream),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
-	.ext = ".text",
-	.mime = STRING_REF(str_textplain),
+	.ext = ".text,.txt",
+	.mime = STRING_REF(str_mime_textplain),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".html,.xhtml,.htm",
-	.mime = STRING_REF(str_texthtml),
+	.mime = STRING_REF(str_mime_texthtml),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".css",
-	.mime = STRING_REF(str_textcss),
+	.mime = STRING_REF(str_mime_textcss),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".json",
-	.mime = STRING_REF(str_textjson),
+	.mime = STRING_REF(str_mime_textjson),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".js",
-	.mime = STRING_REF(str_applicationjavascript),
+	.mime = STRING_REF(str_mime_applicationjavascript),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
 	.ext = ".png",
-	.mime = STRING_REF(str_imagepng),
+	.mime = STRING_REF(str_mime_imagepng),
 	.next =
 (mime_entry_t *)&(const mime_entry_t){
-	.ext = ".jpg",
-	.mime = STRING_REF(str_imagejpeg),
+	.ext = ".jpg,.jpeg",
+	.mime = STRING_REF(str_mime_imagejpeg),
 	.next = NULL
 }}}}}}}};
 
@@ -152,6 +152,7 @@ size_t utils_getmime2(const char *filepath, const char **value)
 		*value = mime->mime.data;
 		return mime->mime.length;
 	}
+	warn("utils: mime for %s not found use default", filepath);
 	*value = mime_default->mime.data;
 	return mime_default->mime.length;
 }
