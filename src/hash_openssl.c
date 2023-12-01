@@ -169,7 +169,11 @@ static int HASH_finish(void *ctx, char *out)
 
 static int HASH_length(void *ctx)
 {
+#ifndef DEPRECATED_OPENSSL
 	return EVP_MD_CTX_get_size(ctx);
+#else
+	return EVP_MD_CTX_size(ctx);
+#endif
 }
 
 static void *HMACSHA256_initkey(const char *key, size_t keylen)
