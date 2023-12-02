@@ -168,9 +168,11 @@ char *utils_urldecode(const char *encoded, size_t length)
 		return NULL;
 	char *decoded = calloc(1, length + 1);
 	char *offset = decoded;
-	/** leave the first / **/
+#if 0
+	/// leave the first /
 	if (*encoded == '/')
 		encoded++;
+#endif
 	while (*encoded != '\0')
 	{
 		if (*encoded == '%')
