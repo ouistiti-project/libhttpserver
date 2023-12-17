@@ -62,6 +62,7 @@ static int SHA256_finish(void *ctx, char *out);
 static void *HMAC_initkey(const char *key, size_t keylen);
 static void HMAC_update(void *ctx, const char *in, size_t len);
 static int HMAC_finish(void *ctx, char *out);
+static int HMAC_length(void *ctx);
 
 #ifndef LIBB64
 const base64_t *base64 = &(const base64_t)
