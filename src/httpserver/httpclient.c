@@ -1090,6 +1090,14 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 		case CLIENT_WAITING:
 		{
 			ret = _httpclient_wait(client, wait_option);
+			/// timeout on socket
+#if 0
+			if (ret == EREJECT && errno == EAGAIN)
+			{
+				client->state |= CLIENT_STOPPED;
+				ret = ESUCCESS;
+			}
+#endif
 		}
 		break;
 		case CLIENT_READING:
