@@ -991,7 +991,9 @@ static int _httpclient_response_generate_end(http_client_t *client, http_message
 	const char *name = "server";
 	if (callback)
 		name = callback->name;
-	warn("client: %p response from connector \"%s\" result %d", client, name, request->response->result);
+	const char *service = NULL;
+	service = httpserver_INFO(client->server, "service");
+	warn("client: %p response from connector \"%s\" service \"%s\" result %d", client, name, service, request->response->result);
 	return ESUCCESS;
 }
 
