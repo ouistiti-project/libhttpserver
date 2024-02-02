@@ -86,11 +86,9 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 
 	if (server)
 	{
-		http_connector_list_t *callback = server->callbacks;
-		while (callback != NULL)
+		for (http_connector_list_t *callback = server->callbacks; callback != NULL; callback = callback->next)
 		{
 			httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
-			callback = callback->next;
 		}
 	}
 	client->client_send = client->ops->sendresp;
@@ -494,30 +492,27 @@ http_server_t *httpclient_server(http_client_t *client)
 static int _httpclient_checkconnector(http_client_t *client, http_message_t *request, http_message_t *response, int priority)
 {
 	int ret = ESUCCESS;
-	http_connector_list_t *iterator;
 	http_connector_list_t *first;
 	first = client->callbacks;
-	iterator = first;
-	if (iterator == NULL)
+	if (first == NULL)
 		warn("client: no connector available");
-	while (iterator != NULL)
+	for (http_connector_list_t *callback = client->callbacks; callback != NULL; callback = callback->next)
 	{
-		if (iterator->func)
+		if (callback->func)
 		{
-			if (priority > 0 && iterator->priority != priority)
+			if (priority > 0 && callback->priority != priority)
 			{
-				iterator = iterator->next;
 				continue;
 			}
-			client_dbg("client %p connector \"%s\"", client, iterator->name);
-			ret = iterator->func(iterator->arg, request, response);
+			client_dbg("client %p connector \"%s\"", client, callback->name);
+			ret = callback->func(callback->arg, request, response);
 			if (ret != EREJECT)
 			{
 				if (ret == ESUCCESS)
 				{
 					httpclient_flag(client, 0, CLIENT_RESPONSEREADY);
 				}
-				request->connector = iterator;
+				request->connector = callback;
 				break;
 			}
 			/**
@@ -526,11 +521,10 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 			else if (first != client->callbacks)
 			{
 				first = client->callbacks;
-				iterator = first;
+				callback = first;
 				continue;
 			}
 		}
-		iterator = iterator->next;
 	}
 	return ret;
 }

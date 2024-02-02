@@ -135,12 +135,11 @@ void httpmessage_destroy(http_message_t *message)
 http_client_t *httpmessage_request(http_message_t *message, const char *method, const char *url, ...)
 {
 	http_client_t *client = NULL;
-	const http_message_method_t *method_it = &default_methods[0];
-	while (method_it != NULL)
+	const http_message_method_t *method_it;
+	for (method_it = &default_methods[0]; method_it != NULL; method_it = method_it->next)
 	{
 		if (!_string_cmp(&method_it->key, method, -1))
 			break;
-		method_it = method_it->next;
 	}
 	if (method_it == NULL)
 	{
@@ -163,10 +162,10 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 			return NULL;
 		*pathname = 0;
 		pathname++;
-		const httpclient_ops_t *it_ops = httpclient_ops();
+
 		const httpclient_ops_t *protocol_ops = NULL;
 		void *protocol_ctx = NULL;
-		while (it_ops != NULL)
+		for (const httpclient_ops_t *it_ops = httpclient_ops();it_ops != NULL; it_ops->next)
 		{
 			if (!strncmp(url, it_ops->scheme, schemelength))
 			{
@@ -354,8 +353,8 @@ static int _httpmesssage_parsefailed(http_message_t *message)
 static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_INIT;
-	const http_message_method_t *method = httpclient_server(message->client)->methods;
-	while (method != NULL)
+
+	for (const http_message_method_t *method = httpclient_server(message->client)->methods; method != NULL; method = method->next)
 	{
 		int length = _string_length(&method->key);
 		if (!_string_cmp(&method->key, data->offset, -1) &&
@@ -372,10 +371,9 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 			message->content_length = 0;
 			break;
 		}
-		method = method->next;
 	}
 
-	if (method == NULL)
+	if (message->method == NULL)
 	{
 		err("message: reject method %s", data->offset);
 		data->offset++;
@@ -807,11 +805,9 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 	else
 	{
 #ifdef DEBUG
-		dbentry_t *entry = message->headers;
-		while (entry != NULL)
+		for (dbentry_t *entry = message->headers; entry != NULL; entry = entry->next)
 		{
 			dbg("message: headers %s", entry->storage->data + entry->key.offset);
-			entry = entry->next;
 		}
 #endif
 		const char *host = NULL;

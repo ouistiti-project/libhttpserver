@@ -97,11 +97,10 @@ char *httpserver_software = _httpserver_software;
 static int _httpserver_setmod(http_server_t *server, http_client_t *client)
 {
 	int ret = ESUCCESS;
-	http_server_mod_t *mod = server->mod;
-	while (mod)
+
+	for (http_server_mod_t *mod = server->mod; mod; mod = mod->next)
 	{
 		ret = httpclient_addmodule(client, mod);
-		mod = mod->next;
 	}
 	return ret;
 }
@@ -115,8 +114,7 @@ static int _httpserver_prepare(http_server_t *server)
 	maxfd = server->sock;
 
 #ifndef VTHREAD
-	const http_client_t *client = server->clients;
-	while (client != NULL)
+	for (const http_client_t *client = server->clients; client != NULL; client = client->next)
 	{
 		if (httpclient_socket(client) > 0)
 		{
@@ -160,7 +158,6 @@ static int _httpserver_prepare(http_server_t *server)
 			if (count >= server->config->maxclients)
 				break;
 		}
-		client = client->next;
 	}
 
 #else
@@ -465,13 +462,14 @@ static int _httpserver_run(http_server_t *server)
 			 * Check if a client is still available
 			 */
 			int checkclients = 0;
-			http_client_t *client = server->clients;
-			while (client != NULL)
+			while (http_client_t *client = server->clients; client != NULL; client = client->next)
 			{
 				client->timeout -= WAIT_TIMER * 100;
 				if (client->timeout < 0)
+				{
 					checkclients = 1;
-				client = client->next;
+					break;
+				}
 			}
 			if (checkclients)
 				_httpserver_checkclients(server, prfds, pwfds, pefds);
@@ -507,13 +505,11 @@ static int _httpserver_run(http_server_t *server)
 				}
 				else
 				{
-					http_client_t *client = server->clients;
-					while (client != NULL)
+					for (http_client_t *client = server->clients; client != NULL; client = client->next)
 					{
 						warn("EBADF %p (%d)", client, client->sock);
 						int ret = write(client->sock, NULL, 0);
 						warn("EBADF %p (%d)", client, ret);
-						client = client->next;
 					}
 				}
 #endif
@@ -586,11 +582,10 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	else
 		_string_store(&server->service, server->s_port.data, server->s_port.length);
 	server->ops = httpserver_ops;
-	const http_message_method_t *method = default_methods;
-	while (method)
+
+	for (const http_message_method_t *method = default_methods; method; method = method->next)
 	{
 		httpserver_addmethod(server, method->key.data, method->key.length, method->properties);
-		method = method->next;
 	}
 	vthread_init(server->config->maxclients);
 
@@ -628,11 +623,10 @@ http_server_t *httpserver_dup(http_server_t *server, http_server_config_t *confi
 		return NULL;
 	vserver->config = config;
 	vserver->ops = server->ops;
-	const http_message_method_t *method = default_methods;
-	while (method)
+
+	for (const http_message_method_t *method = default_methods; method; method = method->next)
 	{
 		httpserver_addmethod(vserver, method->key.data, method->key.length, method->properties);
-		method = method->next;
 	}
 
 	vserver->protocol_ops = server->protocol_ops;
@@ -644,15 +638,15 @@ http_server_t *httpserver_dup(http_server_t *server, http_server_config_t *confi
 void httpserver_addmethod(http_server_t *server, const char *key, size_t keylen, short properties)
 {
 	short id = -1;
-	http_message_method_t *method = server->methods;
-	while (method != NULL)
+
+	http_message_method_t *method;
+	for (method = server->methods; method != NULL; method = method->next)
 	{
 		id = method->id;
 		if (!_string_cmp(&method->key, key, -1))
 		{
 			break;
 		}
-		method = (http_message_method_t *)method->next;
 	}
 	if (method == NULL)
 	{
@@ -748,11 +742,9 @@ int httpserver_reloadclient(http_server_t *server, http_client_t *client)
 	client->callbacks = NULL;
 	httpclient_freemodules(client);
 	_httpserver_setmod(server, client);
-	http_connector_list_t *callback = server->callbacks;
-	while (callback != NULL)
+	for (http_connector_list_t *callback = server->callbacks; callback != NULL; callback = callback->next)
 	{
 		httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
-		callback = callback->next;
 	}
 	return EREJECT;
 }
@@ -950,12 +942,10 @@ void _httpserver_dropsession(http_server_t *server, http_server_session_t *sessi
 
 http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg)
 {
-	http_server_session_t *it = server->sessions;
-	while (it != NULL)
+	for (http_server_session_t *it = server->sessions; it != NULL; it = it->next)
 	{
 		if (cb(cbarg, it) == ESUCCESS)
 			return it;
-		it = it->next;
 	}
 	return NULL;
 }
