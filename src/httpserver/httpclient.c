@@ -521,7 +521,7 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 				break;
 			}
 			/**
-			 * check if the connectors' list wasn't relaoded
+			 * check if the connectors' list wasn't reloaded
 			 */
 			else if (first != client->callbacks)
 			{
@@ -897,13 +897,14 @@ static int _httpclient_response_generate_separator(http_client_t *client, http_m
 	else if (response->content != NULL)
 	{
 		int sent;
+		size_t contentlength = _buffer_length(response->content);
 		/**
 		 * send the first part of the content.
 		 * The next loop may append data into the content, but
 		 * the first part has to be already sent
 		 */
 		if (_httpmessage_contentempty(response, 1))
-			response->content_length -= response->content->length;
+			response->content_length -= contentlength;
 		sent = _httpclient_sendpart(client, response->content);
 		if (sent == EREJECT)
 		{
@@ -911,6 +912,7 @@ static int _httpclient_response_generate_separator(http_client_t *client, http_m
 		}
 		else
 		{
+			_buffer_reset(response->content, 0);
 			_httpmessage_changestate(response, GENERATE_CONTENT);
 			ret = ECONTINUE;
 			response->state |= PARSE_CONTINUE;
@@ -940,17 +942,17 @@ static int _httpclient_response_generate_content(http_client_t *client, http_mes
 	 */
 	if (response->content != NULL && response->content->length > 0)
 	{
+		size_t contentlength = _buffer_length(response->content);
 		if (!_httpmessage_contentempty(response, 1))
 		{
-
 			/**
 			 * if for any raison the content_length is not the real
 			 * size of the content the following condition must stop
 			 * the request
 			 */
 			response->content_length -=
-				(response->content_length < response->content->length)?
-				response->content_length : response->content->length;
+				(response->content_length < contentlength)?
+				response->content_length : contentlength;
 		}
 		sent = _httpclient_sendpart(client, response->content);
 		ret = ECONTINUE;
@@ -960,11 +962,12 @@ static int _httpclient_response_generate_content(http_client_t *client, http_mes
 			ret = EREJECT;
 #ifdef DEBUG
 		static long long sent = 0;
-		sent += response->content->length;
+		sent += contentlength;
 		if (!_httpmessage_contentempty(response, 1) &&
 			_httpmessage_state(response, PARSE_END))
 		client_dbg("response send content %d %lld %lld", ret, response->content_length, sent);
 #endif
+		_buffer_reset(response->content, 0);
 	}
 	else
 	{
