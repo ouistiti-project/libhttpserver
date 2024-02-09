@@ -43,6 +43,7 @@
 #include <time.h>
 #include <signal.h>
 #include <sys/ioctl.h>
+#include <sys/utsname.h>
 
 #ifdef USE_POLL
 #include <poll.h>
@@ -81,8 +82,9 @@ static http_server_config_t defaultconfig = {
 
 #ifndef DEFAULTSCHEME
 #define DEFAULTSCHEME
-const char str_defaultscheme[] = "http";
+const char str_defaultscheme[5] = "http";
 #endif
+const char str_defaultsservice[4] = "www";
 const char str_true[] = "true";
 const char str_false[] = "false";
 
@@ -573,14 +575,28 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	else
 		server->config = &defaultconfig;
 	_string_store(&server->name, httpserver_software, -1);
-	_string_store(&server->hostname, config->hostname, -1);
+	struct utsname uts = {0}; /// uts->nodename should be hostname
+	if (config->hostname)
+		_string_store(&server->hostname, config->hostname, -1);
+	else if (!uname(&uts))
+		_string_alloc(&server->hostname, uts.nodename, -1);
+
 	char s_port[5];
 	size_t length = snprintf(s_port, 5, "%.4d", config->port);
 	_string_alloc(&server->s_port, s_port, length); // this is a memory leak, but memory should be release on destroy
 	if (config->service)
 		_string_store(&server->service, config->service, -1);
-	else
-		_string_store(&server->service, server->s_port.data, server->s_port.length);
+	else if (config->hostname)
+	{
+		const char *dot = strchr(config->hostname, '.');
+		const char *lastdot = strrchr(config->hostname, '.');
+		if (dot && dot != lastdot)
+		{
+			_string_store(&server->service, config->hostname, dot - config->hostname);
+		}
+	}
+	if (server->service.data == NULL)
+		_string_store(&server->service, str_defaultsservice, sizeof(str_defaultsservice));
 	server->ops = httpserver_ops;
 
 	for (const http_message_method_t *method = default_methods; method; method = method->next)
@@ -802,7 +818,7 @@ void httpserver_destroy(http_server_t *server)
 #define NI_MAXSERV 32
 #endif
 static const char default_value[8] = {0};
-static char service[NI_MAXSERV];
+static char buffer[8];
 const char *httpserver_INFO(http_server_t *server, const char *key)
 {
 	const char *value;
@@ -876,8 +892,8 @@ size_t httpserver_INFO2(http_server_t *server, const char *key, const char **val
 	}
 	else if (!strcasecmp(key, "chunksize"))
 	{
-		valuelen = snprintf(service, 8, "%.7u", server->config->chunksize);
-		*value = service;
+		valuelen = snprintf(buffer, 8, "%.7u", server->config->chunksize);
+		*value = buffer;
 	}
 	return valuelen;
 }
