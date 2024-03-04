@@ -31,9 +31,9 @@ $(TARGET)_PKGCONFIG:=ouistiti
 ifeq ($(VTHREAD_TYPE),)
 VTHREAD_TYPE:=fork
 else ifeq ($(VTHREAD_TYPE),pthread)
-$(TARGET)_LIBRARY-$(VTHREAD)+=pthread
+$(TARGET)_LIBS-$(VTHREAD)+=pthread
 else ifeq ($(VTHREAD_TYPE),threadpool)
-$(TARGET)_LIBRARY-$(VTHREAD)+=pthread
+$(TARGET)_LIBS-$(VTHREAD)+=pthread
 endif
 $(TARGET)_SOURCES-$(VTHREAD)+=vthread_$(VTHREAD_TYPE).c
 vthread_pthread_CFLAGS+=-DHAVE_SCHED_YIELD
