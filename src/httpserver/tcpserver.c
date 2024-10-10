@@ -158,7 +158,7 @@ static int tcpclient_connect(void *ctl, const char *addr, int port)
 		if (client->sock > 0)
 		{
 			char straddr[INET_ADDRSTRLEN];
-			inet_ntop(rp->ai_family, &rp->ai_addr, straddr, INET_ADDRSTRLEN); 
+			inet_ntop(rp->ai_family, &rp->ai_addr, straddr, INET_ADDRSTRLEN);
 			warn("client: connect to %s", straddr);
 			if (connect(client->sock, rp->ai_addr, rp->ai_addrlen) == 0)
 				break;
@@ -475,8 +475,8 @@ static int _tcpserver_start(http_server_t *server)
 	struct sockaddr_in6 saddr_in6 = {0};
 #endif
 
-	struct addrinfo hints;
-	struct addrinfo *result, *rp;
+	struct addrinfo hints = {0};;
+	struct addrinfo *result = NULL, *rp = NULL;
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 #ifdef USE_IPV6
@@ -547,7 +547,8 @@ static int _tcpserver_start(http_server_t *server)
 		}
 		server->ops->close(server);
 	}
-	freeaddrinfo(result);
+	if (result)
+		freeaddrinfo(result);
 
 	if (status == 0)
 	{

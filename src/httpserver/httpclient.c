@@ -109,6 +109,7 @@ static void _httpclient_destroy(http_client_t *client)
 {
 	if (client->opsctx != NULL)
 	{
+		client->ops->flush(client->opsctx);
 		client->ops->disconnect(client->opsctx);
 		client->ops->destroy(client->opsctx);
 		client->opsctx = NULL;
@@ -460,6 +461,7 @@ int _httpclient_run(http_client_t *client)
 		httpclient_destroy(client);
 	else if (client->opsctx != NULL)
 	{
+		client->ops->flush(client->opsctx);
 		client->ops->disconnect(client->opsctx);
 		client->ops->destroy(client->opsctx);
 		client->opsctx = NULL;
