@@ -1120,6 +1120,25 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 	{
 		httpmessage_addheader(message, str_connection, STRING_REF("Close"));
 	}
+	if (message->complete)
+	{
+		/**
+		 * rebuild temporarily the DB for the connectors
+		 */
+		_buffer_filldb(message->headers_storage, &message->headers, ':', '\r');
+		http_connector_list_t *it;
+		for (it = message->complete; it != NULL; it = it->nextcomplete)
+		{
+			if (it->func)
+			{
+				message_dbg("message %p complete connector \"%s\"", message->client, it->name);
+				it->func(it->arg, NULL, message);
+			}
+		}
+		_buffer_serializedb(message->headers_storage, message->headers, ':', '\n');
+		dbentry_destroy(message->headers);
+		message->headers = NULL;
+	}
 	message->headers_storage->offset = (char *)_buffer_get(message->headers_storage, 0);
 	return message->headers_storage;
 }

@@ -500,6 +500,19 @@ static int _httpclient_checkconnector(http_client_t *client, http_message_t *req
 		warn("client: no connector available");
 	for (http_connector_list_t *callback = client->callbacks; callback != NULL; callback = callback->next)
 	{
+		if (response && callback->priority == CONNECTOR_COMPLETE)
+		{
+			if (response->complete == NULL)
+				response->complete = callback;
+			else
+			{
+				callback->nextcomplete = response->complete;
+				response->complete = callback;
+			}
+		}
+	}
+	for (http_connector_list_t *callback = client->callbacks; callback != NULL; callback = callback->next)
+	{
 		if (callback->func)
 		{
 			if (priority > 0 && callback->priority != priority)

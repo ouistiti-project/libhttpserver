@@ -181,6 +181,7 @@ typedef int (*http_connector_t)(void *arg, http_message_t *request, http_message
 #define CONNECTOR_DOCFILTER		4
 #define CONNECTOR_DOCUMENT		5
 #define CONNECTOR_ERROR			10
+#define CONNECTOR_COMPLETE		0x8000
 
 /**
  * @brief callback to manage a sender module context

@@ -61,6 +61,7 @@ struct http_connector_list_s
 	http_connector_t func;
 	void *arg;
 	struct http_connector_list_s *next;
+	struct http_connector_list_s *nextcomplete;
 	const char *name;
 	int priority;
 };
@@ -75,6 +76,7 @@ struct http_message_s
 	http_client_t *client;
 	http_message_t *response;
 	void *connector;
+	http_connector_list_t *complete;
 	const http_message_method_t *method;
 	enum {
 		PARSE_INIT,
