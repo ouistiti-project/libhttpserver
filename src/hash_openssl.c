@@ -98,7 +98,7 @@ const hash_t *hash_sha512 = &(const hash_t)
 const hash_t *hash_macsha256 = &(const hash_t)
 {
 	.size = 32,
-	.name = "HMACSHA256",
+	.name = "hmac-sha256",
 	.nameid = '5',
 	.initkey = HMACSHA256_initkey,
 	.update = HMAC_update,
@@ -109,8 +109,8 @@ const hash_t *hash_macsha256 = &(const hash_t)
 const hash_t *hash_macsha1 = &(const hash_t)
 {
 	.size = 20,
-	.name = "HMACSHA1",
-	.nameid = '5',
+	.name = "hmac-sha1",
+	.nameid = '2',
 	.initkey = HMACSHA1_initkey,
 	.update = HMAC_update,
 	.finish = HMAC_finish,

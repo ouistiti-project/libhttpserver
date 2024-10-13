@@ -62,7 +62,9 @@ typedef struct hash_s hash_t;
 struct hash_s
 {
 	const int size;
+	/// name used by digest authentication
 	const char *name;
+	/// nameid used for unix password storage
 	const int nameid;
 	void *(*init)();
 	void *(*initkey)(const char *key, size_t keylen);

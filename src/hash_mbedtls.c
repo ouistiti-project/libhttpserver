@@ -108,7 +108,7 @@ const hash_t *hash_sha512 = NULL;
 const hash_t *hash_macsha256 = &(const hash_t)
 {
 	.size = 32,
-	.name = "HMACSHA256",
+	.name = "hmac-sha256",
 	.nameid = '5',
 	.initkey = &HMAC_initkey,
 	.update = &HMAC_update,
