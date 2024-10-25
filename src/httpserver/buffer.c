@@ -64,7 +64,7 @@ string_t *_string_create(const char *pointer, size_t length)
 {
 	string_t *str = calloc(1, sizeof(*str));
 	_string_alloc(str, pointer, length);
-	return str;	
+	return str;
 }
 
 int _string_alloc(string_t *str, const char *pointer, size_t length)
@@ -87,18 +87,21 @@ int _string_alloc(string_t *str, const char *pointer, size_t length)
 int _string_store(string_t *str, const char *pointer, size_t length)
 {
 	str->data = pointer;
-	if (pointer && length == (size_t) -1)
-		str->length = _string_len(str, pointer);
-	else
-		str->length = length;
+	/// set length and check if value is -1
+	str->length = length;
+	str->length = _string_length(str);
+	str->size = str->length + 1;
 	return ESUCCESS;
 }
 
-int _string_cpy(string_t *str, const char *source)
+int _string_cpy(string_t *str, const char *source, size_t length)
 {
 	if (str->data == NULL)
 		return EREJECT;
-	str->length = snprintf((char *)str->data, str->size, "%s", source);
+	if (length == (size_t) -1)
+		str->length = snprintf((char *)str->data, str->size, "%s", source);
+	else
+		str->length = snprintf((char *)str->data, str->size, "%.*s", source, length);
 	return str->length;
 }
 
