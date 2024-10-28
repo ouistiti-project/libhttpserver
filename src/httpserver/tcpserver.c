@@ -475,7 +475,7 @@ static int _tcpserver_start(http_server_t *server)
 	struct sockaddr_in6 saddr_in6 = {0};
 #endif
 
-	struct addrinfo hints = {0};;
+	struct addrinfo hints = {0};
 	struct addrinfo *result = NULL, *rp = NULL;
 
 	memset(&hints, 0, sizeof(struct addrinfo));

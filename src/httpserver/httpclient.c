@@ -900,6 +900,7 @@ static int _httpclient_response_generate_separator(http_client_t *client, http_m
 		client->ops->flush(client->opsctx);
 	if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
 	{
+		// TODO refactor with line 938
 		_httpmessage_changestate(response, GENERATE_END);
 		ret = ECONTINUE;
 	}
@@ -1352,6 +1353,7 @@ static int _httpclient_thread_generateresponse(http_client_t *client, http_messa
 			}
 			else if (httpmessage_result(response, -1) > 399)
 			{
+				// TODO refactor with line 1368
 				client_dbg("client: exit on result");
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 				ret = EINCOMPLETE;

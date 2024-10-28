@@ -98,10 +98,11 @@ int _string_cpy(string_t *str, const char *source, size_t length)
 {
 	if (str->data == NULL)
 		return EREJECT;
+	// str->data is const.
 	if (length == (size_t) -1)
 		str->length = snprintf((char *)str->data, str->size, "%s", source);
 	else
-		str->length = snprintf((char *)str->data, str->size, "%.*s", source, length);
+		str->length = snprintf((char *)str->data, str->size, "%.*s", length, source);
 	return str->length;
 }
 
