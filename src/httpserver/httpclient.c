@@ -903,7 +903,7 @@ static int _httpclient_response_generate_separator(http_client_t *client, http_m
 	{
 		if (response->content != NULL)
 		{
-			_bufffer_destroy(response->content);
+			_buffer_destroy(response->content);
 			response->content = NULL;
 		}
 		response->state &= ~PARSE_CONTINUE;
