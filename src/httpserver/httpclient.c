@@ -898,13 +898,17 @@ static int _httpclient_response_generate_separator(http_client_t *client, http_m
 	}
 	if (client->ops->flush != NULL)
 		client->ops->flush(client->opsctx);
+	/// Head method requires only the header
 	if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
 	{
-		// TODO refactor with line 938
-		_httpmessage_changestate(response, GENERATE_END);
-		ret = ECONTINUE;
+		if (response->content != NULL)
+		{
+			_bufffer_destroy(response->content);
+			response->content = NULL;
+		}
+		response->state &= ~PARSE_CONTINUE;
 	}
-	else if (response->content != NULL)
+	if (response->content != NULL)
 	{
 		int sent;
 		size_t contentlength = _buffer_length(response->content);
@@ -1351,14 +1355,8 @@ static int _httpclient_thread_generateresponse(http_client_t *client, http_messa
 				client_dbg("client: locked");
 				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
 			}
-			else if (httpmessage_result(response, -1) > 399)
-			{
-				// TODO refactor with line 1368
-				client_dbg("client: exit on result");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				ret = EINCOMPLETE;
-			}
-			else if (client->state & CLIENT_KEEPALIVE)
+			else if ((client->state & CLIENT_KEEPALIVE) &&
+					(httpmessage_result(response, -1) < 400))
 			{
 				client_dbg("client: keep alive");
 				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
