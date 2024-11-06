@@ -112,5 +112,7 @@ http_server_session_t *_httpserver_createsession(http_server_t *server, const ht
 http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg);
 void _httpserver_dropsession(http_server_t *server, http_server_session_t *session);
 
+extern const char str_defaultscheme[];
+
 #endif
 

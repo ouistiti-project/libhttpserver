@@ -88,9 +88,9 @@ const char str_connection[] = "Connection";
 const char str_contenttype[] = "Content-Type";
 const char str_contentlength[] = "Content-Length";
 
-static const char str_uri[] = "uri";
-static const char str_query[] = "query";
-static const char str_content[] = "content";
+const char str_uri[] = "uri";
+const char str_query[] = "query";
+const char str_content[] = "content";
 static const char str_headerstorage[] = "headerstorage";
 
 const http_message_method_t default_methods[] = {
