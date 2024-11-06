@@ -204,7 +204,7 @@ static http_client_t *_httpserver_removeclient(http_server_t *server, http_clien
 	return client2;
 }
 
-static int _httpserver_checkclients(http_server_t *server, const fd_set *prfds, const fd_set *pwfds, const fd_set *pefds)
+static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const fd_set *pwfds, const fd_set *pefds)
 {
 	int ret = 0;
 	http_client_t *client = server->clients;
@@ -254,8 +254,8 @@ static int _httpserver_checkclients(http_server_t *server, const fd_set *prfds, 
 		if (((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 #ifdef VTHREAD
 			|| (!vthread_exist(client->thread))
-			)
 #endif
+			)
 		{
 			warn("client %p died", client);
 			client = _httpserver_removeclient(server, client);
@@ -464,7 +464,7 @@ static int _httpserver_run(http_server_t *server)
 			 * Check if a client is still available
 			 */
 			int checkclients = 0;
-			while (http_client_t *client = server->clients; client != NULL; client = client->next)
+			for (http_client_t *client = server->clients; client != NULL; client = client->next)
 			{
 				client->timeout -= WAIT_TIMER * 100;
 				if (client->timeout < 0)

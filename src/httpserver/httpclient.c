@@ -433,11 +433,11 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 int _httpclient_run(http_client_t *client)
 {
 	int ret;
-	dbg("client: %d %p thread start", vthread_self(client->thread), client);
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
 
 #ifdef VTHREAD
+	dbg("client: %d %p thread start", vthread_self(client->thread), client);
 	if (!vthread_sharedmemory(client->thread))
 	{
 		/*
