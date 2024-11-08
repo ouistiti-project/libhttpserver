@@ -273,7 +273,7 @@ static int tcpclient_wait(void *ctl, int options)
 	{
 		FD_SET(client->sock, &fds);
 	}
-	else if (poll_set[0].revents & POLLOUT)
+	else if (ret >= 0 && poll_set[0].revents & POLLOUT)
 	{
 		FD_SET(client->sock, &fds);
 	}

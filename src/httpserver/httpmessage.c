@@ -266,12 +266,14 @@ void _httpmessage_destroy(http_message_t *message)
 		_buffer_destroy(message->content_storage);
 	if (message->header)
 		_buffer_destroy(message->header);
-	dbentry_destroy(message->headers);
+	if (message->headers)
+		dbentry_destroy(message->headers);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
 	if (message->query_storage)
 		_buffer_destroy(message->query_storage);
-	dbentry_destroy(message->queries);
+	if (message->queries)
+		dbentry_destroy(message->queries);
 	if (message->cookie_storage)
 		_buffer_destroy(message->cookie_storage);
 	dbentry_destroy(message->cookies);
@@ -1643,11 +1645,13 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 
 size_t httpmessage_parameter(http_message_t *message, const char *key, const char **value)
 {
-	if (message->queries == NULL)
+	if (message->queries == NULL && message->query_storage != NULL)
 	{
 		_buffer_filldb(message->query_storage, &message->queries, '=', '&');
 	}
-	ssize_t valuelen = dbentry_search(message->queries, key, value);
+	ssize_t valuelen = 0;
+	if (message->queries != NULL)
+		valuelen = dbentry_search(message->queries, key, value);
 	if (valuelen == EREJECT)
 		return 0;
 	return (size_t)valuelen;
