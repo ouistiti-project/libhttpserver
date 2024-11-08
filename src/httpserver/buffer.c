@@ -145,7 +145,7 @@ int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 	if (length == 0)
 		return buffer->offset - buffer->data;
 
-	if (buffer->data + buffer->size < buffer->offset + length)
+	if (buffer->data + buffer->size <= buffer->offset + length)
 	{
 		size_t available = buffer->size - (buffer->offset - buffer->data);
 		int nbchunks = ((length - available) / ChunkSize) + 1;
