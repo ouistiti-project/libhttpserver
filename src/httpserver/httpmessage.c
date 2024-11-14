@@ -901,7 +901,7 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		 * If the Content-Length header is not set,
 		 * the parser must continue while the socket is opened
 		 */
-		if (!_httpmessage_contentempty(message, 1))
+		if (_httpmessage_contentempty(message, 1))
 		{
 			length -= (data->offset - _buffer_get(data, 0));
 		}
