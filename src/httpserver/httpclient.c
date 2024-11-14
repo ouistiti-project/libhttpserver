@@ -478,7 +478,7 @@ int _httpclient_run(http_client_t *client)
 	 * it possible to leave this thread without shutdown the socket.
 	 * Be careful to not add action on the socket after this point
 	 */
-	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
+	httpclient_state(client, CLIENT_DEAD);
 	dbg("client: %d %p thread exit", vthread_self(client->thread), client);
 	if (!vthread_sharedmemory(client->thread))
 		httpclient_destroy(client);
@@ -496,7 +496,7 @@ int _httpclient_run(http_client_t *client)
 	}
 	while (ret == EINCOMPLETE && client->request_queue == NULL);
 	if (ret == ESUCCESS)
-		client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_DEAD);
 #endif
 #ifdef DEBUG
 	fflush(stderr);
@@ -1120,10 +1120,18 @@ int _httpclient_geterror(http_client_t *client)
 	return ESUCCESS;
 }
 
+static int _httpclient_thread_state(http_client_t *client, int newstate)
+{
+	client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
+	return client->state;
+}
+
 static int _httpclient_thread_statemachine(http_client_t *client)
 {
 	int ret = ECONTINUE;
 	int wait_option = 0;
+	if (client->state & CLIENT_STOPPED)
+		_httpclient_thread_state(client, CLIENT_EXIT);
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
@@ -1204,13 +1212,13 @@ static int _httpclient_thread_receive(http_client_t *client)
 		 * error on the connection
 		 */
 		_httpclient_geterror(client);
-		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+		_httpclient_thread_state(client, CLIENT_EXIT);
 		client->state |= CLIENT_ERROR;
 		return ECONTINUE;
 	}
 	else if (size == EINCOMPLETE)
 	{
-		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		_httpclient_thread_state(client, CLIENT_WAITING);
 	}
 	else
 	{
@@ -1219,7 +1227,7 @@ static int _httpclient_thread_receive(http_client_t *client)
 		 */
 		client->sockdata->offset = client->sockdata->data;
 
-		client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+		_httpclient_thread_state(client, CLIENT_READING);
 #ifdef HTTPCLIENT_DUMPSOCKET
 		if (client->dumpfd > 0)
 			write(client->dumpfd, client->sockdata->data, size);
@@ -1369,29 +1377,29 @@ static int _httpclient_thread_generateresponse(http_client_t *client, http_messa
 			if ((request->state & PARSE_MASK) < PARSE_END)
 			{
 				client_dbg("client: incomplete");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				_httpclient_thread_state(client, CLIENT_EXIT);
 				ret = EINCOMPLETE;
 			}
 			else if (client->state & CLIENT_ERROR)
 			{
 				client_dbg("client: error");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				_httpclient_thread_state(client, CLIENT_EXIT);
 			}
 			else if (client->state & CLIENT_LOCKED)
 			{
 				client_dbg("client: locked");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				_httpclient_thread_state(client, CLIENT_EXIT);
 			}
 			else if ((client->state & CLIENT_KEEPALIVE) &&
 					(httpmessage_result(response, -1) < 400))
 			{
 				client_dbg("client: keep alive");
-				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+				_httpclient_thread_state(client, CLIENT_READING);
 			}
 			else
 			{
 				client_dbg("client: exit");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				_httpclient_thread_state(client, CLIENT_EXIT);
 				ret = EINCOMPLETE;
 			}
 			/**
@@ -1406,10 +1414,10 @@ static int _httpclient_thread_generateresponse(http_client_t *client, http_messa
 		else if (res_ret == EREJECT)
 		{
 			err("client should exit");
-			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+			_httpclient_thread_state(client, CLIENT_EXIT);
 		}
 		else
-			client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
+			_httpclient_thread_state(client, CLIENT_SENDING);
 	}
 	return ret;
 }
@@ -1439,7 +1447,9 @@ static int _httpclient_thread(http_client_t *client)
 	ret = _httpclient_thread_statemachine(client);
 
 	if ((ret == ESUCCESS) && (client->state & CLIENT_STOPPED))
+	{
 		return ret;
+	}
 	else if ((ret == ESUCCESS) && !(client->state & CLIENT_LOCKED))
 	{
 		int ret = _httpclient_thread_receive(client);
@@ -1450,13 +1460,13 @@ static int _httpclient_thread(http_client_t *client)
 	{
 		err("client: message in error");
 		_httpclient_geterror(client);
-		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+		_httpclient_thread_state(client, CLIENT_EXIT);
 		client->state |= CLIENT_ERROR;
 		return ECONTINUE;
 	}
 	else if (ret == EINCOMPLETE)
 	{
-		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		_httpclient_thread_state(client, CLIENT_WAITING);
 	}
 
 	/**
@@ -1485,7 +1495,7 @@ static int _httpclient_thread(http_client_t *client)
 void httpclient_shutdown(http_client_t *client)
 {
 	client->ops->disconnect(client->opsctx);
-	client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+	_httpclient_thread_state(client, CLIENT_EXIT);
 }
 
 void httpclient_flush(http_client_t *client)
