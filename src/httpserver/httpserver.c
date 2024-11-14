@@ -250,14 +250,12 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 		}
 
 #endif
-		if (((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
-#ifdef VTHREAD
-			|| (!vthread_exist(client->thread))
-#endif
-			)
+		if (_httpclient_isalive(client) == EREJECT)
 		{
 			warn("client %p died", client);
-			client = _httpserver_removeclient(server, client);
+			http_client_t *next = _httpserver_removeclient(server, client);
+			httpclient_destroy(client);
+			client = next;
 		}
 		else
 		{

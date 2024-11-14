@@ -1122,6 +1122,16 @@ int _httpclient_geterror(http_client_t *client)
 	return ESUCCESS;
 }
 
+int _httpclient_isalive(http_client_t *client)
+{
+	if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
+		return EREJECT;
+	if (client->heartbeat == client->alive)
+		return EREJECT;
+	client->alive = client->heartbeat;
+	return ESUCCESS;
+}
+
 static int _httpclient_thread_state(http_client_t *client, int newstate)
 {
 	client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
@@ -1134,6 +1144,7 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 	int wait_option = 0;
 	if (client->state & CLIENT_STOPPED)
 		_httpclient_thread_state(client, CLIENT_EXIT);
+	client->heartbeat ++;
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
