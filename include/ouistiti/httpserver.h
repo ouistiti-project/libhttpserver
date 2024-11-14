@@ -71,6 +71,9 @@ extern const char EXPORT_SYMBOL str_connection[11];
 extern const char EXPORT_SYMBOL str_uri[4];
 extern const char EXPORT_SYMBOL str_query[6];
 extern const char EXPORT_SYMBOL str_content[8];
+extern const char EXPORT_SYMBOL str_keepalive[11];
+extern const char EXPORT_SYMBOL str_upgrade[8];
+extern const char EXPORT_SYMBOL str_SetCookie[11];
 
 typedef enum
 {
