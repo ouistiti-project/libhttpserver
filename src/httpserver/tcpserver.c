@@ -615,14 +615,6 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 
 static void _tcpserver_close(http_server_t *server)
 {
-	http_client_t *client = server->clients;
-	while (client != NULL)
-	{
-		http_client_t *next = client->next;
-		httpclient_destroy(client);
-		client = next;
-	}
-	server->clients = NULL;
 	if (server->sock > 0)
 	{
 		shutdown(server->sock, SHUT_RDWR);

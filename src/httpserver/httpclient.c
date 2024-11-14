@@ -118,7 +118,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 	return client;
 }
 
-static void _httpclient_destroy(http_client_t *client)
+void httpclient_disconnect(http_client_t *client)
 {
 	if (client->opsctx != NULL)
 	{
@@ -127,7 +127,12 @@ static void _httpclient_destroy(http_client_t *client)
 		client->ops->destroy(client->opsctx);
 		client->opsctx = NULL;
 	}
+}
 
+static void _httpclient_destroy(http_client_t *client)
+{
+	dbg("client: destroy");
+	httpclient_disconnect(client);
 	httpclient_freemodules(client);
 	httpclient_freeconnectors(client);
 	if (client->session)
@@ -480,14 +485,11 @@ int _httpclient_run(http_client_t *client)
 	 */
 	httpclient_state(client, CLIENT_DEAD);
 	dbg("client: %d %p thread exit", vthread_self(client->thread), client);
+	httpclient_disconnect(client);
 	if (!vthread_sharedmemory(client->thread))
-		httpclient_destroy(client);
-	else if (client->opsctx != NULL)
 	{
-		client->ops->flush(client->opsctx);
-		client->ops->disconnect(client->opsctx);
-		client->ops->destroy(client->opsctx);
-		client->opsctx = NULL;
+		/// with forked client connection, it must be destroy by client and server
+		httpclient_destroy(client);
 	}
 #else
 	do
@@ -1195,8 +1197,6 @@ static int _httpclient_thread_receive(http_client_t *client)
 {
 
 	int size;
-	if (client->state & CLIENT_STOPPED)
-		return ESUCCESS;
 
 	/**
 	 * here, it is the call to the recvreq callback from the
