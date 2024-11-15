@@ -136,8 +136,7 @@ void vthread_wait(vthread_t threads[], int nbthreads)
 {
 	if (g_pool == NULL)
 		return;
-	int i;
-	for (i = 0; i < nbthreads; i++) 
+	for (int i = 0; i < nbthreads; i++)
 	{
 		void *value_ptr;
 		vthread_t vthread = threads[i];
