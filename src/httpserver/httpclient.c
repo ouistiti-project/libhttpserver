@@ -460,7 +460,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 
 int _httpclient_run(http_client_t *client)
 {
-	int ret;
+	int ret = ECONTINUE;
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
 
@@ -1152,15 +1152,17 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 			wait_option = WAIT_ACCEPT;
 		case CLIENT_WAITING:
 		{
-			ret = _httpclient_wait(client, wait_option);
+			if (_buffer_empty(client->sockdata))
+				ret = _httpclient_wait(client, wait_option);
 			/// timeout on socket
-#if 0
 			if (ret == EREJECT && errno == EAGAIN)
 			{
+				err("client: %p timeout", client);
 				client->state |= CLIENT_STOPPED;
+#if 0
 				ret = ESUCCESS;
-			}
 #endif
+			}
 		}
 		break;
 		case CLIENT_READING:
@@ -1465,7 +1467,9 @@ static int _httpclient_thread(http_client_t *client)
 	{
 		int ret = _httpclient_thread_receive(client);
 		if (ret != EINCOMPLETE)
+		{
 			return ret;
+		}
 	}
 	else if (ret == EREJECT)
 	{
