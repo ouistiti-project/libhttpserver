@@ -642,6 +642,12 @@ static int _httpclient_message(http_client_t *client, http_message_t *request)
 	int ret = _httpmessage_parserequest(request, client->sockdata);
 
 	if ((request->mode & HTTPMESSAGE_KEEPALIVE) &&
+		!client->server->config->keepalive)
+	{
+		request->mode &= ~HTTPMESSAGE_KEEPALIVE;
+	}
+
+	if ((request->mode & HTTPMESSAGE_KEEPALIVE) &&
 		(request->version > HTTP10))
 	{
 		dbg("client: set keep-alive");
