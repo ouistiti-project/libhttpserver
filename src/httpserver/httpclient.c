@@ -1158,6 +1158,7 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 			wait_option = WAIT_ACCEPT;
 		case CLIENT_WAITING:
 		{
+			ret = ESUCCESS;
 			if (_buffer_empty(client->sockdata))
 				ret = _httpclient_wait(client, wait_option);
 			/// timeout on socket
