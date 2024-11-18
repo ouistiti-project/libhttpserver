@@ -809,9 +809,6 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 			dbg("message: headers %s", entry->storage->data + entry->key.offset);
 		}
 #endif
-		const char *host = NULL;
-		if (dbentry_search(message->headers, "host", &host) > 0)
-			warn("message to %s", host);
 		_buffer_shrink(data);
 		next = PARSE_PRECONTENT;
 		message->state &= ~PARSE_CONTINUE;
