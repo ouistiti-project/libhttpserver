@@ -45,6 +45,13 @@ struct vthread_s
 {
 	pthread_t pthread;
 	pthread_attr_t attr;
+	vthread_routine routine;
+	void *arg;
+	enum {
+		_VTHREAD_STARTED,
+		_VTHREAD_RUNNING,
+		_VTHREAD_STOPPED,
+		} state;
 };
 
 void vthread_init(int maxthreads)
@@ -55,6 +62,15 @@ void vthread_init(int maxthreads)
 void vthread_uninit(vthread_t thread)
 {
 	return;
+}
+
+static void *_vthread_routine(void *arg)
+{
+	vthread_t vthread = arg;
+	vthread->state = _VTHREAD_RUNNING;
+	void *ret = vthread->routine(vthread->arg);
+	vthread->state = _VTHREAD_STOPPED;
+	return ret;
 }
 
 int vthread_create(vthread_t *thread, vthread_attr_t *attr,
@@ -69,6 +85,8 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	}
 	pthread_attr_init(attr);
 	pthread_attr_setdetachstate(attr, PTHREAD_CREATE_JOINABLE);
+	vthread->routine = start_routine;
+	vthread->arg = arg;
 
 	if (pthread_create(&(vthread->pthread), attr, start_routine, arg) < 0)
 		ret = EREJECT;
@@ -100,7 +118,7 @@ int vthread_join(vthread_t thread, void **value_ptr)
 
 int vthread_exist(vthread_t thread)
 {
-	return 1;
+	return (thread->state == _VTHREAD_RUNNING);
 }
 
 void vthread_wait(vthread_t threads[], int nbthreads)
