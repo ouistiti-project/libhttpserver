@@ -851,14 +851,6 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 		dbg("no content inside request");
 	}
 	else
-	/**
-	 * data may contain some first bytes from the content
-	 * We need to get out from this function use them by
-	 * the connector
-	 */
-	if (!(message->state & PARSE_CONTINUE))
-		message->state |= PARSE_CONTINUE;
-	else
 	{
 		next = PARSE_CONTENT;
 		message->state &= ~PARSE_CONTINUE;
