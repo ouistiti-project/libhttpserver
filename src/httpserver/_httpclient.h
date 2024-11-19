@@ -64,6 +64,7 @@ struct http_client_s
 	vthread_t thread; /* The thread of socket management during the live of the connection */
 
 	const httpclient_ops_t *ops;
+	void *protocol;
 	void *opsctx; /* ctx of ops functions */
 
 	http_send_t client_send;
@@ -104,5 +105,6 @@ void httpclient_disconnect(http_client_t *client);
 int httpclient_addmodule(http_client_t *client, http_server_mod_t *mod);
 void httpclient_freemodules(http_client_t *client);
 void httpclient_freeconnectors(http_client_t *client);
+void httpclient_flag(http_client_t *client, int remove, int new);
 
 #endif

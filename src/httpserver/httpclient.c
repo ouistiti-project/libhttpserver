@@ -77,24 +77,10 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 		return NULL;
 	client->server = server;
 	client->ops = fops;
-	client->opsctx = client->ops->create(protocol, client);
-	if (client->opsctx == NULL)
-	{
-		vfree(client);
-		return NULL;
-	}
+	client->protocol = protocol;
 
-	if (server)
-	{
-		for (http_connector_list_t *callback = server->callbacks; callback != NULL; callback = callback->next)
-		{
-			httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
-		}
-	}
 	client->client_send = client->ops->sendresp;
 	client->client_recv = client->ops->recvreq;
-	client->send_arg = client->opsctx;
-	client->recv_arg = client->opsctx;
 	client->sockdata = _buffer_create(str_sockdata, 1);
 	if (client->sockdata == NULL)
 	{
@@ -113,6 +99,53 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 	}
 	else
 		err("client: dump data impossible %m");
+#endif
+	if (server)
+	{
+		for (http_server_mod_t *mod = server->mod; mod; mod = mod->next)
+		{
+			httpclient_addmodule(client, mod);
+		}
+		for (http_connector_list_t *callback = server->callbacks; callback != NULL; callback = callback->next)
+		{
+			httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
+		}
+#ifdef VTHREAD
+		vthread_attr_t attr;
+		httpclient_flag(client, 1, CLIENT_STOPPED);
+		httpclient_flag(client, 0, CLIENT_STARTED);
+		if (vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client)) != ESUCCESS)
+		{
+			httpclient_disconnect(client);
+			httpclient_destroy(client);
+			return NULL;
+		}
+		if (!vthread_sharedmemory(client->thread))
+		{
+			/**
+			 * To disallow the reception of SIGPIPE during the
+			 * "send" call, the socket into the parent process
+			 * must be closed.
+			 * Or the tcpserver must disable SIGPIPE
+			 * during the sending, but in this case
+			 * it is impossible to recceive real SIGPIPE.
+			 */
+			close(client->sock);
+		}
+#endif
+	}
+#ifdef HTTPCLIENT_FEATURES
+	else
+	{
+		client->opsctx = client->ops->create(client->protocol, client);
+		if (client->opsctx == NULL)
+		{
+			httpclient_destroy(client);
+			return NULL;
+		}
+		client->send_arg = client->opsctx;
+		client->recv_arg = client->opsctx;
+	}
 #endif
 
 	return client;
@@ -461,6 +494,17 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 int _httpclient_run(http_client_t *client)
 {
 	int ret = ECONTINUE;
+
+	client->opsctx = client->ops->create(client->protocol, client);
+	if (client->opsctx == NULL)
+	{
+		httpclient_state(client, CLIENT_DEAD);
+		httpclient_flag(client, 0, CLIENT_ERROR);
+		return EREJECT;
+	}
+	client->send_arg = client->opsctx;
+	client->recv_arg = client->opsctx;
+
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
 
@@ -1130,6 +1174,9 @@ int _httpclient_geterror(http_client_t *client)
 
 int _httpclient_isalive(http_client_t *client)
 {
+#ifdef VTHREAD
+	vthread_yield(client->thread);
+#endif
 	if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 		return EREJECT;
 	if (client->heartbeat == client->alive)
@@ -1165,7 +1212,7 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 			if (ret == EREJECT && errno == EAGAIN)
 			{
 				err("client: %p timeout", client);
-				client->state |= CLIENT_STOPPED;
+				httpclient_flag(client, 0, CLIENT_STOPPED);
 #if 0
 				ret = ESUCCESS;
 #endif
@@ -1204,7 +1251,7 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 			if (!(client->state & CLIENT_LOCKED))
 				client->ops->disconnect(client->opsctx);
 
-			client->state |= CLIENT_STOPPED;
+			httpclient_flag(client, 0, CLIENT_STOPPED);
 			ret = ESUCCESS;
 		}
 		default:
