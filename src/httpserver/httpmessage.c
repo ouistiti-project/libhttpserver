@@ -104,17 +104,17 @@ const http_message_method_t default_methods[] = {
 #endif
 };
 
-int httpserver_version(http_message_version_e versionid, const char **version)
+size_t httpserver_version(http_message_version_e versionid, const char **version)
 {
 	if (version)
 		*version = NULL;
 	if ((versionid & HTTPVERSION_MASK) < HTTPVERSIONS)
 	{
 		if (version)
-			*version = _string_get(&httpversion[(versionid & HTTPVERSION_MASK)]);
-		return _string_length(&httpversion[(versionid & HTTPVERSION_MASK)]);
+			*version = _string_get(&httpversion[versionid & HTTPVERSION_MASK]);
+		return _string_length(&httpversion[versionid & HTTPVERSION_MASK]);
 	}
-	return -1;
+	return 0;
 }
 
 int httpmessage_chunksize()
@@ -1044,7 +1044,6 @@ int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			case PARSE_END:
 			{
 				message_dbg("parse end with %lu data: %s", _buffer_length(data), data->offset);
-				dbg("parse end with %lu data: %s", _buffer_length(data), data->data);
 
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;
