@@ -88,9 +88,6 @@ struct http_client_s
 	struct sockaddr_storage addr;
 	unsigned int addr_size;
 	struct http_client_s *next;
-
-	uint32_t alive;
-	uint32_t heartbeat;
 };
 typedef struct http_client_s http_client_t;
 

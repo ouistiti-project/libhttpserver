@@ -1187,14 +1187,13 @@ int _httpclient_geterror(http_client_t *client)
 
 int _httpclient_isalive(http_client_t *client)
 {
-#ifdef VTHREAD
-	vthread_yield(client->thread);
-#endif
 	if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
 		return EREJECT;
-	if (client->heartbeat == client->alive)
+#ifdef VTHREAD
+	vthread_yield(client->thread);
+	if (!vthread_exist(client->thread))
 		return EREJECT;
-	client->alive = client->heartbeat;
+#endif
 	return ESUCCESS;
 }
 
@@ -1210,7 +1209,6 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 	int wait_option = 0;
 	if (client->state & CLIENT_STOPPED)
 		_httpclient_thread_state(client, CLIENT_EXIT);
-	client->heartbeat ++;
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
