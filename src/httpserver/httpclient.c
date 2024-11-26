@@ -26,6 +26,15 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
+/**
+ * httpclient manages the connection with the client.
+ * In threading mode, the server's' thread just accepts the client connection,
+ * after the client starts a new thread where all communication are done.
+ * The socket shutdown and closing are done inside the client's thread,
+ * and the server's thread must wait the closing and destroy the client.
+ * With process (vthread_fork). the client's thread must destroy the client too,
+ * but while it is a process, the memory will be freed with its dead.
+ */
 #if defined(__GNUC__) && !defined(_GNU_SOURCE)
 # define _GNU_SOURCE
 #else
@@ -152,6 +161,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 		client->opsctx = client->ops->create(client->protocol, client);
 		if (client->opsctx == NULL)
 		{
+			httpclient_disconnect(client);
 			httpclient_destroy(client);
 			return NULL;
 		}
@@ -178,7 +188,9 @@ void httpclient_disconnect(http_client_t *client)
 static void _httpclient_destroy(http_client_t *client)
 {
 	dbg("client: destroy");
-	httpclient_disconnect(client);
+#ifdef VTHREAD
+	vthread_join(client->thread, NULL);
+#endif
 	httpclient_freemodules(client);
 	httpclient_freeconnectors(client);
 	if (client->session)
@@ -507,8 +519,8 @@ int _httpclient_run(http_client_t *client)
 		ret = client->ops->start(client->opsctx);
 	if (ret != ECONTINUE || client->opsctx == NULL)
 	{
-		httpclient_state(client, CLIENT_DEAD);
 		httpclient_flag(client, 0, CLIENT_ERROR);
+		httpclient_disconnect(client);
 		return EREJECT;
 	}
 	client->send_arg = client->opsctx;
@@ -536,7 +548,6 @@ int _httpclient_run(http_client_t *client)
 	 * it possible to leave this thread without shutdown the socket.
 	 * Be careful to not add action on the socket after this point
 	 */
-	httpclient_state(client, CLIENT_DEAD);
 	dbg("client: %d %p thread exit", vthread_self(client->thread), client);
 	httpclient_disconnect(client);
 	if (!vthread_sharedmemory(client->thread))
@@ -551,7 +562,9 @@ int _httpclient_run(http_client_t *client)
 	}
 	while (ret == EINCOMPLETE && client->request_queue == NULL);
 	if (ret == ESUCCESS)
-		httpclient_state(client, CLIENT_DEAD);
+	{
+		httpclient_disconnect(client);
+	}
 #endif
 #ifdef DEBUG
 	fflush(stderr);

@@ -185,9 +185,6 @@ static int _httpserver_prepare(http_server_t *server)
 
 static http_client_t *_httpserver_removeclient(http_server_t *server, http_client_t *client)
 {
-#ifdef VTHREAD
-	vthread_join(client->thread, NULL);
-#endif
 	http_client_t *client2 = server->clients;
 	if (client == server->clients)
 	{
