@@ -824,6 +824,12 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 	const char *content_type = NULL;
 	int length = 0;
 	length = dbentry_search(message->headers, str_contenttype, &content_type);
+	if (length > 0)
+	{
+		const char *end = strchr(content_type, ';');
+		if (end)
+			length = end - content_type;
+	}
 
 	if ((message->method->properties & MESSAGE_ALLOW_CONTENT) &&
 			content_type != NULL && !strncasecmp(content_type, str_form_urlencoded, length))
