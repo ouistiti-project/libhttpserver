@@ -809,9 +809,6 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 			dbg("message: headers %s", entry->storage->data + entry->key.offset);
 		}
 #endif
-		const char *host = NULL;
-		if (dbentry_search(message->headers, "host", &host) > 0)
-			warn("message to %s", host);
 		_buffer_shrink(data);
 		next = PARSE_PRECONTENT;
 		message->state &= ~PARSE_CONTINUE;
@@ -853,14 +850,6 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 		next = PARSE_END;
 		dbg("no content inside request");
 	}
-	else
-	/**
-	 * data may contain some first bytes from the content
-	 * We need to get out from this function use them by
-	 * the connector
-	 */
-	if (!(message->state & PARSE_CONTINUE))
-		message->state |= PARSE_CONTINUE;
 	else
 	{
 		next = PARSE_CONTENT;
@@ -938,12 +927,12 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 {
 	int next = PARSE_POSTCONTENT;
 	const char *query = data->offset;
-	int length = _buffer_length(data) - (data->offset - _buffer_get(data, 0));
+	size_t length = _buffer_length(data) - (data->offset - _buffer_get(data, 0));
 	_buffer_append(message->query_storage, query, length);
 	if (message->content_length <= length)
 	{
-		_buffer_rewindto(message->query_storage, '\n');
-		_buffer_rewindto(message->query_storage, '\r');
+		/// The content may be binary data like a file
+		/// No parsinng must be done
 		data->offset += message->content_length;
 		message->content = message->query_storage;
 		message->content_packet = _buffer_length(message->query_storage);
