@@ -221,7 +221,8 @@ void _buffer_shrink(buffer_t *buffer)
 		buffer->offset++;
 		buffer->length--;
 	}
-	memcpy(buffer->data, buffer->offset, buffer->length);
+	/// the memory overlap
+	memmove(buffer->data, buffer->offset, buffer->length);
 	buffer->data[buffer->length] = '\0';
 	buffer->offset = buffer->data;
 }
