@@ -251,6 +251,7 @@ http_message_t * _httpmessage_create(http_client_t *client, http_message_t *pare
 			message->client = parent->client;
 			message->version = parent->version;
 			message->result = parent->result;
+			message->mode = parent->mode;
 		}
 	}
 	return message;
