@@ -579,11 +579,11 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	if (config->hostname)
 		_string_store(&server->hostname, config->hostname, -1);
 	else if (!uname(&uts))
-		_string_alloc(&server->hostname, uts.nodename, -1);
+		_string_store(&server->hostname, uts.nodename, -1);
 
 	char s_port[5];
 	size_t length = snprintf(s_port, 5, "%.4d", config->port);
-	_string_alloc(&server->s_port, s_port, length); // this is a memory leak, but memory should be release on destroy
+	_string_store(&server->s_port, s_port, length);
 	if (config->service)
 		_string_store(&server->service, config->service, -1);
 	else if (config->hostname)

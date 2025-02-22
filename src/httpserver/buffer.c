@@ -52,34 +52,11 @@
 
 #define buffer_dbg(...)
 
-static size_t _string_len(string_t *str, const char *pointer)
+static size_t _string_len(string_t *str)
 {
-	if (str->size == 0) str->size = STRING_MAXLENGTH;
-	return strnlen(pointer, str->size);
-}
-
-string_t *_string_create(const char *pointer, size_t length)
-{
-	string_t *str = calloc(1, sizeof(*str));
-	_string_alloc(str, pointer, length);
-	return str;
-}
-
-int _string_alloc(string_t *str, const char *pointer, size_t length)
-{
-	char *data = NULL;
-	str->length =  length;
-	if (pointer && length == (size_t) -1)
-		str->length = _string_len(str, pointer);
-	if (str->length > 0)
-		data = calloc(1, str->length + 1);
-	if (pointer != NULL)
-	{
-		str->length = snprintf(data, length + 1, "%s", pointer);
-	}
-	str->data = data;
-	str->size = str->length + 1;
-	return ESUCCESS;
+	if (str->data && str->length == (size_t) -1)
+		str->length = strnlen(str->data, STRING_MAXLENGTH);
+	return str->length;
 }
 
 int _string_store(string_t *str, const char *pointer, size_t length)
@@ -87,15 +64,13 @@ int _string_store(string_t *str, const char *pointer, size_t length)
 	str->data = pointer;
 	/// set length and check if value is -1
 	str->length = length;
-	str->length = _string_length(str);
+	str->length = _string_len(str);
 	str->size = str->length + 1;
 	return ESUCCESS;
 }
 
-size_t _string_length(string_t *str)
+size_t _string_length(const string_t *str)
 {
-	if (str->data && str->length == (size_t) -1)
-		str->length = strnlen(str->data, MAX_STRING);
 	return str->length;
 }
 
