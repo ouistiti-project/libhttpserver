@@ -167,7 +167,7 @@ http_client_t *httpmessage_request(http_message_t *message, const char *method, 
 
 		const httpclient_ops_t *protocol_ops = NULL;
 		void *protocol_ctx = NULL;
-		for (const httpclient_ops_t *it_ops = httpclient_ops();it_ops != NULL; it_ops->next)
+		for (const httpclient_ops_t *it_ops = httpclient_ops();it_ops != NULL; it_ops = it_ops->next)
 		{
 			if (!strncmp(url, it_ops->scheme, schemelength))
 			{
