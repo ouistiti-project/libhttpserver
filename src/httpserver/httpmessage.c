@@ -268,12 +268,14 @@ void _httpmessage_destroy(http_message_t *message)
 		_buffer_destroy(message->content_storage);
 	if (message->header)
 		_buffer_destroy(message->header);
-	dbentry_destroy(message->headers);
+	if (message->headers)
+		dbentry_destroy(message->headers);
 	if (message->headers_storage)
 		_buffer_destroy(message->headers_storage);
 	if (message->query_storage)
 		_buffer_destroy(message->query_storage);
-	dbentry_destroy(message->queries);
+	if (message->queries)
+		dbentry_destroy(message->queries);
 	if (message->cookie_storage)
 		_buffer_destroy(message->cookie_storage);
 	dbentry_destroy(message->cookies);
@@ -358,7 +360,7 @@ static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 
 	for (const http_message_method_t *method = httpclient_server(message->client)->methods; method != NULL; method = method->next)
 	{
-		int length = _string_length(&method->key);
+		size_t length = _string_length(&method->key);
 		if (!_string_cmp(&method->key, data->offset, -1) &&
 			data->offset[length] == ' ')
 		{
@@ -1129,8 +1131,8 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 		 * rebuild temporarily the DB for the connectors
 		 */
 		_buffer_filldb(message->headers_storage, &message->headers, ':', '\r');
-		http_connector_list_t *it;
-		for (it = message->complete; it != NULL; it = it->nextcomplete)
+		for (http_connector_list_t *it = message->complete; it != NULL;
+			it = it->nextcomplete)
 		{
 			if (it->func)
 			{
@@ -1504,7 +1506,7 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 
 int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value)
 {
-	int valuelen = EREJECT;
+	size_t valuelen = (size_t)EREJECT;
 	if (!strcasecmp(key, "uri") && (message->uri != NULL))
 	{
 		*value = _buffer_get(message->uri, 0);
@@ -1628,14 +1630,14 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 		if (*value != host)
 		{
 			*value = httpclient_server(message->client)->config->addr;
-			valuelen = EINCOMPLETE;
+			valuelen = (size_t)EINCOMPLETE;
 		}
 	}
 	else
 	{
 		valuelen = dbentry_search(message->headers, key, value);
 	}
-	if (valuelen == EREJECT)
+	if (valuelen == (size_t)EREJECT)
 	{
 		valuelen = httpserver_INFO2(httpclient_server(message->client), key, value);
 	//	valuelen = EINCOMPLETE;
@@ -1645,11 +1647,13 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 
 size_t httpmessage_parameter(http_message_t *message, const char *key, const char **value)
 {
-	if (message->queries == NULL)
+	if (message->queries == NULL && message->query_storage != NULL)
 	{
 		_buffer_filldb(message->query_storage, &message->queries, '=', '&');
 	}
-	ssize_t valuelen = dbentry_search(message->queries, key, value);
+	ssize_t valuelen = 0;
+	if (message->queries != NULL)
+		valuelen = dbentry_search(message->queries, key, value);
 	if (valuelen == EREJECT)
 		return 0;
 	return (size_t)valuelen;
