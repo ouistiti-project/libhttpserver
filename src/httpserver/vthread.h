@@ -18,6 +18,7 @@ typedef void *(*vthread_routine)(void *);
 # define vthread_attr_t int
 #endif
 
+#ifdef VTHREAD
 void vthread_init(int maxthreads);
 
 void vthread_uninit(vthread_t thread);
@@ -36,4 +37,15 @@ void vthread_yield(vthread_t thread);
 int vthread_self(vthread_t thread);
 
 int vthread_sharedmemory(vthread_t thread);
+#else
+#define vthread_init(...)
+#define vthread_uninit(...)
+#define vthread_create(...) 0
+#define vthread_join(...) 0
+#define vthread_wait(...)
+#define vthread_exist(...) 0
+#define vthread_yield(...)
+#define vthread_self(...) 0
+#define vthread_sharedmemory(...) 1
+#endif
 #endif
