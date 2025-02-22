@@ -1169,7 +1169,10 @@ int httpmessage_content(http_message_t *message, const char **data, size_t *cont
 		return size;
 	if (state < PARSE_CONTENT)
 		return EINCOMPLETE;
+	/// the socket is already open but no data are ready
 	if (size == 0 && state >= PARSE_CONTENT)
+		return ECONTINUE;
+	if (httpclient_state(message->client, -1) & CLIENT_STOPPED)
 		return EREJECT;
 	return size;
 }

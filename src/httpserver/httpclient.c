@@ -146,9 +146,12 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
-void httpclient_state(http_client_t *client, int new)
+int httpclient_state(http_client_t *client, int newstate)
 {
-	client->state = new | (client->state & ~CLIENT_MACHINEMASK);
+	client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
+	if (newstate >= 0)
+		client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
+	return client->state;
 }
 
 void httpclient_flag(http_client_t *client, int remove, int new)
