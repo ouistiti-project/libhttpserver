@@ -60,13 +60,24 @@ typedef struct http_message_s http_message_t;
 typedef struct http_server_s http_server_t;
 typedef struct http_client_s http_client_t;
 
+/**
+ * string are char pointer and not unsigned char
+ * strcpy, strlen, ... use this convention
+ */
 extern const char EXPORT_SYMBOL str_get[4];
 extern const char EXPORT_SYMBOL str_post[5];
 extern const char EXPORT_SYMBOL str_head[5];
-extern const char EXPORT_SYMBOL str_defaultscheme[5];
+extern const char EXPORT_SYMBOL str_cookie[7];
 extern const char EXPORT_SYMBOL str_form_urlencoded[34];
 extern const char EXPORT_SYMBOL str_contenttype[13];
 extern const char EXPORT_SYMBOL str_contentlength[15];
+extern const char EXPORT_SYMBOL str_connection[11];
+extern const char EXPORT_SYMBOL str_uri[4];
+extern const char EXPORT_SYMBOL str_query[6];
+extern const char EXPORT_SYMBOL str_content[8];
+extern const char EXPORT_SYMBOL str_keepalive[11];
+extern const char EXPORT_SYMBOL str_upgrade[8];
+extern const char EXPORT_SYMBOL str_setcookie[11];
 
 typedef enum
 {
@@ -650,43 +661,43 @@ void EXPORT_SYMBOL httpclient_destroy(http_client_t *client);
 
 /**
  * @brief create a session for this client
- * 
+ *
  * @param client the connection that receive the request
  * @param token the token to assign to the session
- * 
+ *
  * @return EREJECT if the client already has a session otherwise ESUCCESS
  */
 EXPORT_SYMBOL int httpclient_setsession(http_client_t *client, const char *token, size_t tokenlen);
 
 /**
  * @brief get/set session DB
- * 
+ *
  * @param client the connection that receive the request
  * @param key the key into the DB to get or to set
  * @param value the value to set for the key into the DB or NULL to get it
  * @param size the length of the value to store (-1 for null terminated string)
- * 
+ *
  * @return the value found into the DB or NULL
  */
 EXPORT_SYMBOL const void *httpclient_session(http_client_t *client, const char *key, size_t keylen, const void *value, size_t size);
 
 /**
  * @brief set session DB
- * 
+ *
  * @param client the connection that receive the request
  * @param key the key must be the same as the previous httpclient_session call.
  * @param value the value to append
  * @param size the length of the value to store (-1 for null terminated string)
- * 
+ *
  * @return the value found into the DB or NULL
  */
 EXPORT_SYMBOL const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, size_t size);
 
 /**
  * @brief delete session DB
- * 
+ *
  * @param client the connection that receive the request
- * 
+ *
  */
 EXPORT_SYMBOL void httpclient_dropsession(http_client_t *client);
 
