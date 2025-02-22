@@ -581,9 +581,8 @@ http_server_t *httpserver_create(http_server_config_t *config)
 	else if (!uname(&uts))
 		_string_store(&server->hostname, uts.nodename, -1);
 
-	char s_port[5];
-	size_t length = snprintf(s_port, 5, "%.4d", config->port);
-	_string_store(&server->s_port, s_port, length);
+	size_t length = snprintf(server->c_port, 5, "%.4d", config->port);
+	_string_store(&server->s_port, server->c_port, length);
 	if (config->service)
 		_string_store(&server->service, config->service, -1);
 	else if (config->hostname)
