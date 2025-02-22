@@ -52,11 +52,9 @@
 
 #define buffer_dbg(...)
 
-#define MAX_STRING (HTTPMESSAGE_CHUNKSIZE * MAXCHUNKS_URI)
-
 static size_t _string_len(string_t *str, const char *pointer)
 {
-	if (str->size == 0) str->size = MAX_STRING;
+	if (str->size == 0) str->size = STRING_MAXLENGTH;
 	return strnlen(pointer, str->size);
 }
 
@@ -94,21 +92,10 @@ int _string_store(string_t *str, const char *pointer, size_t length)
 	return ESUCCESS;
 }
 
-int _string_cpy(string_t *str, const char *source, size_t length)
-{
-	if (str->data == NULL)
-		return EREJECT;
-	if (length == (size_t) -1)
-		str->length = snprintf((char *)str->data, str->size, "%s", source);
-	else
-		str->length = snprintf((char *)str->data, str->size, "%.*s", source, length);
-	return str->length;
-}
-
-size_t _string_length(const string_t *str)
+size_t _string_length(string_t *str)
 {
 	if (str->data && str->length == (size_t) -1)
-		((string_t*)str)->length = strnlen(str->data, MAX_STRING);
+		str->length = strnlen(str->data, MAX_STRING);
 	return str->length;
 }
 
@@ -119,8 +106,10 @@ const char *_string_get(const string_t *str)
 
 int _string_cmp(const string_t *str, const char *cmp, size_t length)
 {
+	if (cmp == NULL)
+		return -1;
 	if ((length != (size_t) -1) && (length != str->length))
-		return EREJECT;
+		return (length - str->length);
 	return strncasecmp(str->data, cmp, str->length);
 }
 
