@@ -518,12 +518,13 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			case '\r':
 			case '\n':
 			{
-				/// version is not present but it must be parse to be "unset"
-				next = PARSE_VERSION;
+				/// version is not present but it must be parse to be "HTTP/0.9"
+				next = PARSE_END;
 				if (*(data->offset + 1) == '\n')
 				{
 					data->offset++;
 				}
+				message->version = 0;
 			}
 			break;
 			default:
@@ -691,7 +692,6 @@ static int _httpmessage_parseversion(http_message_t *message, buffer_t *data)
 			message->version = i;
 			break;
 		}
-		i++;
 	}
 	if (message->version == -1)
 	{
@@ -1255,8 +1255,10 @@ int _httpmessage_fillheaderdb(http_message_t *message)
 {
 	_buffer_filldb(message->headers_storage, &message->headers, ':', '\n');
 	const char *value = NULL;
-	ssize_t valuelen;
-	valuelen = dbentry_search(message->headers, str_connection, &value);
+	ssize_t valuelen = 0;
+	/// HTTP 0.9 and 1.0 must close connection
+	if (message->version == 2)
+		valuelen = dbentry_search(message->headers, str_connection, &value);
 	if (valuelen > 0)
 	{
 		for (int i = 0; i < valuelen; i++)
@@ -1340,7 +1342,7 @@ int httpmessage_addheader(http_message_t *message, const char *key, const char *
 		const char *prevkey = strstr(message->headers_storage->data, key);
 		if (prevkey != NULL && prevkey[keylen] == ':')
 		{
-			err("message: header already present %s %.*s", key, valuelen, prevkey + keylen + 1);
+			err("message: header already present %s %.*s", key, (int)valuelen, prevkey + keylen + 1);
 			return EREJECT;
 		}
 	}
