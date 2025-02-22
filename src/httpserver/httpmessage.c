@@ -428,16 +428,16 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 
 	while (data->offset < (_buffer_get(data, 0) + _buffer_length(data)) && next == PARSE_URI)
 	{
+		if (*(data->offset + 1) == '\0')
+		{
+			next = PARSE_URI | PARSE_CONTINUE;
+			break;
+		}
 		switch (*data->offset)
 		{
 #ifndef HTTPMESSAGE_NODOUBLEDOT
 			case '.':
 			{
-				if (*(data->offset + 1) == '\0')
-				{
-					next = PARSE_URI | PARSE_CONTINUE;
-					break;
-				}
 				if (*(data->offset + 1) == '.')
 				{
 					next = _httpmessage_pushuri(message, next, uri, length);
@@ -465,12 +465,6 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 #endif
 			case '%':
 			{
-				if (*(data->offset + 1) == '\0')
-				{
-					next = PARSE_URI | PARSE_CONTINUE;
-					break;
-				}
-
 				next = _httpmessage_pushuri(message, next, uri, length);
 				char code = 0;
 				int ret = _httpmessage_decodeuri(data->offset, &code);
@@ -490,22 +484,22 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			}
 			break;
 			case '/':
-				if (*(data->offset + 1) == '\0')
-				{
-					next = PARSE_URI | PARSE_CONTINUE;
-					break;
-				}
 				/**
 				 * Remove all double / inside the URI.
 				 * This may allow unsecure path with double .
 				 * But leave double // for the query part
 				 */
+				length++;
+				if (*(data->offset + 1) == '/')
+				{
+					next = _httpmessage_pushuri(message, next, uri, length);
+				}
 				while (*(data->offset + 1) == '/')
 				{
-					next = PARSE_URI | PARSE_CONTINUE;
 					data->offset++;
+					uri = data->offset + 1;
+					length = 0;
 				}
-				length++;
 			break;
 			case '?':
 				next = PARSE_QUERY;
@@ -544,8 +538,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 					length++;
 			}
 		}
-		if (next != (PARSE_URI | PARSE_CONTINUE))
-			data->offset++;
+		data->offset++;
 	}
 	next = _httpmessage_pushuri(message, next, uri, length);
 	return next;
@@ -992,6 +985,7 @@ int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 
 	do
 	{
+		ret = ECONTINUE;
 		int next = message->state  & PARSE_MASK;
 
 		switch (next)
