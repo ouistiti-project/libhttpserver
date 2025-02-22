@@ -103,6 +103,7 @@ const http_message_method_t default_methods[] = {
 	{ .key = {NULL, 0, 0}, .id = -1, .next = NULL},
 #endif
 };
+extern ssize_t tcpserver_getname(struct sockaddr_storage *addr, socklen_t addrlen, char *buffer, size_t length, int flag);
 
 size_t httpserver_version(http_message_version_e versionid, const char **version)
 {
@@ -1607,58 +1608,72 @@ size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char
 	{
 		if (message->client == NULL)
 			return 0;
+		struct sockaddr_storage *sin = &message->client->addr;
+		socklen_t len = sizeof(message->client->addr);
 
-		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
-			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
-		*value = host;
-		valuelen = strnlen(*value, NI_MAXHOST);
+		memset(host, 0, NI_MAXHOST);
+		valuelen = tcpserver_getname(sin, len, host, NI_MAXHOST, 0);
+		if ((ssize_t)valuelen > -1)
+			*value = host;
+		else
+			valuelen = 0;
 	}
-	else if (!strncasecmp(key, "remote_", 7))
+	else if (!strncasecmp(key, "remote_host", 11))
 	{
 		if (message->client == NULL)
-			return EREJECT;
-		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
-			host, NI_MAXHOST,
-			service, NI_MAXSERV, NI_NUMERICSERV);
+			return 0;
+		struct sockaddr_storage *sin = &message->client->addr;
+		socklen_t len = sizeof(message->client->addr);
 
-		if (host && !strcasecmp(key + 7, "host"))
-		{
+		memset(host, 0, NI_MAXHOST);
+		valuelen = tcpserver_getname(sin, len, host, NI_MAXHOST, 1);
+		if ((ssize_t)valuelen > -1)
 			*value = host;
-			valuelen = strnlen(host, NI_MAXHOST);
-		}
-		if (service && !strcasecmp(key + 7, "port"))
-		{
+		else
+			valuelen = 0;
+	}
+	else if (!strncasecmp(key, "remote_port", 11))
+	{
+		if (message->client == NULL)
+			return 0;
+		struct sockaddr_storage *sin = &message->client->addr;
+		socklen_t len = sizeof(message->client->addr);
+
+		memset(service, 0, NI_MAXSERV);
+		valuelen = tcpserver_getname(sin, len, service, NI_MAXSERV, 2);
+		if ((ssize_t)valuelen > -1)
 			*value = service;
-			valuelen = strnlen(service, NI_MAXSERV);
-		}
+		else
+			return 0;
 	}
 	else if (!strcasecmp(key, "port"))
 	{
-		struct sockaddr_in sin;
+		struct sockaddr_storage sin = {0};
 		socklen_t len = sizeof(sin);
-		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
+
+		memset(service, 0, NI_MAXSERV);
+		if (!getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len))
 		{
-			getnameinfo((struct sockaddr *) &sin, len,
-				0, 0,
-				service, NI_MAXSERV, NI_NUMERICSERV);
-			*value = service;
-			valuelen = strnlen(service, NI_MAXSERV);
+			valuelen = tcpserver_getname(&sin, len, service, NI_MAXSERV, 2);
+			if ((ssize_t)valuelen > -1)
+				*value = service;
+			else
+				return 0;
 		}
 	}
 	else if (!strcasecmp(key, "addr"))
 	{
-		struct sockaddr_in sin;
+		struct sockaddr_storage sin = {0};
 		socklen_t len = sizeof(sin);
-		host[0] = '\0';
-		if (getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len) == 0)
+
+		memset(host, 0, NI_MAXHOST);
+		if (!getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len))
 		{
-			if (!getnameinfo((struct sockaddr *) &sin, len,
-				host, NI_MAXHOST,
-				0, 0, NI_NUMERICHOST))
-			{
+			valuelen = tcpserver_getname(&sin, len, host, NI_MAXHOST, 0);
+			if ((ssize_t)valuelen > -1)
 				*value = host;
-				valuelen = strnlen(host, NI_MAXHOST);
-			}
+			else
+				return 0;
 		}
 		if (*value != host)
 		{
