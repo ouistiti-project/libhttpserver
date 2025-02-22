@@ -105,8 +105,7 @@ int vthread_exist(vthread_t thread)
 
 void vthread_wait(vthread_t threads[], int nbthreads)
 {
-	int i;
-	for (i = 0; i < nbthreads; i++) 
+	for (int i = 0; i < nbthreads; i++)
 	{
 		void *value_ptr;
 		vthread_t thread = threads[i];
