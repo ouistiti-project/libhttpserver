@@ -1677,7 +1677,7 @@ size_t httpmessage_parameter(http_message_t *message, const char *key, const cha
 
 size_t httpmessage_cookie(http_message_t *message, const char *key, const char **cookie)
 {
-	size_t length = -1;
+	size_t length = 0;
 	dbentry_t *entry = dbentry_get(message->cookies, key);
 	if (entry && cookie)
 	{
