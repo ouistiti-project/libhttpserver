@@ -1343,6 +1343,24 @@ int httpmessage_addheader(http_message_t *message, const char *key, const char *
 	size_t keylen = strlen(key);
 	if (value != NULL && valuelen == -1)
 		valuelen = strlen(value);
+	int ret = 0;
+	const string_t mulitdefined[] = {
+		STRING_DCL(str_setcookie),
+	};
+	for (int i = 0 ; i < sizeof(mulitdefined) / sizeof(*mulitdefined); i++)
+	{
+		if (!_string_cmp(&mulitdefined[i], key, keylen))
+			ret = 1;
+	}
+	if (ret == 0)
+	{
+		const char *prevkey = strstr(message->headers_storage->data, key);
+		if (prevkey != NULL && prevkey[keylen] == ':')
+		{
+			err("message: header already present %s %.*s", key, valuelen, prevkey + keylen + 1);
+			return EREJECT;
+		}
+	}
 	if (_buffer_accept(message->headers_storage, keylen + 2 + valuelen + 2) == ESUCCESS)
 	{
 		_buffer_append(message->headers_storage, key, keylen);
