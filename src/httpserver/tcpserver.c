@@ -118,6 +118,14 @@ static void *tcpclient_create(void *config, http_client_t *clt)
 		}
 	}
 
+#ifndef BLOCK_SOCKET
+		int flags;
+		flags = fcntl(clt->sock, F_GETFL, 0);
+		fcntl(clt->sock, F_SETFL, flags | O_NONBLOCK);
+		flags = fcntl(clt->sock, F_GETFD, 0);
+		fcntl(clt->sock, F_SETFD, flags | FD_CLOEXEC);
+#endif
+
 	return clt;
 }
 
@@ -476,7 +484,7 @@ static int _tcpserver_start(http_server_t *server)
 	struct sockaddr_in6 saddr_in6 = {0};
 #endif
 
-	struct addrinfo hints = {0};;
+	struct addrinfo hints = {0};
 	struct addrinfo *result = NULL, *rp = NULL;
 
 	memset(&hints, 0, sizeof(struct addrinfo));
@@ -602,13 +610,6 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 #endif
 		if (rc == 0)
 			warn("tcpserver: new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
-#ifndef BLOCK_SOCKET
-		int flags;
-		flags = fcntl(httpclient_socket(client), F_GETFL, 0);
-		fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
-		flags = fcntl(httpclient_socket(client), F_GETFD, 0);
-		fcntl(httpclient_socket(client), F_SETFD, flags | FD_CLOEXEC);
-#endif
 	}
 	return client;
 }
