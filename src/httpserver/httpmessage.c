@@ -521,7 +521,8 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			case '\r':
 			case '\n':
 			{
-				next = PARSE_PREHEADER;
+				/// version is not present but it must be parse to be "unset"
+				next = PARSE_VERSION;
 				if (*(data->offset + 1) == '\n')
 				{
 					data->offset++;
