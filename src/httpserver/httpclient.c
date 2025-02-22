@@ -105,6 +105,19 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 		_httpclient_destroy(client);
 		client = NULL;
 	}
+#ifdef HTTPCLIENT_DUMPSOCKET
+	char tmpname[] = "/tmp/ouistiticlient_XXXXXX.log";
+	client->dumpfd = mkstemps(tmpname, 4);
+	if (client->dumpfd > 0)
+	{
+		err("client: dump data");
+		char address[INET_ADDRSTRLEN] = {0};
+		inet_ntop(AF_INET, &client->addr, address,client);
+		dprintf(client->dumpfd, "data from %s %s\n\n", address, server->c_port);
+	}
+	else
+		err("client: dump data impossible %m");
+#endif
 
 	return client;
 }
@@ -128,6 +141,10 @@ static void _httpclient_destroy(http_client_t *client)
 	if (client->sockdata)
 		_buffer_destroy(client->sockdata);
 	client->sockdata = NULL;
+#ifdef HTTPCLIENT_DUMPSOCKET
+	if (client->dumpfd > 0)
+		close(client->dumpfd);
+#endif
 	http_message_t *request = client->request_queue;
 	while (request)
 	{
@@ -1210,6 +1227,10 @@ static int _httpclient_thread_receive(http_client_t *client)
 		client->sockdata->offset = client->sockdata->data;
 
 		client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+#ifdef HTTPCLIENT_DUMPSOCKET
+		if (client->dumpfd > 0)
+			write(client->dumpfd, client->sockdata->data, size);
+#endif
 	}
 	return EINCOMPLETE;
 }

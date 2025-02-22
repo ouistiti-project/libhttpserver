@@ -79,6 +79,9 @@ struct http_client_s
 	http_client_modctx_t *modctx; /* list of pointers returned by getctx of each mod */
 
 	buffer_t *sockdata;
+#ifdef HTTPCLIENT_DUMPSOCKET
+	int dumpfd;
+#endif
 
 	http_server_session_t *session;
 	struct sockaddr_storage addr;
