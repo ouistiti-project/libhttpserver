@@ -616,6 +616,7 @@ static int _httpmessage_parsequery(http_message_t *message, buffer_t *data)
 	if (length > 0 && (message->query_storage != NULL))
 	{
 		int offset = _buffer_append(message->query_storage, query, length);
+		next &= ~PARSE_CONTINUE;
 		if (offset < 0)
 		{
 			next = _httpmesssage_parsefailed(message);
@@ -623,7 +624,6 @@ static int _httpmessage_parsequery(http_message_t *message, buffer_t *data)
 					_buffer_get(message->query_storage, 0),
 					_buffer_get(data, 0));
 		}
-		next &= ~PARSE_CONTINUE;
 	}
 	return next;
 }
@@ -840,8 +840,10 @@ static int _httpmessage_parseprecontent(http_message_t *message, buffer_t *data)
 		if (message->query_storage == NULL)
 		{
 			int nbchunks = MAXCHUNKS_HEADER;
+#ifdef HTTPMESSAGE_QUERY_UNLIMITED
 			if (!_httpmessage_contentempty(message, 1))
 				nbchunks = (message->content_length / _buffer_chunksize(-1) ) + 1;
+#endif
 			message->query_storage = _buffer_create(str_query, nbchunks);
 		}
 		else
@@ -922,8 +924,6 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 		if (message->content != data)
 			_buffer_append(message->content, data->offset, length);
 		message->content_packet = length;
-		if (!_httpmessage_contentempty(message, 1))
-			message->content_length -= length;
 		data->offset += length;
 	}
 	return next;
@@ -934,8 +934,15 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	int next = PARSE_POSTCONTENT;
 	const char *query = data->offset;
 	size_t length = _buffer_length(data) - (data->offset - _buffer_get(data, 0));
-	_buffer_append(message->query_storage, query, length);
-	if (message->content_length <= length)
+	int offset = _buffer_append(message->query_storage, query, length);
+	if (offset < 0)
+	{
+		next = _httpmesssage_parsefailed(message);
+		err("message: reject query too long : %s %s",
+				_buffer_get(message->query_storage, 0),
+				_buffer_get(data, 0));
+	}
+	else if (message->content_length <= length)
 	{
 		/// The content may be binary data like a file
 		/// No parsinng must be done
@@ -1159,9 +1166,13 @@ int httpmessage_content(http_message_t *message, const char **data, size_t *cont
 	if (content_length != NULL)
 	{
 		if (!_httpmessage_contentempty(message, 1))
+		{
 			*content_length = message->content_length;
+		}
 		else
+		{
 			*content_length = 0;
+		}
 	}
 	if (message->content)
 	{
@@ -1170,13 +1181,15 @@ int httpmessage_content(http_message_t *message, const char **data, size_t *cont
 		{
 			*data = _buffer_get(message->content, 0);
 		}
+		if (data && !_httpmessage_contentempty(message, 1))
+			message->content_length -= message->content_packet;
 	}
 	if ((message->state & GENERATE_MASK) != 0)
 		return size;
 	if (state < PARSE_CONTENT)
 		return EINCOMPLETE;
 	/// the socket is already open but no data are ready
-	if (size == 0 && state >= PARSE_CONTENT)
+	if (size == 0 && state < PARSE_END)
 		return ECONTINUE;
 	if (httpclient_state(message->client, -1) & CLIENT_STOPPED)
 		return EREJECT;
