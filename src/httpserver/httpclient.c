@@ -74,9 +74,13 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
 	if (client == NULL)
+	{
+		err("client: not enough memory");
 		return NULL;
+	}
 	client->server = server;
 	client->ops = fops;
+	_string_store(&client->scheme, fops->scheme, -1);
 	client->opsctx = client->ops->create(protocol, client);
 	if (client->opsctx == NULL)
 	{

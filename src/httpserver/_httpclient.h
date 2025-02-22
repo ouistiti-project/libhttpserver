@@ -65,6 +65,7 @@ struct http_client_s
 
 	const httpclient_ops_t *ops;
 	void *opsctx; /* ctx of ops functions */
+	string_t scheme;
 
 	http_send_t client_send;
 	void *send_arg;

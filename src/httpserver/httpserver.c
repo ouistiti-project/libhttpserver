@@ -580,6 +580,8 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		_string_store(&server->hostname, config->hostname, -1);
 	else if (!uname(&uts))
 		_string_store(&server->hostname, uts.nodename, -1);
+	if (config->addr)
+		_string_store(&server->addr, config->addr, -1);
 
 	size_t length = snprintf(server->c_port, 5, "%.4d", config->port);
 	_string_store(&server->s_port, server->c_port, length);
@@ -846,6 +848,11 @@ size_t httpserver_INFO2(http_server_t *server, const char *key, const char **val
 		}
 		else
 			*value = default_value;
+	}
+	else if (!strcasecmp(key, "addr"))
+	{
+		*value = _string_get(&server->addr);
+		valuelen = _string_length(&server->addr);
 	}
 	else if (!strcasecmp(key, "service"))
 	{

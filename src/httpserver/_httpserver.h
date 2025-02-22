@@ -84,6 +84,7 @@ struct http_server_s
 	const httpclient_ops_t *protocol_ops;
 	void *protocol;
 	string_t hostname;
+	string_t addr;
 	char c_port[5];
 	string_t s_port;
 	string_t service;

@@ -1511,9 +1511,10 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 	return value;
 }
 
-int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value)
+size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value)
 {
-	size_t valuelen = (size_t)EREJECT;
+	size_t valuelen = 0;
+	*value = NULL;
 	if (!strcasecmp(key, "uri") && (message->uri != NULL))
 	{
 		*value = _buffer_get(message->uri, 0);
@@ -1546,8 +1547,8 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 	}
 	else if (!strcasecmp(key, "scheme"))
 	{
-		*value = message->client->ops->scheme;
-		valuelen = EINCOMPLETE;
+		*value = _string_get(&message->client->scheme);
+		valuelen = _string_length(&message->client->scheme);
 	}
 	else if (!strcasecmp(key, "version"))
 	{
@@ -1584,12 +1585,12 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 	else if (!strncasecmp(key, "remote_addr", 11))
 	{
 		if (message->client == NULL)
-			return EREJECT;
+			return 0;
 
 		getnameinfo((struct sockaddr *) &message->client->addr, sizeof(message->client->addr),
 			host, NI_MAXHOST, 0, 0, NI_NUMERICHOST);
 		*value = host;
-		valuelen = strlen(*value);
+		valuelen = strnlen(*value, NI_MAXHOST);
 	}
 	else if (!strncasecmp(key, "remote_", 7))
 	{
@@ -1599,12 +1600,16 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 			host, NI_MAXHOST,
 			service, NI_MAXSERV, NI_NUMERICSERV);
 
-		if (!strcasecmp(key + 7, "host"))
+		if (host && !strcasecmp(key + 7, "host"))
+		{
 			*value = host;
-		if (!strcasecmp(key + 7, "port"))
+			valuelen = strnlen(host, NI_MAXHOST);
+		}
+		if (service && !strcasecmp(key + 7, "port"))
+		{
 			*value = service;
-		if (*value)
-			valuelen = strlen(*value);
+			valuelen = strnlen(service, NI_MAXSERV);
+		}
 	}
 	else if (!strcasecmp(key, "port"))
 	{
@@ -1616,7 +1621,7 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 				0, 0,
 				service, NI_MAXSERV, NI_NUMERICSERV);
 			*value = service;
-			valuelen = strlen(*value);
+			valuelen = strnlen(service, NI_MAXSERV);
 		}
 	}
 	else if (!strcasecmp(key, "addr"))
@@ -1631,13 +1636,12 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 				0, 0, NI_NUMERICHOST))
 			{
 				*value = host;
-				valuelen = strlen(*value);
+				valuelen = strnlen(host, NI_MAXHOST);
 			}
 		}
 		if (*value != host)
 		{
-			*value = httpclient_server(message->client)->config->addr;
-			valuelen = (size_t)EINCOMPLETE;
+			valuelen = httpserver_INFO2(httpclient_server(message->client), "addr", value);
 		}
 	}
 	else
@@ -1647,7 +1651,6 @@ int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **
 	if (valuelen == (size_t)EREJECT)
 	{
 		valuelen = httpserver_INFO2(httpclient_server(message->client), key, value);
-	//	valuelen = EINCOMPLETE;
 	}
 	return valuelen;
 }

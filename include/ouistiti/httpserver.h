@@ -582,7 +582,7 @@ EXPORT_SYMBOL const char * httpmessage_SERVER(http_message_t *message, const cha
  * @return the value of the attribut or a empty string
  */
 EXPORT_SYMBOL const char * httpmessage_REQUEST(http_message_t *message, const char *key);
-EXPORT_SYMBOL int httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value);
+EXPORT_SYMBOL size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value);
 
 /**
  * @brief get/set value for the session used by the request
