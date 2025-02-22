@@ -119,14 +119,8 @@ static void _httpclient_destroy(http_client_t *client)
 		client->opsctx = NULL;
 	}
 
-	client->modctx = NULL;
-	http_connector_list_t *callback = client->callbacks;
-	while (callback != NULL)
-	{
-		http_connector_list_t *next = callback->next;
-		free(callback);
-		callback = next;
-	}
+	httpclient_freemodules(client);
+	httpclient_freeconnectors(client);
 	if (client->session)
 	{
 		httpclient_dropsession(client);
@@ -164,6 +158,18 @@ void httpclient_flag(http_client_t *client, int remove, int new)
 		client->state |= (new & ~CLIENT_MACHINEMASK);
 	else
 		client->state &= ~(new & ~CLIENT_MACHINEMASK);
+}
+
+void httpclient_freeconnectors(http_client_t *client)
+{
+	http_connector_list_t *callback = client->callbacks;
+	while (callback != NULL)
+	{
+		http_connector_list_t *next = callback->next;
+		free(callback);
+		callback = next;
+	}
+	client->callbacks = NULL;
 }
 
 void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name)

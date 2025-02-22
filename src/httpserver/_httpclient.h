@@ -97,5 +97,6 @@ int _httpclient_connect(http_client_t *client, const char *addr, int port);
 #endif
 int httpclient_addmodule(http_client_t *client, http_server_mod_t *mod);
 void httpclient_freemodules(http_client_t *client);
+void httpclient_freeconnectors(http_client_t *client);
 
 #endif
