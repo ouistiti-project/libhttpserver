@@ -90,7 +90,7 @@ typedef enum
 	HTTP_PIPELINE = 0x0100,
 } http_message_version_e;
 
-EXPORT_SYMBOL int httpserver_version(http_message_version_e versionid, const char **version);
+EXPORT_SYMBOL size_t httpserver_version(http_message_version_e versionid, const char **version);
 
 typedef int http_message_result_e;
 #define RESULT_200 200

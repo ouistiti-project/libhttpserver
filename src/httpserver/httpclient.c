@@ -304,7 +304,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		buffer_t *uri = request->uri;
 		size = client->client_send(client->send_arg, _buffer_get(uri, 0), _buffer_length(uri));
 		const char *version = NULL;
-		int versionlen = httpserver_version(request->version, &version);
+		size_t versionlen = httpserver_version(request->version, &version);
 		if (version)
 		{
 			client->client_send(client->send_arg, " ", 1);
