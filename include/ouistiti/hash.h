@@ -35,15 +35,15 @@ struct base64_s
 	int (*encode)(const char *in, size_t inlen, char *out, size_t outlen);
 	struct{
 		void *(*init)();
-		size_t (*update)(void *ctx, unsigned char *out, const unsigned char *data, size_t length);
-		size_t (*finish)(void *ctx, unsigned char *out);
+		size_t (*update)(void *ctx, char *out, const char *data, size_t length);
+		size_t (*finish)(void *ctx, char *out);
 		size_t (*length)(void *ctx, size_t inlen);
 	} encoder;
 	int (*decode)(const char *in, size_t inlen, char *out, size_t outlen);
 	struct{
 		void *(*init)();
-		size_t (*update)(void *ctx, unsigned char *out, const unsigned char *data, size_t length);
-		size_t (*finish)(void *ctx, unsigned char *out);
+		size_t (*update)(void *ctx, char *out, const char *data, size_t length);
+		size_t (*finish)(void *ctx, char *out);
 		size_t (*length)(void *ctx, size_t inlen);
 	} decoder;
 };

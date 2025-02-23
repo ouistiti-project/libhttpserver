@@ -44,13 +44,12 @@
 
 static void *BASE64_init();
 static void *BASE64_initurl();
-static size_t BASE64_update(void *pstate, unsigned char *out, const unsigned char *in, size_t inlen);
-static size_t BASE64_finish(void *pstate, unsigned char *out);
+static size_t BASE64_update(void *pstate, char *out, const char *in, size_t inlen);
+static size_t BASE64_finish(void *pstate, char *out);
 static size_t BASE64_length(void *pstate, size_t inlen);
 
 static int BASE64_encode1(const char *in, size_t inlen, char *out, size_t outlen);
 static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen);
-static int BASE64_encode(const char *in, size_t inlen, char *out, size_t outlen);
 static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen);
 const base64_t *base64 = &(const base64_t)
 {
@@ -89,12 +88,12 @@ static void *BASE64_initurl()
 	return pstate;
 }
 
-static size_t BASE64_update(void *pstate, unsigned char *out, const unsigned char *in, size_t inlen)
+static size_t BASE64_update(void *pstate, char *out, const char *in, size_t inlen)
 {
 	return base64_encode_block(in, inlen, out, pstate);
 }
 
-static size_t BASE64_finish(void *pstate, unsigned char *out)
+static size_t BASE64_finish(void *pstate, char *out)
 {
 	return base64_encode_blockend(out, pstate);
 }
@@ -164,20 +163,22 @@ static void *BASE32_init()
 	return pstate;
 }
 
-static size_t BASE32_update(void *pstate, unsigned char *out, const unsigned char *in, size_t inlen)
+static size_t BASE32_update(void *pstate, char *out, const char *in, size_t inlen)
 {
 	return base32_encode_block(in, inlen, out, pstate);
 }
 
-static size_t BASE32_finish(void *pstate, unsigned char *out)
+static size_t BASE32_finish(void *pstate, char *out)
 {
 	return base32_encode_blockend(out, pstate);
 }
 
+#if 0
 static size_t BASE32_length(void *pstate, size_t inlen)
 {
 	return inlen + ((size_t)(inlen + 4) / 2);
 }
+#endif
 
 const base64_t *base32 = &(const base64_t)
 {
