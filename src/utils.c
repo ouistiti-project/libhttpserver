@@ -420,39 +420,3 @@ int utils_parsestring(const char *string, size_t stringlen, int listlength, util
 	}
 	return ret;
 }
-
-#ifndef COOKIE
-const char *cookie_get(http_message_t *request, const char *key)
-{
-	const char *value = NULL;
-	const char *cookie = NULL;
-	size_t cookielen = httpmessage_REQUEST2(request, str_cookie, &cookie);
-	if (cookie != NULL)
-	{
-		key = strstr(cookie, key);
-		const char *end = cookie + cookielen;
-		const char *value = key;
-		if (key != NULL)
-		{
-			while (value[0] != '\0' )
-			{
-				if (value[0] == ';')
-					value = end;
-				else if (value[0] == '=')
-					break;
-				else
-					value++;
-			}
-		}
-	}
-	return value;
-}
-
-int cookie_set(http_message_t *response, const char *key, const char *value, ...)
-{
-	httpmessage_addheader(response, str_setcookie, key, -1);
-	httpmessage_appendheader(response, str_setcookie, STRING_REF("="));
-	httpmessage_appendheader(response, str_setcookie, value, -1);
-	return ESUCCESS;
-}
-#endif

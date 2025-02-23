@@ -57,25 +57,4 @@ struct utils_parsestring_s
 typedef struct utils_parsestring_s utils_parsestring_t;
 int utils_parsestring(const char *string, size_t stringlen, int listlength, utils_parsestring_t list[]);
 
-/**
- * @brief get value of each cookie of the request
- *
- * The function may accept NULL key in this case
- * it returns the first cookie available and
- * the next call to the function will return the next one.
- * The return is not directly the value of the cookie but
- * the key followed by the value separated by "=".
- * Example:
- * keyvalue = cookie_get(request, "foo");
- * strcmp(keyvalue, "foo=bar") == 0
- *
- * @param message the request message received
- * @param key the name of the cookie or NULL
- *
- * @return the key and value corresponding or a null pointer
- */
-const char *cookie_get(http_message_t *request, const char *key);
-
-int cookie_set(http_message_t *response, const char *key, const char *value, ...);
-
 #endif
