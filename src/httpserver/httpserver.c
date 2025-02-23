@@ -750,7 +750,18 @@ int httpserver_run(http_server_t *server)
 #ifndef VTHREAD
 	return _httpserver_run(server);
 #else
-	pause();
+	struct timeval timeout;
+	int maxfd = 0;
+	fd_set rfds;
+
+	FD_ZERO(&rfds);
+
+	timeout.tv_sec = WAIT_TIMER;
+	timeout.tv_usec = 0;
+
+	int ret = select(maxfd + 1, &rfds, NULL, NULL, &timeout);
+	if (ret < 0)
+		return EREJECT;
 	return ECONTINUE;
 #endif
 }
