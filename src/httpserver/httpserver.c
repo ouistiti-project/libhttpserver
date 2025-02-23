@@ -413,9 +413,7 @@ static int _httpserver_run(http_server_t *server)
 		server_dbg("server: events %d", nbselect);
 		if (nbselect == 0)
 		{
-#ifdef VTHREAD
-			//vthread_yield(server->thread);
-#else
+
 			/**
 			 * poll/select exit on timeout
 			 * Check if a client is still available
@@ -432,7 +430,6 @@ static int _httpserver_run(http_server_t *server)
 			}
 			if (checkclients)
 				_httpserver_checkclients(server, prfds, pwfds, pefds);
-#endif
 		}
 		else if (nbselect < 0)
 		{
@@ -458,7 +455,6 @@ static int _httpserver_run(http_server_t *server)
 #ifdef CHECK_EBADF
 				if (fcntl(server->sock, F_GETFL) < 0)
 				{
-					server->run = 0;
 					err("server %p select EBADF", server);
 					ret = EREJECT;
 				}
@@ -474,10 +470,9 @@ static int _httpserver_run(http_server_t *server)
 #endif
 				errno = 0;
 			}
-			else
+			else if (server->run)
 			{
 				err("server %p select error (%d, %s)", server, errno, strerror(errno));
-				server->run = 0;
 				ret = EREJECT;
 			}
 		}
@@ -486,7 +481,9 @@ static int _httpserver_run(http_server_t *server)
 			int count = 0;
 			count = _httpserver_checkclients(server, prfds, pwfds, pefds);
 			if (count < server->config->maxclients)
+			{
 				ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+			}
 			else
 			{
 				ret = EINCOMPLETE;
