@@ -59,7 +59,8 @@ static int SHA1_finish(void *ctx, char *out);
 static void *SHA256_init();
 static void SHA256_update(void *ctx, const char *in, size_t len);
 static int SHA256_finish(void *ctx, char *out);
-static void *HMAC_initkey(const char *key, size_t keylen);
+static void *HMACSHA256_initkey(const char *key, size_t keylen);
+static void *HMACSHA1_initkey(const char *key, size_t keylen);
 static void HMAC_update(void *ctx, const char *in, size_t len);
 static int HMAC_finish(void *ctx, char *out);
 static int HMAC_length(void *ctx);
@@ -105,12 +106,22 @@ const hash_t *hash_sha256 = &(const hash_t)
 	.finish = &SHA256_finish,
 };
 const hash_t *hash_sha512 = NULL;
+const hash_t *hash_macsha1 = &(const hash_t)
+{
+	.size = 20,
+	.name = "hmac-sha!",
+	.nameid = '2',
+	.initkey = &HMACSHA1_initkey,
+	.update = &HMAC_update,
+	.finish = &HMAC_finish,
+	.length = &HMAC_length,
+};
 const hash_t *hash_macsha256 = &(const hash_t)
 {
 	.size = 32,
 	.name = "hmac-sha256",
 	.nameid = '5',
-	.initkey = &HMAC_initkey,
+	.initkey = &HMACSHA256_initkey,
 	.update = &HMAC_update,
 	.finish = &HMAC_finish,
 	.length = &HMAC_length,
@@ -246,16 +257,26 @@ static int SHA256_finish(void *ctx, char *out)
 	return 0;
 }
 
-static void *HMAC_initkey(const char *key, size_t keylen)
+static void *HMAC_initkey(const char *key, size_t keylen, int type)
 {
 	mbedtls_md_context_t *pctx;
 	pctx = calloc(1, sizeof(*pctx));
 
-	const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+	const mbedtls_md_info_t *info = mbedtls_md_info_from_type(type);
 	mbedtls_md_init(pctx);
 	mbedtls_md_setup(pctx, info, 1);
 	mbedtls_md_hmac_starts(pctx, key, keylen);
 	return pctx;
+}
+
+static void *HMACSHA256_initkey(const char *key, size_t keylen)
+{
+	return HMAC_initkey(key, keylen, MBEDTLS_MD_SHA256);
+}
+
+static void *HMACSHA1_initkey(const char *key, size_t keylen)
+{
+	return HMAC_initkey(key, keylen, MBEDTLS_MD_SHA1);
 }
 
 static void HMAC_update(void *ctx, const char *input, size_t len)
