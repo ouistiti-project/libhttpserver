@@ -1287,7 +1287,9 @@ int _httpmessage_fillheaderdb(http_message_t *message)
 		{
 			if (!strncasecmp( value + i, STRING_REF(str_keepalive)))
 			{
+#ifdef HTTPMESSAGE_KEEPALIVE_ENABLED
 				message->mode |= HTTPMESSAGE_KEEPALIVE;
+#endif
 			}
 			if (!strncasecmp( value + i, STRING_REF(str_upgrade)))
 			{
