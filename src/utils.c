@@ -422,14 +422,11 @@ int utils_parsestring(const char *string, size_t stringlen, int listlength, util
 }
 
 #ifndef COOKIE
-static const char str_Cookie[] = "Cookie";
-static const char str_SetCookie[] = "Set-Cookie";
-
 const char *cookie_get(http_message_t *request, const char *key)
 {
 	const char *value = NULL;
 	const char *cookie = NULL;
-	size_t cookielen = httpmessage_REQUEST2(request, str_Cookie, &cookie);
+	size_t cookielen = httpmessage_REQUEST2(request, str_cookie, &cookie);
 	if (cookie != NULL)
 	{
 		key = strstr(cookie, key);
@@ -453,9 +450,9 @@ const char *cookie_get(http_message_t *request, const char *key)
 
 int cookie_set(http_message_t *response, const char *key, const char *value, ...)
 {
-	httpmessage_addheader(response, str_SetCookie, key, -1);
-	httpmessage_appendheader(response, str_SetCookie, STRING_REF("="));
-	httpmessage_appendheader(response, str_SetCookie, value, -1);
+	httpmessage_addheader(response, str_setcookie, key, -1);
+	httpmessage_appendheader(response, str_setcookie, STRING_REF("="));
+	httpmessage_appendheader(response, str_setcookie, value, -1);
 	return ESUCCESS;
 }
 #endif

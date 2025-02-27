@@ -84,6 +84,7 @@ struct http_server_s
 	const httpclient_ops_t *protocol_ops;
 	void *protocol;
 	string_t hostname;
+	char c_port[5];
 	string_t s_port;
 	string_t service;
 	http_message_method_t *methods;
@@ -110,6 +111,8 @@ typedef int (*checksession_t)(void * arg, http_server_session_t*session);
 http_server_session_t *_httpserver_createsession(http_server_t *server, const http_client_t *client);
 http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg);
 void _httpserver_dropsession(http_server_t *server, http_server_session_t *session);
+
+extern const char str_defaultscheme[];
 
 #endif
 

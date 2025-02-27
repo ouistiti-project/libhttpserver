@@ -87,10 +87,12 @@ const char str_cookie[] = "Cookie";
 const char str_connection[] = "Connection";
 const char str_contenttype[] = "Content-Type";
 const char str_contentlength[] = "Content-Length";
+const char str_keepalive[] = "Keep-Alive";
+const char str_setcookie[] = "Set-Cookie";
 
-static const char str_uri[] = "uri";
-static const char str_query[] = "query";
-static const char str_content[] = "content";
+const char str_uri[] = "uri";
+const char str_query[] = "query";
+const char str_content[] = "content";
 static const char str_headerstorage[] = "headerstorage";
 
 const http_message_method_t default_methods[] = {
@@ -1114,7 +1116,7 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 	}
 	if ((message->mode & HTTPMESSAGE_KEEPALIVE) > 0)
 	{
-		httpmessage_addheader(message, str_connection, STRING_REF("Keep-Alive"));
+		httpmessage_addheader(message, str_connection, STRING_REF(str_keepalive));
 	}
 	else
 	{
@@ -1272,11 +1274,11 @@ int _httpmessage_fillheaderdb(http_message_t *message)
 	{
 		for (int i = 0; i < valuelen; i++)
 		{
-			if (!strncasecmp( value + i, "Keep-Alive", sizeof("Keep-Alive") - 1))
+			if (!strncasecmp( value + i, STRING_REF(str_keepalive)))
 			{
 				message->mode |= HTTPMESSAGE_KEEPALIVE;
 			}
-			if (!strncasecmp( value + i, "Upgrade", sizeof("Upgrade") - 1))
+			if (!strncasecmp( value + i, STRING_REF(str_upgrade)))
 			{
 				warn("Connection upgrading");
 				message->mode |= HTTPMESSAGE_LOCKED;

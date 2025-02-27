@@ -52,36 +52,11 @@
 
 #define buffer_dbg(...)
 
-#define MAX_STRING (HTTPMESSAGE_CHUNKSIZE * MAXCHUNKS_URI)
-
-static size_t _string_len(string_t *str, const char *pointer)
+static size_t _string_len(string_t *str)
 {
-	if (str->size == 0) str->size = MAX_STRING;
-	return strnlen(pointer, str->size);
-}
-
-string_t *_string_create(const char *pointer, size_t length)
-{
-	string_t *str = calloc(1, sizeof(*str));
-	_string_alloc(str, pointer, length);
-	return str;
-}
-
-int _string_alloc(string_t *str, const char *pointer, size_t length)
-{
-	char *data = NULL;
-	str->length =  length;
-	if (pointer && length == (size_t) -1)
-		str->length = _string_len(str, pointer);
-	if (str->length > 0)
-		data = calloc(1, str->length + 1);
-	if (pointer != NULL)
-	{
-		str->length = snprintf(data, length + 1, "%s", pointer);
-	}
-	str->data = data;
-	str->size = str->length + 1;
-	return ESUCCESS;
+	if (str->data && str->length == (size_t) -1)
+		str->length = strnlen(str->data, STRING_MAXLENGTH);
+	return str->length;
 }
 
 int _string_store(string_t *str, const char *pointer, size_t length)
@@ -89,26 +64,13 @@ int _string_store(string_t *str, const char *pointer, size_t length)
 	str->data = pointer;
 	/// set length and check if value is -1
 	str->length = length;
-	str->length = _string_length(str);
+	str->length = _string_len(str);
 	str->size = str->length + 1;
 	return ESUCCESS;
 }
 
-int _string_cpy(string_t *str, const char *source, size_t length)
-{
-	if (str->data == NULL)
-		return EREJECT;
-	if (length == (size_t) -1)
-		str->length = snprintf((char *)str->data, str->size, "%s", source);
-	else
-		str->length = snprintf((char *)str->data, str->size, "%.*s", source, length);
-	return str->length;
-}
-
 size_t _string_length(const string_t *str)
 {
-	if (str->data && str->length == (size_t) -1)
-		((string_t*)str)->length = strnlen(str->data, MAX_STRING);
 	return str->length;
 }
 
@@ -119,8 +81,10 @@ const char *_string_get(const string_t *str)
 
 int _string_cmp(const string_t *str, const char *cmp, size_t length)
 {
+	if (cmp == NULL)
+		return -1;
 	if ((length != (size_t) -1) && (length != str->length))
-		return EREJECT;
+		return (length - str->length);
 	return strncasecmp(str->data, cmp, str->length);
 }
 
@@ -181,7 +145,7 @@ int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 	if (length == 0)
 		return buffer->offset - buffer->data;
 
-	if (buffer->data + buffer->size < buffer->offset + length)
+	if (buffer->data + buffer->size <= buffer->offset + length)
 	{
 		size_t available = buffer->size - (buffer->offset - buffer->data);
 		int nbchunks = ((length - available) / ChunkSize) + 1;
@@ -257,7 +221,8 @@ void _buffer_shrink(buffer_t *buffer)
 		buffer->offset++;
 		buffer->length--;
 	}
-	memcpy(buffer->data, buffer->offset, buffer->length);
+	/// the memory overlap
+	memmove(buffer->data, buffer->offset, buffer->length);
 	buffer->data[buffer->length] = '\0';
 	buffer->offset = buffer->data;
 }
