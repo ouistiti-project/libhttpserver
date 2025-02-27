@@ -202,7 +202,6 @@ int websocket_unframed(char *in, int inlength, char *out, void *arg)
 int websocket_framed(int type, char *in, int inlength, char *out, int *outlength, void *arg)
 {
 	struct frame_s frame;
-	int mtu = 126;
 	uint16_t payloadlen = 0;
 	memset(&frame, 0, sizeof(frame));
 	int length;
@@ -228,8 +227,6 @@ int websocket_framed(int type, char *in, int inlength, char *out, int *outlength
 	}
 	frame.mask = 0;
 
-	if (_config->mtu)
-		mtu = _config->mtu;
 	if (length < 126)
 	{
 		frame.payloadlen = length;

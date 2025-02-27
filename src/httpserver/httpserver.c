@@ -202,6 +202,7 @@ static http_client_t *_httpserver_removeclient(http_server_t *server, http_clien
 
 static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const fd_set *pwfds, const fd_set *pefds)
 {
+	int error = 0;
 	int ret = 0;
 	http_client_t *client = server->clients;
 	while (client != NULL)
@@ -250,6 +251,8 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 		if (_httpclient_isalive(client) == EREJECT)
 		{
 			warn("client %p died", client);
+			if (httpclient_state(client, -1) & CLIENT_ERROR)
+				error++;
 			http_client_t *next = _httpserver_removeclient(server, client);
 			httpclient_destroy(client);
 			client = next;
@@ -260,15 +263,32 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 			client = client->next;
 		}
 	}
-	warn("server: %d clients running", ret);
+	server_dbg("server: %d clients running", ret);
+/// The timer doesn't stop the DDOS attacks, it's just slower
+#if 0
+	if (error > 0)
+	{
+		/// try to stop a DDOS attack
+		struct timespec waittime = {0};
+		waittime.tv_nsec = server->config->keepalive * 1000000000;
+		nanosleep(&waittime, NULL);
+	}
+#endif
 
 	return ret;
 }
 
 static int _httpserver_addclient(http_server_t *server, http_client_t *client)
 {
+/// The thread be not already started
+/// Enter here may be normal
+#if 0
 	if (!_httpclient_isalive(client))
+	{
 		warn("server: client invisible");
+		return EINCOMPLET;
+	}
+#endif
 	client->next = server->clients;
 	server->clients = client;
 	return ESUCCESS;
@@ -293,10 +313,13 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 
 		if (client != NULL)
 		{
-			_httpserver_addclient(server, client);
+			ret = _httpserver_addclient(server, client);
 		}
 		else
+		{
 			warn("server: client connection error");
+			ret = EINCOMPLETE;
+		}
 	}
 
 	return ret;
@@ -368,6 +391,16 @@ static int _httpserver_select(http_server_t *server, int maxfd, fd_set *prfds, f
 	return nbselect;
 }
 
+static void _httpserver_closeclients(http_server_t *server)
+{
+	http_client_t *next;
+	for (http_client_t *client = server->clients; client != NULL; client = next)
+	{
+			next = _httpserver_removeclient(server, client);
+			httpclient_destroy(client);
+	}
+}
+
 static int _httpserver_run(http_server_t *server)
 {
 	int ret = ESUCCESS;
@@ -413,9 +446,7 @@ static int _httpserver_run(http_server_t *server)
 		server_dbg("server: events %d", nbselect);
 		if (nbselect == 0)
 		{
-#ifdef VTHREAD
-			//vthread_yield(server->thread);
-#else
+
 			/**
 			 * poll/select exit on timeout
 			 * Check if a client is still available
@@ -432,7 +463,6 @@ static int _httpserver_run(http_server_t *server)
 			}
 			if (checkclients)
 				_httpserver_checkclients(server, prfds, pwfds, pefds);
-#endif
 		}
 		else if (nbselect < 0)
 		{
@@ -458,7 +488,6 @@ static int _httpserver_run(http_server_t *server)
 #ifdef CHECK_EBADF
 				if (fcntl(server->sock, F_GETFL) < 0)
 				{
-					server->run = 0;
 					err("server %p select EBADF", server);
 					ret = EREJECT;
 				}
@@ -474,10 +503,9 @@ static int _httpserver_run(http_server_t *server)
 #endif
 				errno = 0;
 			}
-			else
+			else if (server->run)
 			{
 				err("server %p select error (%d, %s)", server, errno, strerror(errno));
-				server->run = 0;
 				ret = EREJECT;
 			}
 		}
@@ -486,14 +514,25 @@ static int _httpserver_run(http_server_t *server)
 			int count = 0;
 			count = _httpserver_checkclients(server, prfds, pwfds, pefds);
 			if (count < server->config->maxclients)
-				ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
-			else
 			{
+				ret = _httpserver_checkserver(server, prfds, pwfds, pefds);
+			}
+			else
 				ret = EINCOMPLETE;
+			if (ret == EINCOMPLETE)
+			{
 				warn("server: too many clients");
+				/// DDOS attack
+				if (errno == EMFILE)
+				{
+					kill(0, SIGPIPE);
+					_httpserver_closeclients(server);
+				}
 #ifdef VTHREAD
 				vthread_yield(server->thread);
-				usleep(server->config->keepalive * 1000000);
+				struct timespec waittime = {0};
+				waittime.tv_nsec = server->config->keepalive * 1000000000;
+				nanosleep(&waittime, NULL);
 #endif
 			}
 
@@ -511,12 +550,7 @@ static int _httpserver_run(http_server_t *server)
 			run--;
 		}
 	}
-	http_client_t *next;
-	for (http_client_t *client = server->clients; client != NULL; client = next)
-	{
-			next = _httpserver_removeclient(server, client);
-			httpclient_destroy(client);
-	}
+	_httpserver_closeclients(server);
 	if (!vthread_sharedmemory(server->thread))
 	{
 		/// with forked client connection, it must be destroy by client and server
@@ -716,7 +750,18 @@ int httpserver_run(http_server_t *server)
 #ifndef VTHREAD
 	return _httpserver_run(server);
 #else
-	pause();
+	struct timeval timeout;
+	int maxfd = 0;
+	fd_set rfds;
+
+	FD_ZERO(&rfds);
+
+	timeout.tv_sec = WAIT_TIMER;
+	timeout.tv_usec = 0;
+
+	int ret = select(maxfd + 1, &rfds, NULL, NULL, &timeout);
+	if (ret < 0)
+		return EREJECT;
 	return ECONTINUE;
 #endif
 }
