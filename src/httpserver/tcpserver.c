@@ -118,6 +118,14 @@ static void *tcpclient_create(void *config, http_client_t *clt)
 		}
 	}
 
+#ifndef BLOCK_SOCKET
+		int flags;
+		flags = fcntl(clt->sock, F_GETFL, 0);
+		fcntl(clt->sock, F_SETFL, flags | O_NONBLOCK);
+		flags = fcntl(clt->sock, F_GETFD, 0);
+		fcntl(clt->sock, F_SETFD, flags | FD_CLOEXEC);
+#endif
+
 	return clt;
 }
 
@@ -273,7 +281,7 @@ static int tcpclient_wait(void *ctl, int options)
 	{
 		FD_SET(client->sock, &fds);
 	}
-	else if (poll_set[0].revents & POLLOUT)
+	else if (ret >= 0 && poll_set[0].revents & POLLOUT)
 	{
 		FD_SET(client->sock, &fds);
 	}
@@ -449,6 +457,31 @@ static void handler(int sig, siginfo_t *si, void *arg)
 }
 #endif
 
+static struct addrinfo *_tcpgetinterface(http_server_t *server)
+{
+	struct addrinfo hints = {0};
+	struct addrinfo *result = NULL;
+
+#ifdef USE_IPV6
+	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
+#else
+	hints.ai_family = AF_INET;
+#endif
+	hints.ai_socktype = SOCK_STREAM; /* Stream socket */
+	hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;    /* For wildcard IP address */
+	hints.ai_protocol = 0;          /* Any protocol */
+	hints.ai_canonname = NULL;
+	hints.ai_addr = NULL;
+	hints.ai_next = NULL;
+
+	if (getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result))
+	{
+		err("tcpserver: address info not found %m");
+		return NULL;
+	}
+	return result;
+}
+
 static int _tcpserver_start(http_server_t *server)
 {
 	int status = -1;
@@ -471,51 +504,37 @@ static int _tcpserver_start(http_server_t *server)
 	sigaction(SIGPIPE, &action, NULL);
 #endif
 
-	struct sockaddr_in saddr_in = {0};
 #ifdef USE_IPV6
 	struct sockaddr_in6 saddr_in6 = {0};
+#else
+	struct sockaddr_in saddr_in = {0};
 #endif
 
-	struct addrinfo hints = {0};;
+	struct addrinfo hints = {0};
 	struct addrinfo *result = NULL, *rp = NULL;
 
-	memset(&hints, 0, sizeof(struct addrinfo));
-#ifdef USE_IPV6
-	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
-#else
-	hints.ai_family = AF_INET;
-#endif
-	hints.ai_socktype = SOCK_STREAM; /* Stream socket */
-	hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;    /* For wildcard IP address */
-	hints.ai_protocol = 0;          /* Any protocol */
-	hints.ai_canonname = NULL;
-	hints.ai_addr = NULL;
-	hints.ai_next = NULL;
-
-	status = getaddrinfo(server->config->addr, str_defaultscheme, &hints, &result);
-	if (status != 0) {
-		warn("socket interface not found : %s", hstrerror(status));
-		rp = &hints;
-#ifdef USE_IPV6
-		if (rp->ai_family == AF_INET6)
-		{
-			saddr_in6.sin6_flowinfo = 0;
-			saddr_in6.sin6_addr = in6addr_any;
-			rp->ai_addr = (struct sockaddr *)&saddr_in6;
-			rp->ai_addrlen = sizeof(saddr_in6);
-		}
-		else if (rp->ai_family == AF_INET)
-#endif
-		{
-			memset(&saddr_in, 0, sizeof(saddr_in));
-			saddr_in.sin_family = AF_INET;
-			saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
-			rp->ai_addr = (struct sockaddr *)&saddr_in;
-			rp->ai_addrlen = sizeof(saddr_in);
-		}
-	}
+	if (server->config->addr)
+		rp = result = _tcpgetinterface(server);
 	else
-		rp = result;
+	{
+		rp = &hints;
+		rp->ai_socktype = SOCK_STREAM;
+		rp->ai_protocol = 0;
+#ifdef USE_IPV6
+		memset(&saddr_in6, 0, sizeof(saddr_in6));
+		saddr_in6.sin6_family = AF_INET6;
+		saddr_in6.sin6_addr = in6addr_any;
+		rp->ai_family = AF_INET6;
+		rp->ai_addr = (struct sockaddr *)&saddr_in6;
+		rp->ai_addrlen = sizeof(saddr_in6);
+#else
+		memset(&saddr_in, 0, sizeof(saddr_in));
+		saddr_in.sin_family = AF_INET;
+		saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
+		rp->ai_addr = (struct sockaddr *)&saddr_in;
+		rp->ai_addrlen = sizeof(saddr_in);
+#endif
+	}
 
 	for (; rp != NULL; rp = rp->ai_next)
 	{
@@ -602,13 +621,6 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 #endif
 		if (rc == 0)
 			warn("tcpserver: new connection %p (%d) from %s %d", client, client->sock, hoststr, server->config->port);
-#ifndef BLOCK_SOCKET
-		int flags;
-		flags = fcntl(httpclient_socket(client), F_GETFL, 0);
-		fcntl(httpclient_socket(client), F_SETFL, flags | O_NONBLOCK);
-		flags = fcntl(httpclient_socket(client), F_GETFD, 0);
-		fcntl(httpclient_socket(client), F_SETFD, flags | FD_CLOEXEC);
-#endif
 	}
 	return client;
 }
@@ -624,6 +636,46 @@ static void _tcpserver_close(http_server_t *server)
 #ifdef WIN32
 	WSACleanup();
 #endif
+}
+
+ssize_t tcpserver_getname(struct sockaddr_storage *addr, socklen_t addrlen, char *buffer, size_t length, int flag)
+{
+#ifdef USE_IPV6
+	struct sockaddr_in6 *sin = (struct sockaddr_in6 *)addr;
+	if ((sin->sin6_family != AF_INET) && (sin->sin6_family != AF_INET6))
+#else
+	struct sockaddr_in *sin = (struct sockaddr_in *)addr;
+	if (sin->sin_family != AF_INET)
+#endif
+	{
+		return -1;
+	}
+	int ret = -1;
+	if (flag == 0x01)
+	{
+		ret = getnameinfo((struct sockaddr *) addr, addrlen, buffer, length,
+				0, 0, NI_NAMEREQD | NI_NOFQDN);
+	} else if (flag == 0x02)
+		ret = getnameinfo((struct sockaddr *) addr, addrlen, 0, 0,
+				buffer, length, NI_NUMERICSERV);
+	else
+		ret = getnameinfo((struct sockaddr *) addr, addrlen, buffer, length,
+				0, 0, NI_NUMERICHOST);
+	if (ret == 0)
+	{
+#ifdef USE_IPV6
+			length = strnlen(buffer, length);
+			/// IPv4-mapped address on IPv6
+			if (!strncmp(buffer, "::ffff:", 7))
+			{
+				memmove(buffer, buffer + 7, length - 7 + 1); /// +1 for null terminated
+				length -= 7;
+			}
+#endif
+	}
+	else
+		length = -1;
+	return length;
 }
 
 //httpserver_ops_t *tcpops = &(httpserver_ops_t)
