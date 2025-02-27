@@ -1287,7 +1287,9 @@ int _httpmessage_fillheaderdb(http_message_t *message)
 		{
 			if (!strncasecmp( value + i, STRING_REF(str_keepalive)))
 			{
+#ifdef HTTPMESSAGE_KEEPALIVE_ENABLED
 				message->mode |= HTTPMESSAGE_KEEPALIVE;
+#endif
 			}
 			if (!strncasecmp( value + i, STRING_REF(str_upgrade)))
 			{
@@ -1709,12 +1711,11 @@ size_t httpmessage_SESSION2(http_message_t *message, const char *key, void **val
 {
 	size_t length = 0;
 	http_client_t * client = message->client;
-	if (client->session == NULL)
-		return 0;
-	dbentry_t *entry = dbentry_get(client->session->dbfirst, key);
-	if (entry && value)
+	dbentry_t *entry = httpclient_sessioninfo(client, key);
+	if (entry)
 	{
-		*value = client->session->storage->data + entry->value.offset;
+		if (value)
+			*value = client->session->storage->data + entry->value.offset;
 		length = entry->value.length;
 	}
 	return length;

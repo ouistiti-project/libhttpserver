@@ -64,6 +64,7 @@ struct http_client_s
 	vthread_t thread; /* The thread of socket management during the live of the connection */
 
 	const httpclient_ops_t *ops;
+	void *protocol;
 	void *opsctx; /* ctx of ops functions */
 	string_t scheme;
 
@@ -79,6 +80,9 @@ struct http_client_s
 	http_client_modctx_t *modctx; /* list of pointers returned by getctx of each mod */
 
 	buffer_t *sockdata;
+#ifdef HTTPCLIENT_DUMPSOCKET
+	int dumpfd;
+#endif
 
 	http_server_session_t *session;
 	struct sockaddr_storage addr;
@@ -89,13 +93,19 @@ typedef struct http_client_s http_client_t;
 
 int httpclient_socket(http_client_t *client);
 int _httpclient_run(http_client_t *client);
+int _httpclient_isalive(http_client_t *client);
 int httpclient_state(http_client_t *client, int newstate);
 #ifdef HTTPCLIENT_FEATURES
 void httpclient_appendops(const httpclient_ops_t *ops);
 const httpclient_ops_t *httpclient_ops();
 int _httpclient_connect(http_client_t *client, const char *addr, int port);
 #endif
+void httpclient_disconnect(http_client_t *client);
 int httpclient_addmodule(http_client_t *client, http_server_mod_t *mod);
 void httpclient_freemodules(http_client_t *client);
+void httpclient_freeconnectors(http_client_t *client);
+void httpclient_flag(http_client_t *client, int remove, int new);
+
+dbentry_t * httpclient_sessioninfo(http_client_t *client, const char *key);
 
 #endif

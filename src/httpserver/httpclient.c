@@ -26,6 +26,15 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *****************************************************************************/
 
+/**
+ * httpclient manages the connection with the client.
+ * In threading mode, the server's' thread just accepts the client connection,
+ * after the client starts a new thread where all communication are done.
+ * The socket shutdown and closing are done inside the client's thread,
+ * and the server's thread must wait the closing and destroy the client.
+ * With process (vthread_fork). the client's thread must destroy the client too,
+ * but while it is a process, the memory will be freed with its dead.
+ */
 #if defined(__GNUC__) && !defined(_GNU_SOURCE)
 # define _GNU_SOURCE
 #else
@@ -80,37 +89,93 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 	}
 	client->server = server;
 	client->ops = fops;
+	client->protocol = protocol;
 	_string_store(&client->scheme, fops->scheme, -1);
-	client->opsctx = client->ops->create(protocol, client);
-	if (client->opsctx == NULL)
+
+	client->client_send = client->ops->sendresp;
+	client->client_recv = client->ops->recvreq;
+	client->sockdata = _buffer_create(str_sockdata, 1);
+	if (client->sockdata == NULL)
 	{
-		vfree(client);
+		err("client: not enough memory");
+		_httpclient_destroy(client);
 		return NULL;
 	}
-
+	client->opsctx = client->ops->create(client->protocol, client);
+	if (client ->opsctx == NULL)
+	{
+		err("client: protocol error");
+		_httpclient_destroy(client);
+		return NULL;
+	}
+#ifdef HTTPCLIENT_DUMPSOCKET
+	char tmpname[] = "/tmp/ouistiticlient_XXXXXX.log";
+	client->dumpfd = mkstemps(tmpname, 4);
+	if (client->dumpfd > 0)
+	{
+		err("client: dump data");
+		char address[INET_ADDRSTRLEN] = {0};
+		inet_ntop(AF_INET, &client->addr, address,client);
+		dprintf(client->dumpfd, "data from %s %s\n\n", address, server->c_port);
+	}
+	else
+		err("client: dump data impossible %m");
+#endif
 	if (server)
 	{
+		for (http_server_mod_t *mod = server->mod; mod; mod = mod->next)
+		{
+			httpclient_addmodule(client, mod);
+		}
 		for (http_connector_list_t *callback = server->callbacks; callback != NULL; callback = callback->next)
 		{
 			httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
 		}
+#ifdef VTHREAD
+		vthread_attr_t attr;
+		httpclient_flag(client, 1, CLIENT_STOPPED);
+		httpclient_flag(client, 0, CLIENT_STARTED);
+		if (vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client)) != ESUCCESS)
+		{
+			httpclient_disconnect(client);
+			httpclient_destroy(client);
+			return NULL;
+		}
+		if (!vthread_sharedmemory(client->thread))
+		{
+			/**
+			 * To disallow the reception of SIGPIPE during the
+			 * "send" call, the socket into the parent process
+			 * must be closed.
+			 * Or the tcpserver must disable SIGPIPE
+			 * during the sending, but in this case
+			 * it is impossible to recceive real SIGPIPE.
+			 */
+			close(client->sock);
+		}
+#endif
 	}
-	client->client_send = client->ops->sendresp;
-	client->client_recv = client->ops->recvreq;
-	client->send_arg = client->opsctx;
-	client->recv_arg = client->opsctx;
-	client->sockdata = _buffer_create(str_sockdata, 1);
-	if (client->sockdata == NULL)
+#ifdef HTTPCLIENT_FEATURES
+	else
 	{
-		_httpclient_destroy(client);
-		client = NULL;
+		client->opsctx = client->ops->create(client->protocol, client);
+		if (client->opsctx == NULL)
+		{
+			httpclient_disconnect(client);
+			httpclient_destroy(client);
+			return NULL;
+		}
+		client->send_arg = client->opsctx;
+		client->recv_arg = client->opsctx;
 	}
+#endif
 
 	return client;
 }
 
-static void _httpclient_destroy(http_client_t *client)
+void httpclient_disconnect(http_client_t *client)
 {
+	httpclient_state(client, CLIENT_DEAD);
 	if (client->opsctx != NULL)
 	{
 		client->ops->flush(client->opsctx);
@@ -118,15 +183,16 @@ static void _httpclient_destroy(http_client_t *client)
 		client->ops->destroy(client->opsctx);
 		client->opsctx = NULL;
 	}
+}
 
-	client->modctx = NULL;
-	http_connector_list_t *callback = client->callbacks;
-	while (callback != NULL)
-	{
-		http_connector_list_t *next = callback->next;
-		free(callback);
-		callback = next;
-	}
+static void _httpclient_destroy(http_client_t *client)
+{
+	dbg("client: destroy");
+#ifdef VTHREAD
+	vthread_join(client->thread, NULL);
+#endif
+	httpclient_freemodules(client);
+	httpclient_freeconnectors(client);
 	if (client->session)
 	{
 		httpclient_dropsession(client);
@@ -134,6 +200,10 @@ static void _httpclient_destroy(http_client_t *client)
 	if (client->sockdata)
 		_buffer_destroy(client->sockdata);
 	client->sockdata = NULL;
+#ifdef HTTPCLIENT_DUMPSOCKET
+	if (client->dumpfd > 0)
+		close(client->dumpfd);
+#endif
 	http_message_t *request = client->request_queue;
 	while (request)
 	{
@@ -152,7 +222,6 @@ void httpclient_destroy(http_client_t *client)
 
 int httpclient_state(http_client_t *client, int newstate)
 {
-	client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
 	if (newstate >= 0)
 		client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
 	return client->state;
@@ -164,6 +233,18 @@ void httpclient_flag(http_client_t *client, int remove, int new)
 		client->state |= (new & ~CLIENT_MACHINEMASK);
 	else
 		client->state &= ~(new & ~CLIENT_MACHINEMASK);
+}
+
+void httpclient_freeconnectors(http_client_t *client)
+{
+	http_connector_list_t *callback = client->callbacks;
+	while (callback != NULL)
+	{
+		http_connector_list_t *next = callback->next;
+		free(callback);
+		callback = next;
+	}
+	client->callbacks = NULL;
 }
 
 void httpclient_addconnector(http_client_t *client, http_connector_t func, void *funcarg, int priority, const char *name)
@@ -439,7 +520,19 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 
 int _httpclient_run(http_client_t *client)
 {
-	int ret;
+	int ret = ECONTINUE;
+
+	if (client->ops->start)
+		ret = client->ops->start(client->opsctx);
+	if (ret != ECONTINUE || client->opsctx == NULL)
+	{
+		httpclient_flag(client, 0, CLIENT_ERROR);
+		httpclient_disconnect(client);
+		return EREJECT;
+	}
+	client->send_arg = client->opsctx;
+	client->recv_arg = client->opsctx;
+
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
 
@@ -462,16 +555,12 @@ int _httpclient_run(http_client_t *client)
 	 * it possible to leave this thread without shutdown the socket.
 	 * Be careful to not add action on the socket after this point
 	 */
-	client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
 	dbg("client: %d %p thread exit", vthread_self(client->thread), client);
+	httpclient_disconnect(client);
 	if (!vthread_sharedmemory(client->thread))
-		httpclient_destroy(client);
-	else if (client->opsctx != NULL)
 	{
-		client->ops->flush(client->opsctx);
-		client->ops->disconnect(client->opsctx);
-		client->ops->destroy(client->opsctx);
-		client->opsctx = NULL;
+		/// with forked client connection, it must be destroy by client and server
+		httpclient_destroy(client);
 	}
 #else
 	do
@@ -480,7 +569,9 @@ int _httpclient_run(http_client_t *client)
 	}
 	while (ret == EINCOMPLETE && client->request_queue == NULL);
 	if (ret == ESUCCESS)
-		client->state = CLIENT_DEAD | (client->state & ~CLIENT_MACHINEMASK);
+	{
+		httpclient_disconnect(client);
+	}
 #endif
 #ifdef DEBUG
 	fflush(stderr);
@@ -624,6 +715,12 @@ static int _httpclient_message(http_client_t *client, http_message_t *request)
 	int ret = _httpmessage_parserequest(request, client->sockdata);
 
 	if ((request->mode & HTTPMESSAGE_KEEPALIVE) &&
+		!client->server->config->keepalive)
+	{
+		request->mode &= ~HTTPMESSAGE_KEEPALIVE;
+	}
+
+	if ((request->mode & HTTPMESSAGE_KEEPALIVE) &&
 		(request->version > HTTP10))
 	{
 		dbg("client: set keep-alive");
@@ -638,7 +735,7 @@ static int _httpclient_changeresponsestate(http_client_t *client, http_message_t
 	{
 	case ESUCCESS:
 	{
-		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_WAITING);
 		if ((response->state & PARSE_MASK) < PARSE_POSTHEADER)
 			_httpmessage_changestate(response, PARSE_POSTHEADER);
 		if (!(response->state & GENERATE_MASK))
@@ -740,7 +837,7 @@ static int _httpclient_request(http_client_t *client, http_message_t *request)
 	else if ((request->mode & HTTPMESSAGE_LOCKED) ||
 		(request->response->mode & HTTPMESSAGE_LOCKED))
 	{
-			client->state |= CLIENT_LOCKED;
+		httpclient_flag(client, 0, CLIENT_LOCKED);
 	}
 	return ret;
 }
@@ -905,12 +1002,17 @@ static int _httpclient_response_generate_separator(http_client_t *client, http_m
 	}
 	if (client->ops->flush != NULL)
 		client->ops->flush(client->opsctx);
+	/// Head method requires only the header
 	if (request->method && request->method->id == MESSAGE_TYPE_HEAD)
 	{
-		_httpmessage_changestate(response, GENERATE_END);
-		ret = ECONTINUE;
+		if (response->content != NULL)
+		{
+			_buffer_destroy(response->content);
+			response->content = NULL;
+		}
+		response->state &= ~PARSE_CONTINUE;
 	}
-	else if (response->content != NULL)
+	if (response->content != NULL)
 	{
 		int sent;
 		size_t contentlength = _buffer_length(response->content);
@@ -1096,6 +1198,19 @@ int _httpclient_geterror(http_client_t *client)
 	warn("client: bad request");
 	_httpmessage_changestate(client->request, PARSE_END);
 	client->request = NULL;
+	httpclient_flag(client, 0, CLIENT_ERROR);
+	return ESUCCESS;
+}
+
+int _httpclient_isalive(http_client_t *client)
+{
+	if ((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
+		return EREJECT;
+#ifdef VTHREAD
+	vthread_yield(client->thread);
+	if (!vthread_exist(client->thread))
+		return EREJECT;
+#endif
 	return ESUCCESS;
 }
 
@@ -1103,6 +1218,8 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 {
 	int ret = ECONTINUE;
 	int wait_option = 0;
+	if (client->state & CLIENT_STOPPED)
+		httpclient_state(client, CLIENT_EXIT);
 
 	switch (client->state & CLIENT_MACHINEMASK)
 	{
@@ -1110,15 +1227,18 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 			wait_option = WAIT_ACCEPT;
 		case CLIENT_WAITING:
 		{
-			ret = _httpclient_wait(client, wait_option);
+			ret = ESUCCESS;
+			if (_buffer_empty(client->sockdata))
+				ret = _httpclient_wait(client, wait_option);
 			/// timeout on socket
-#if 0
 			if (ret == EREJECT && errno == EAGAIN)
 			{
-				client->state |= CLIENT_STOPPED;
+				err("client: %p timeout", client);
+				httpclient_flag(client, 0, CLIENT_STOPPED);
+#if 0
 				ret = ESUCCESS;
-			}
 #endif
+			}
 		}
 		break;
 		case CLIENT_READING:
@@ -1153,7 +1273,7 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 			if (!(client->state & CLIENT_LOCKED))
 				client->ops->disconnect(client->opsctx);
 
-			client->state |= CLIENT_STOPPED;
+			httpclient_flag(client, 0, CLIENT_STOPPED);
 			ret = ESUCCESS;
 		}
 		default:
@@ -1166,8 +1286,6 @@ static int _httpclient_thread_receive(http_client_t *client)
 {
 
 	int size;
-	if (client->state & CLIENT_STOPPED)
-		return ESUCCESS;
 
 	/**
 	 * here, it is the call to the recvreq callback from the
@@ -1183,13 +1301,12 @@ static int _httpclient_thread_receive(http_client_t *client)
 		 * error on the connection
 		 */
 		_httpclient_geterror(client);
-		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-		client->state |= CLIENT_ERROR;
+		httpclient_state(client, CLIENT_EXIT);
 		return ECONTINUE;
 	}
 	else if (size == EINCOMPLETE)
 	{
-		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_WAITING);
 	}
 	else
 	{
@@ -1198,7 +1315,11 @@ static int _httpclient_thread_receive(http_client_t *client)
 		 */
 		client->sockdata->offset = client->sockdata->data;
 
-		client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_READING);
+#ifdef HTTPCLIENT_DUMPSOCKET
+		if (client->dumpfd > 0)
+			write(client->dumpfd, client->sockdata->data, size);
+#endif
 	}
 	return EINCOMPLETE;
 }
@@ -1226,7 +1347,7 @@ static void _httpclient_thread_fillrequest(http_client_t *client)
 		/**
 		 * The request is ready to be manipulate by the connectors
 		 */
-		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_WAITING);
 	}
 	break;
 	case EINCOMPLETE:
@@ -1241,23 +1362,21 @@ static void _httpclient_thread_fillrequest(http_client_t *client)
 			/**
 			 * The request is not ready and need more data
 			 */
-			client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+			httpclient_state(client, CLIENT_WAITING);
 		}
 		else
 		{
-			client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+			httpclient_state(client, CLIENT_READING);
 		}
 #else
-		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_WAITING);
 #endif
 	}
 	break;
 	case EREJECT:
 	{
 		_httpclient_geterror(client);
-
-		client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
-		client->state |= CLIENT_ERROR;
+		httpclient_state(client, CLIENT_READING);
 		_buffer_reset(client->sockdata, 0);
 	}
 	break;
@@ -1273,7 +1392,7 @@ static void _httpclient_thread_fillrequest(http_client_t *client)
 			_buffer_shrink(client->sockdata);
 		}
 		client->request = NULL;
-		client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_SENDING);
 	}
 	}
 }
@@ -1305,7 +1424,7 @@ static void _httpclient_thread_parserequest(http_client_t *client, http_message_
 	}
 	if (ret == EREJECT)
 	{
-		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_EXIT);
 	}
 	else if (ret == EINCOMPLETE)
 	{
@@ -1338,40 +1457,35 @@ static int _httpclient_thread_generateresponse(http_client_t *client, http_messa
 			if (_httpmessage_contentempty(response, 1))
 			{
 				dbg("client: disable keep alive (Content-Length is not set)");
-				client->state &= ~CLIENT_KEEPALIVE;
+				httpclient_flag(client, 1, CLIENT_KEEPALIVE);
 			}
 
 			if ((request->state & PARSE_MASK) < PARSE_END)
 			{
 				client_dbg("client: incomplete");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				httpclient_state(client, CLIENT_EXIT);
 				ret = EINCOMPLETE;
 			}
 			else if (client->state & CLIENT_ERROR)
 			{
 				client_dbg("client: error");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				httpclient_state(client, CLIENT_EXIT);
 			}
 			else if (client->state & CLIENT_LOCKED)
 			{
 				client_dbg("client: locked");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				httpclient_state(client, CLIENT_EXIT);
 			}
-			else if (httpmessage_result(response, -1) > 399)
-			{
-				client_dbg("client: exit on result");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-				ret = EINCOMPLETE;
-			}
-			else if (client->state & CLIENT_KEEPALIVE)
+			else if ((client->state & CLIENT_KEEPALIVE) &&
+					(httpmessage_result(response, -1) < 400))
 			{
 				client_dbg("client: keep alive");
-				client->state = CLIENT_READING | (client->state & ~CLIENT_MACHINEMASK);
+				httpclient_state(client, CLIENT_READING);
 			}
 			else
 			{
 				client_dbg("client: exit");
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				httpclient_state(client, CLIENT_EXIT);
 				ret = EINCOMPLETE;
 			}
 			/**
@@ -1386,10 +1500,10 @@ static int _httpclient_thread_generateresponse(http_client_t *client, http_messa
 		else if (res_ret == EREJECT)
 		{
 			err("client should exit");
-			client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+			httpclient_state(client, CLIENT_EXIT);
 		}
 		else
-			client->state = CLIENT_SENDING | (client->state & ~CLIENT_MACHINEMASK);
+			httpclient_state(client, CLIENT_SENDING);
 	}
 	return ret;
 }
@@ -1419,24 +1533,27 @@ static int _httpclient_thread(http_client_t *client)
 	ret = _httpclient_thread_statemachine(client);
 
 	if ((ret == ESUCCESS) && (client->state & CLIENT_STOPPED))
+	{
 		return ret;
+	}
 	else if ((ret == ESUCCESS) && !(client->state & CLIENT_LOCKED))
 	{
 		int ret = _httpclient_thread_receive(client);
 		if (ret != EINCOMPLETE)
+		{
 			return ret;
+		}
 	}
 	else if (ret == EREJECT)
 	{
 		err("client: message in error");
 		_httpclient_geterror(client);
-		client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
-		client->state |= CLIENT_ERROR;
+		httpclient_state(client, CLIENT_EXIT);
 		return ECONTINUE;
 	}
 	else if (ret == EINCOMPLETE)
 	{
-		client->state = CLIENT_WAITING | (client->state & ~CLIENT_MACHINEMASK);
+		httpclient_state(client, CLIENT_WAITING);
 	}
 
 	/**
@@ -1465,7 +1582,8 @@ static int _httpclient_thread(http_client_t *client)
 void httpclient_shutdown(http_client_t *client)
 {
 	client->ops->disconnect(client->opsctx);
-	client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+	httpclient_flag(client, 0, CLIENT_STOPPED);
+	httpclient_flag(client, 1, CLIENT_KEEPALIVE);
 }
 
 void httpclient_flush(http_client_t *client)
@@ -1512,7 +1630,7 @@ void httpclient_dropsession(http_client_t *client)
 	client->session = NULL;
 }
 
-static dbentry_t * _httpclient_sessioninfo(http_client_t *client, const char *key)
+dbentry_t * httpclient_sessioninfo(http_client_t *client, const char *key)
 {
 	dbentry_t *sessioninfo = NULL;
 	if (client == NULL)
@@ -1538,12 +1656,14 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 			return NULL;
 		if (entry != NULL)
 		{
+			/// remove the previous entry
 #if 0
 			_buffer_deletedb(client->session->storage, entry, 0);
 #else
 			client->session->storage->data[entry->key.offset] = SESSION_SEPARATOR[0];
 #endif
 		}
+		/// append the key=value to the end of the storage
 		int keyof = _buffer_append(client->session->storage, key, keylen);
 		_buffer_append(client->session->storage, "=", 1);
 		int valueof = _buffer_append(client->session->storage, value, size);
@@ -1553,8 +1673,10 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 		client->session->dbfirst = NULL;
 		_buffer_filldb(client->session->storage, &client->session->dbfirst, '=', SESSION_SEPARATOR[0]);
 #else
+		/// retreive the key and value inside the storage
 		key = _buffer_get(client->session->storage, keyof);
 		value = _buffer_get(client->session->storage, valueof);
+		/// create db entry without the trailing SEPARATOR
 		_buffer_dbentry(client->session->storage, &client->session->dbfirst, key, keylen, value, client->session->storage->length - 1);
 #endif
 		entry = dbentry_get(client->session->dbfirst, key);
@@ -1568,7 +1690,7 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 
 const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, size_t size)
 {
-	dbentry_t *entry = _httpclient_sessioninfo(client, key);
+	dbentry_t *entry = httpclient_sessioninfo(client, key);
 	if (entry == NULL)
 		return NULL;
 	void *valueend = client->session->storage->data + entry->value.offset + entry->value.length;
@@ -1582,6 +1704,7 @@ const void *httpclient_appendsession(http_client_t *client, const char *key, con
 	_buffer_pop(client->session->storage, 1);
 	_buffer_append(client->session->storage, value, size);
 	_buffer_append(client->session->storage, SESSION_SEPARATOR, 1);
+	entry->value.length += size;
 	return client->session->storage->data + entry->value.offset;
 }
 
