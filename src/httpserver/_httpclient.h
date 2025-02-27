@@ -65,6 +65,7 @@ struct http_client_s
 
 	const httpclient_ops_t *ops;
 	void *opsctx; /* ctx of ops functions */
+	string_t scheme;
 
 	http_send_t client_send;
 	void *send_arg;
@@ -88,6 +89,7 @@ typedef struct http_client_s http_client_t;
 
 int httpclient_socket(http_client_t *client);
 int _httpclient_run(http_client_t *client);
+int httpclient_state(http_client_t *client, int newstate);
 #ifdef HTTPCLIENT_FEATURES
 void httpclient_appendops(const httpclient_ops_t *ops);
 const httpclient_ops_t *httpclient_ops();

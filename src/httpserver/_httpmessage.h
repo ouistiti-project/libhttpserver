@@ -91,7 +91,8 @@ struct http_message_s
 		PARSE_POSTHEADER = 0x0009,
 		PARSE_PRECONTENT = 0x000A,
 		PARSE_CONTENT = 0x000B,
-		PARSE_END = 0x000C,
+//		PARSE_POSTCONTENT = 0x000C, /**POSTCONTENT is here to allow to parse all the content of POST request  see _httpclient_request*/
+		PARSE_END = 0x000D,
 		PARSE_MASK = 0x000F,
 		GENERATE_ERROR = 0x0010,
 		GENERATE_INIT = 0x0020,

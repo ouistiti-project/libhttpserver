@@ -74,9 +74,13 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 {
 	http_client_t *client = vcalloc(1, sizeof(*client));
 	if (client == NULL)
+	{
+		err("client: not enough memory");
 		return NULL;
+	}
 	client->server = server;
 	client->ops = fops;
+	_string_store(&client->scheme, fops->scheme, -1);
 	client->opsctx = client->ops->create(protocol, client);
 	if (client->opsctx == NULL)
 	{
@@ -146,9 +150,12 @@ void httpclient_destroy(http_client_t *client)
 	_httpclient_destroy(client);
 }
 
-void httpclient_state(http_client_t *client, int new)
+int httpclient_state(http_client_t *client, int newstate)
 {
-	client->state = new | (client->state & ~CLIENT_MACHINEMASK);
+	client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
+	if (newstate >= 0)
+		client->state = newstate | (client->state & ~CLIENT_MACHINEMASK);
+	return client->state;
 }
 
 void httpclient_flag(http_client_t *client, int remove, int new)
@@ -301,7 +308,7 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		buffer_t *uri = request->uri;
 		size = client->client_send(client->send_arg, _buffer_get(uri, 0), _buffer_length(uri));
 		const char *version = NULL;
-		int versionlen = httpserver_version(request->version, &version);
+		size_t versionlen = httpserver_version(request->version, &version);
 		if (version)
 		{
 			client->client_send(client->send_arg, " ", 1);
