@@ -90,8 +90,16 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 	client->sockdata = _buffer_create(str_sockdata, 1);
 	if (client->sockdata == NULL)
 	{
+		err("client: not enough memory");
 		_httpclient_destroy(client);
-		client = NULL;
+		return NULL;
+	}
+	client ->opsctx = client->ops->create(client->protocol, client);
+	if (client ->opsctx == NULL)
+	{
+		err("client: protocol error");
+		_httpclient_destroy(client);
+		return NULL;
 	}
 #ifdef HTTPCLIENT_DUMPSOCKET
 	char tmpname[] = "/tmp/ouistiticlient_XXXXXX.log";
@@ -497,6 +505,18 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 int _httpclient_run(http_client_t *client)
 {
 	int ret = ECONTINUE;
+
+	if (client->ops->start)
+		ret = client->ops->start(client->opsctx);
+	if (ret != ECONTINUE || client->opsctx == NULL)
+	{
+		httpclient_flag(client, 0, CLIENT_ERROR);
+		httpclient_disconnect(client);
+		return EREJECT;
+	}
+	client->send_arg = client->opsctx;
+	client->recv_arg = client->opsctx;
+
 	httpclient_flag(client, 1, CLIENT_STARTED);
 	httpclient_flag(client, 0, CLIENT_RUNNING);
 

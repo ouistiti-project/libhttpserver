@@ -116,6 +116,7 @@ typedef int http_message_result_e;
 #endif
 
 typedef void *(*http_create_t)(void *config, http_client_t *clt);
+typedef int (*http_start_t)(void *ctx);
 typedef int (*http_connect_t)(void *ctx, const char *addr, int port);
 typedef int (*http_wait_t)(void *ctx, int options);
 typedef int (*http_status_t)(void *ctx);
@@ -153,6 +154,7 @@ struct httpclient_ops_s
 	int default_port;
 	int type;
 	http_create_t create;
+	http_start_t start; /* begins the communication with the client */
 	http_connect_t connect; /* callback to connect on an external server */
 	http_recv_t recvreq; /* callback to receive data on the socket */
 	http_send_t sendresp; /* callback to send data on the socket */

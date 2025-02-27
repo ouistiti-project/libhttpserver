@@ -428,6 +428,7 @@ const httpclient_ops_t *tcpclient_ops = &(httpclient_ops_t)
 	.default_port = 80,
 	.type = 0,
 	.create = &tcpclient_create,
+	.start = NULL,
 #ifdef HTTPCLIENT_FEATURES
 	.connect = &tcpclient_connect,
 #else
