@@ -64,9 +64,16 @@ static void * _thread_run(void *data)
 	dbg("thread start");
 	while (thread->state > E_STOPPED)
 	{
+#ifdef THREADPOOL_TIMED
+		const struct timespec timeout = {.tv_sec=0, .tv_nsec=10000000};
+#endif
 		pthread_mutex_lock(&thread->mutex);
 		while (thread->state == E_WAITING)
+#ifdef THREADPOOL_TIMED
+			pthread_cond_timedwait(&thread->cond, &thread->mutex, &timeout);
+#else
 			pthread_cond_wait(&thread->cond, &thread->mutex);
+#endif
 		pthread_mutex_unlock(&thread->mutex);
 		if (thread->state == E_STOPPED)
 			break;
@@ -75,7 +82,7 @@ static void * _thread_run(void *data)
 		pthread_mutex_lock(&thread->mutex);
 		thread->state = E_WAITING;
 		pthread_mutex_unlock(&thread->mutex);
-		pthread_cond_signal(&thread->cond);
+		pthread_cond_broadcast(&thread->cond);
 	}
 	dbg("thread end");
 	return NULL;
@@ -124,7 +131,7 @@ int threadpool_get(threadpool_t *pool, threadhandler_t hdl, void *hdldata, void 
 			it->userdata = userdata;
 			it->state = E_RUNNING;
 			pthread_mutex_unlock(&it->mutex);
-			pthread_cond_signal(&it->cond);
+			pthread_cond_broadcast(&it->cond);
 			ret = it->id;
 			break;
 		}
@@ -145,9 +152,16 @@ int threadpool_wait(threadpool_t *pool, int id)
 		return -1;
 	}
 
+#ifdef THREADPOOL_TIMED
+	const struct timespec timeout = {.tv_sec=0, .tv_nsec=10000000};
+#endif
 	pthread_mutex_lock(&it->mutex);
 	while (it->state == E_RUNNING)
+#ifdef THREADPOOL_TIMED
+		pthread_cond_timedwait(&it->cond, &it->mutex, &timeout);
+#else
 		pthread_cond_wait(&it->cond, &it->mutex);
+#endif
 	pthread_mutex_unlock(&it->mutex);
 	return -(it->state != E_STOPPED);
 }
