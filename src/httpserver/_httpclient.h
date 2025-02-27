@@ -106,4 +106,6 @@ void httpclient_freemodules(http_client_t *client);
 void httpclient_freeconnectors(http_client_t *client);
 void httpclient_flag(http_client_t *client, int remove, int new);
 
+dbentry_t * httpclient_sessioninfo(http_client_t *client, const char *key);
+
 #endif

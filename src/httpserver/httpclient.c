@@ -1617,7 +1617,7 @@ void httpclient_dropsession(http_client_t *client)
 	client->session = NULL;
 }
 
-static dbentry_t * _httpclient_sessioninfo(http_client_t *client, const char *key)
+dbentry_t * httpclient_sessioninfo(http_client_t *client, const char *key)
 {
 	dbentry_t *sessioninfo = NULL;
 	if (client == NULL)
@@ -1643,12 +1643,14 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 			return NULL;
 		if (entry != NULL)
 		{
+			/// remove the previous entry
 #if 0
 			_buffer_deletedb(client->session->storage, entry, 0);
 #else
 			client->session->storage->data[entry->key.offset] = SESSION_SEPARATOR[0];
 #endif
 		}
+		/// append the key=value to the end of the storage
 		int keyof = _buffer_append(client->session->storage, key, keylen);
 		_buffer_append(client->session->storage, "=", 1);
 		int valueof = _buffer_append(client->session->storage, value, size);
@@ -1658,8 +1660,10 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 		client->session->dbfirst = NULL;
 		_buffer_filldb(client->session->storage, &client->session->dbfirst, '=', SESSION_SEPARATOR[0]);
 #else
+		/// retreive the key and value inside the storage
 		key = _buffer_get(client->session->storage, keyof);
 		value = _buffer_get(client->session->storage, valueof);
+		/// create db entry without the trailing SEPARATOR
 		_buffer_dbentry(client->session->storage, &client->session->dbfirst, key, keylen, value, client->session->storage->length - 1);
 #endif
 		entry = dbentry_get(client->session->dbfirst, key);
@@ -1673,7 +1677,7 @@ const void *httpclient_session(http_client_t *client, const char *key, size_t ke
 
 const void *httpclient_appendsession(http_client_t *client, const char *key, const void *value, size_t size)
 {
-	dbentry_t *entry = _httpclient_sessioninfo(client, key);
+	dbentry_t *entry = httpclient_sessioninfo(client, key);
 	if (entry == NULL)
 		return NULL;
 	void *valueend = client->session->storage->data + entry->value.offset + entry->value.length;
@@ -1687,6 +1691,7 @@ const void *httpclient_appendsession(http_client_t *client, const char *key, con
 	_buffer_pop(client->session->storage, 1);
 	_buffer_append(client->session->storage, value, size);
 	_buffer_append(client->session->storage, SESSION_SEPARATOR, 1);
+	entry->value.length += size;
 	return client->session->storage->data + entry->value.offset;
 }
 
