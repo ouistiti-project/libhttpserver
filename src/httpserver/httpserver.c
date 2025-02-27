@@ -200,7 +200,6 @@ static http_client_t *_httpserver_removeclient(http_server_t *server, http_clien
 		client2->next = client->next;
 		client2 = client2->next;
 	}
-	httpclient_destroy(client);
 	return client2;
 }
 
@@ -513,8 +512,18 @@ static int _httpserver_run(http_server_t *server)
 		if (!server->run)
 		{
 			run--;
-			server->ops->close(server);
 		}
+	}
+	http_client_t *next;
+	for (http_client_t *client = server->clients; client != NULL; client = next)
+	{
+			next = _httpserver_removeclient(server, client);
+			httpclient_destroy(client);
+	}
+	if (!vthread_sharedmemory(server->thread))
+	{
+		/// with forked client connection, it must be destroy by client and server
+		httpserver_destroy(server);
 	}
 	warn("server end");
 	return ret;
@@ -744,6 +753,14 @@ void httpserver_destroy(http_server_t *server)
 		server->thread = NULL;
 	}
 #endif
+	http_client_t *client = server->clients;
+	while (client != NULL)
+	{
+		http_client_t *next = client->next;
+		httpclient_destroy(client);
+		client = next;
+	}
+	server->clients = NULL;
 	http_connector_list_t *callback = server->callbacks;
 	while (callback)
 	{
