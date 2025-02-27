@@ -219,11 +219,11 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 		{
 			if (fcntl(httpclient_socket(client), F_GETFL) < 0)
 			{
-				err("client %p error (%d, %s)", client, errno, strerror(errno));
+				err("server: client %p error (%d, %s)", client, errno, strerror(errno));
 				if (errno == EBADF)
 				{
 					err("EBADF");
-					client->state |= CLIENT_STOPPED;
+					httpclient_flag(client, 0, CLIENT_STOPPED);
 				}
 			}
 			/** fcntl changes the value of errno **/
@@ -232,14 +232,14 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 #endif
 		if (client->timeout < 0)
 		{
-			client->state |= CLIENT_STOPPED;
+			httpclient_flag(client, 0, CLIENT_STOPPED);
 		}
 #ifndef VTHREAD
 		if (FD_ISSET(httpclient_socket(client), pefds))
 		{
 			err("client %p exception", client);
 			if ((client->state & CLIENT_MACHINEMASK) != CLIENT_NEW)
-				client->state = CLIENT_EXIT | (client->state & ~CLIENT_MACHINEMASK);
+				httpclient_state(client, CLIENT_EXIT);
 			else
 				FD_CLR(httpclient_socket(client), prfds);
 		}

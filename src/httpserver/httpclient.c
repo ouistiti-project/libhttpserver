@@ -166,6 +166,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 
 void httpclient_disconnect(http_client_t *client)
 {
+	httpclient_state(client, CLIENT_DEAD);
 	if (client->opsctx != NULL)
 	{
 		client->ops->flush(client->opsctx);
@@ -1184,6 +1185,7 @@ int _httpclient_geterror(http_client_t *client)
 	warn("client: bad request");
 	_httpmessage_changestate(client->request, PARSE_END);
 	client->request = NULL;
+	httpclient_flag(client, 0, CLIENT_ERROR);
 	return ESUCCESS;
 }
 
@@ -1287,7 +1289,6 @@ static int _httpclient_thread_receive(http_client_t *client)
 		 */
 		_httpclient_geterror(client);
 		httpclient_state(client, CLIENT_EXIT);
-		httpclient_flag(client, 0, CLIENT_ERROR);
 		return ECONTINUE;
 	}
 	else if (size == EINCOMPLETE)
@@ -1362,9 +1363,7 @@ static void _httpclient_thread_fillrequest(http_client_t *client)
 	case EREJECT:
 	{
 		_httpclient_geterror(client);
-
 		httpclient_state(client, CLIENT_READING);
-		httpclient_flag(client, 0, CLIENT_ERROR);
 		_buffer_reset(client->sockdata, 0);
 	}
 	break;
@@ -1537,7 +1536,6 @@ static int _httpclient_thread(http_client_t *client)
 		err("client: message in error");
 		_httpclient_geterror(client);
 		httpclient_state(client, CLIENT_EXIT);
-		httpclient_flag(client, 0, CLIENT_ERROR);
 		return ECONTINUE;
 	}
 	else if (ret == EINCOMPLETE)
