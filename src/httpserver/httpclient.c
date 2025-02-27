@@ -122,7 +122,7 @@ http_client_t *httpclient_create(http_server_t *server, const httpclient_ops_t *
 		httpclient_flag(client, 0, CLIENT_STARTED);
 		if (vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client)) != ESUCCESS)
 		{
-			client->ops->disconnect(client->opsctx);
+			httpclient_disconnect(client);
 			httpclient_destroy(client);
 			return NULL;
 		}
