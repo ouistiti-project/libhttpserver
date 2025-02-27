@@ -251,14 +251,12 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 		}
 
 #endif
-		if (((client->state & CLIENT_MACHINEMASK) == CLIENT_DEAD)
-#ifdef VTHREAD
-			|| (!vthread_exist(client->thread))
-#endif
-			)
+		if (_httpclient_isalive(client) == EREJECT)
 		{
 			warn("client %p died", client);
-			client = _httpserver_removeclient(server, client);
+			http_client_t *next = _httpserver_removeclient(server, client);
+			httpclient_destroy(client);
+			client = next;
 		}
 		else
 		{
@@ -273,47 +271,11 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 
 static int _httpserver_addclient(http_server_t *server, http_client_t *client)
 {
-	int ret = EREJECT;
-
-	ret = _httpserver_setmod(server, client);
-#ifdef VTHREAD
-	if (ret == ESUCCESS)
-	{
-		vthread_attr_t attr;
-		client->state &= ~CLIENT_STOPPED;
-		client->state |= CLIENT_STARTED;
-		ret = vthread_create(&client->thread, &attr, (vthread_routine)_httpclient_run, (void *)client, sizeof(*client));
-		if (!vthread_sharedmemory(client->thread))
-		{
-			/**
-			 * To disallow the reception of SIGPIPE during the
-			 * "send" call, the socket into the parent process
-			 * must be closed.
-			 * Or the tcpserver must disable SIGPIPE
-			 * during the sending, but in this case
-			 * it is impossible to recceive real SIGPIPE.
-			 */
-			close(client->sock);
-		}
-	}
-#endif
-	if (ret == ESUCCESS)
-	{
-		client->next = server->clients;
-		server->clients = client;
-	}
-	else
-	{
-		/**
-		 * One module rejected the new client socket.
-		 * It may be a bug or a module checking the client
-		 * like "clientfilter"
-		 */
-		warn("server: connection refused by modules");
-		httpclient_shutdown(client);
-		httpclient_destroy(client);
-	}
-	return ret;
+	if (!_httpclient_isalive(client))
+		warn("server: client invisible");
+	client->next = server->clients;
+	server->clients = client;
+	return ESUCCESS;
 }
 
 static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set *pwfds, fd_set *pefds)
@@ -336,7 +298,6 @@ static int _httpserver_checkserver(http_server_t *server, fd_set *prfds, fd_set 
 		if (client != NULL)
 		{
 			_httpserver_addclient(server, client);
-			/// the return of this function talk about the client not the server
 		}
 		else
 			warn("server: client connection error");

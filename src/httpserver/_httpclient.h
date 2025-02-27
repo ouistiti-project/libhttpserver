@@ -64,6 +64,7 @@ struct http_client_s
 	vthread_t thread; /* The thread of socket management during the live of the connection */
 
 	const httpclient_ops_t *ops;
+	void *protocol;
 	void *opsctx; /* ctx of ops functions */
 	string_t scheme;
 
@@ -92,6 +93,7 @@ typedef struct http_client_s http_client_t;
 
 int httpclient_socket(http_client_t *client);
 int _httpclient_run(http_client_t *client);
+int _httpclient_isalive(http_client_t *client);
 int httpclient_state(http_client_t *client, int newstate);
 #ifdef HTTPCLIENT_FEATURES
 void httpclient_appendops(const httpclient_ops_t *ops);
