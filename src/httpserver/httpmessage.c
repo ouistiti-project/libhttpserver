@@ -916,11 +916,10 @@ static int _httpmessage_parsecontent(http_message_t *message, buffer_t *data)
 			length -= (data->offset - _buffer_get(data, 0));
 		}
 
-		if (message->content == NULL)
-		{
+		if (message->content_storage == NULL)
 			message->content_storage = _buffer_create(str_content, 1);
+		if (message->content == NULL)
 			message->content = message->content_storage;
-		}
 		_buffer_reset(message->content, 0);
 		if (message->content != data)
 			_buffer_append(message->content, data->offset, length);
@@ -1438,7 +1437,9 @@ int httpmessage_addcontent(http_message_t *message, const char *type, const char
 		}
 	}
 	if (message->content_storage == NULL)
+	{
 		message->content_storage = _buffer_create(str_content, MAXCHUNKS_CONTENT);
+	}
 	if (message->content == NULL && content != NULL)
 	{
 		_buffer_reset(message->content_storage, 0);
