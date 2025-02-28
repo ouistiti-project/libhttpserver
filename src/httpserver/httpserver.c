@@ -399,6 +399,7 @@ static void _httpserver_closeclients(http_server_t *server)
 			next = _httpserver_removeclient(server, client);
 			httpclient_destroy(client);
 	}
+	server->clients = NULL;
 }
 
 static int _httpserver_run(http_server_t *server)
@@ -796,13 +797,7 @@ void httpserver_destroy(http_server_t *server)
 	}
 #endif
 	http_client_t *client = server->clients;
-	while (client != NULL)
-	{
-		http_client_t *next = client->next;
-		httpclient_destroy(client);
-		client = next;
-	}
-	server->clients = NULL;
+	_httpserver_closeclients(server);
 	http_connector_list_t *callback = server->callbacks;
 	while (callback)
 	{

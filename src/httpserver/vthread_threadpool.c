@@ -116,12 +116,13 @@ int vthread_join(vthread_t vthread, void **value_ptr)
 	{
 		if (threadpool_wait(g_pool, vthread->id) == -1)
 		{
+			free(vthread);
 			return EREJECT;
 		}
 		if (value_ptr)
 			*value_ptr = vthread->rdata;
-		free(vthread);
 	}
+	free(vthread);
 	return ret;
 }
 
