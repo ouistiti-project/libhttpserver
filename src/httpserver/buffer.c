@@ -314,6 +314,11 @@ int _buffer_filldb(buffer_t *storage, dbentry_t **db, char separator, char field
 		}
 		else if (storage->data[i] == fieldsep || storage->data[i] == '\0')
 		{
+			if (key != NULL && keylen == 0)
+			{
+				keylen = &storage->data[i] - key;
+				value = (char *)str_true;
+			}
 			if (key != NULL && _buffer_dbentry(storage, db, key, keylen, value, i) < 0)
 				return -1;
 			else
