@@ -91,16 +91,21 @@ static void *MD5_init()
 {
 	md5_state_t *pctx;
 	pctx = calloc(1, sizeof(*pctx));
-	md5_init(pctx);
+	if (pctx)
+		md5_init(pctx);
 	return pctx;
 }
 static void MD5_update(void *ctx, const char *in, size_t len)
 {
+	if (!ctx)
+		return;
 	md5_state_t *pctx = (md5_state_t *)ctx;
 	md5_append(pctx, in, len);
 }
 static int MD5_finish(void *ctx, char *out)
 {
+	if (!ctx)
+		return -1;
 	md5_state_t *pctx = (md5_state_t *)ctx;
 	md5_finish(pctx, out);
 	free(pctx);
