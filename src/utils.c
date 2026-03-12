@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "ouistiti/log.h"
 #include "ouistiti/httpserver.h"
@@ -419,4 +420,44 @@ int utils_parsestring(const char *string, size_t stringlen, int listlength, util
 		}
 	}
 	return ret;
+}
+
+char *utils_abspath(const char *path)
+{
+	size_t length = strnlen(path, PATH_MAX);
+	char *abs = calloc(1, length);
+	char *absit = abs;
+	char *lastdir = abs;
+	for (const char *it = path; it < path + length; it++)
+	{
+		switch (*it)
+		{
+		case '.':
+			if (*(it + 1) == '.')
+			{
+				if (lastdir == NULL)
+					goto abspatherror;
+				absit = lastdir;
+				*absit = '\0';
+				lastdir = strrchr(abs, '/');
+				it += 1;
+			}
+			else if (*(it + 1) == '/')
+			{
+				// remove ./
+				it++;
+			}
+			else
+				*absit = *it;
+		break;
+		default:
+			*absit = *it;
+			absit++;
+			*absit = '\0';
+		}
+	}
+	return abs;
+abspatherror:
+	free(abs);
+	return NULL;
 }

@@ -57,4 +57,6 @@ struct utils_parsestring_s
 typedef struct utils_parsestring_s utils_parsestring_t;
 int utils_parsestring(const char *string, size_t stringlen, int listlength, utils_parsestring_t list[]);
 
+char *utils_abspath(const char *path);
+
 #endif
