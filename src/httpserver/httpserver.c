@@ -642,6 +642,12 @@ http_server_t *httpserver_dup(http_server_t *server, http_server_config_t *confi
 		return NULL;
 	vserver->config = config;
 	vserver->ops = server->ops;
+	if (config->hostname)
+		_string_store(&vserver->hostname, config->hostname, -1);
+	if (config->service)
+	{
+		_string_store(&vserver->service, config->service, -1);
+	}
 
 	for (const http_message_method_t *method = default_methods; method; method = method->next)
 	{
