@@ -804,12 +804,10 @@ static int _httpmessage_parsepostheader(http_message_t *message, buffer_t *data)
 	}
 	else
 	{
-#ifdef DEBUG
-		for (dbentry_t *entry = message->headers; entry != NULL; entry = entry->next)
+		for (dbentry_t *entry = message->headers; (message->client->state & CLIENT_INFO) && entry != NULL; entry = entry->next)
 		{
-			dbg("message: headers %s", entry->storage->data + entry->key.offset);
+			warn("message: request headers %s", entry->storage->data + entry->key.offset);
 		}
-#endif
 		_buffer_shrink(data);
 		next = PARSE_PRECONTENT;
 		message->state &= ~PARSE_CONTINUE;
@@ -1137,11 +1135,20 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 				it->func(it->arg, NULL, message);
 			}
 		}
+		for (dbentry_t *entry = message->headers; (message->client->state & CLIENT_INFO) && entry != NULL; entry = entry->next)
+		{
+			warn("message: response headers %s", entry->storage->data + entry->key.offset);
+		}
 		_buffer_serializedb(message->headers_storage, message->headers, ':', '\n');
 		dbentry_destroy(message->headers);
 		message->headers = NULL;
+		message->headers_storage->offset = (char *)_buffer_get(message->headers_storage, 0);
 	}
-	message->headers_storage->offset = (char *)_buffer_get(message->headers_storage, 0);
+	else
+	{
+		message->headers_storage->offset = (char *)_buffer_get(message->headers_storage, 0);
+		warn("message: response headers \n%.*s", message->headers_storage->length, message->headers_storage->data);
+	}
 	return message->headers_storage;
 }
 
