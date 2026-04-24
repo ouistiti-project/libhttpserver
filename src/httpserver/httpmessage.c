@@ -1191,7 +1191,7 @@ int httpmessage_content(http_message_t *message, const char **data, size_t *cont
 	/// the socket is already open but no data are ready
 	if (size == 0 && state < PARSE_END)
 		return ECONTINUE;
-	if (httpclient_state(message->client, -1) & CLIENT_STOPPED)
+	if (httpclient_state(message->client) & CLIENT_STOPPED)
 		return EREJECT;
 	return size;
 }

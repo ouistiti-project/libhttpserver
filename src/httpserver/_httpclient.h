@@ -28,14 +28,6 @@
 #ifndef ___HTTPCLIENT_H__
 #define ___HTTPCLIENT_H__
 
-#define CLIENT_STARTED 0x0100
-#define CLIENT_RUNNING 0x0200
-#define CLIENT_STOPPED 0x0400
-#define CLIENT_LOCKED  0x0800
-#define CLIENT_NONBLOCK 0x1000
-#define CLIENT_ERROR 0x2000
-#define CLIENT_RESPONSEREADY 0x4000
-#define CLIENT_KEEPALIVE 0x8000
 #define CLIENT_MACHINEMASK 0x000F
 #define CLIENT_NEW 0x0000
 #define CLIENT_READING 0x0001
@@ -94,7 +86,7 @@ typedef struct http_client_s http_client_t;
 int httpclient_socket(http_client_t *client);
 int _httpclient_run(http_client_t *client);
 int _httpclient_isalive(http_client_t *client);
-int httpclient_state(http_client_t *client, int newstate);
+int _httpclient_state(http_client_t *client, int newstate);
 #ifdef HTTPCLIENT_FEATURES
 void httpclient_appendops(const httpclient_ops_t *ops);
 const httpclient_ops_t *httpclient_ops();

@@ -237,7 +237,7 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 		{
 			err("client %p exception", client);
 			if ((client->state & CLIENT_MACHINEMASK) != CLIENT_NEW)
-				httpclient_state(client, CLIENT_EXIT);
+				_httpclient_state(client, CLIENT_EXIT);
 			else
 				FD_CLR(httpclient_socket(client), prfds);
 		}
@@ -251,7 +251,7 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 		if (_httpclient_isalive(client) == EREJECT)
 		{
 			warn("client %p died", client);
-			if (httpclient_state(client, -1) & CLIENT_ERROR)
+			if (httpclient_state(client) & CLIENT_ERROR)
 				error++;
 			http_client_t *next = _httpserver_removeclient(server, client);
 			httpclient_destroy(client);

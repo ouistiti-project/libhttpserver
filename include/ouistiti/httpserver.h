@@ -662,6 +662,23 @@ EXPORT_SYMBOL extern const httpclient_ops_t * tcpclient_ops;
 void EXPORT_SYMBOL httpclient_destroy(http_client_t *client);
 
 /**
+ * @brief return part of the client state field
+ *
+ * @param client the connection
+ */
+#define CLIENT_LOCALHOST 0x0010
+#define CLIENT_INFO 0x0020
+#define CLIENT_STARTED 0x0100
+#define CLIENT_RUNNING 0x0200
+#define CLIENT_STOPPED 0x0400
+#define CLIENT_LOCKED  0x0800
+#define CLIENT_NONBLOCK 0x1000
+#define CLIENT_ERROR 0x2000
+#define CLIENT_RESPONSEREADY 0x4000
+#define CLIENT_KEEPALIVE 0x8000
+int EXPORT_SYMBOL httpclient_state(http_client_t *client);
+
+/**
  * @brief create a session for this client
  *
  * @param client the connection that receive the request
