@@ -599,7 +599,7 @@ http_server_t *httpserver_create(http_server_config_t *config)
 		}
 	}
 	if (server->service.data == NULL)
-		_string_store(&server->service, str_defaultsservice, sizeof(str_defaultsservice));
+		_string_store(&server->service, str_defaultsservice, sizeof(str_defaultsservice) - 1);
 	server->ops = httpserver_ops;
 
 	for (const http_message_method_t *method = default_methods; method; method = method->next)
@@ -860,12 +860,26 @@ size_t httpserver_INFO2(http_server_t *server, const char *key, const char **val
 	}
 	else if (!strcasecmp(key, "domain"))
 	{
-		if (server->hostname.data)
-			*value = strchr(server->hostname.data, '.');
+		const char *hostname = NULL;
+		if (!_string_empty(&server->hostname))
+			hostname = _string_get(&server->hostname);
+		const char *service = NULL;
+		if (!_string_empty(&server->service))
+			service = _string_get(&server->service);
+		if (hostname && service)
+			*value = strstr(hostname, service);
 		if (*value)
 		{
-			*value = *value + 1;
-			valuelen = server->hostname.length - (*value - server->hostname.data);
+			/// hostname contains service
+			*value = _string_get(&server->hostname);
+			*value += _string_length(&server->service) + 1;
+			valuelen = _string_length(&server->hostname);
+			valuelen -= _string_length(&server->service) + 1;
+		}
+		else if (hostname)
+		{
+			*value = _string_get(&server->hostname);
+			valuelen = _string_length(&server->hostname);
 		}
 		else
 			*value = default_value;
