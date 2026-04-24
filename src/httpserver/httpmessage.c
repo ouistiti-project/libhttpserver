@@ -1546,7 +1546,14 @@ size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char
 {
 	size_t valuelen = 0;
 	*value = NULL;
-	if (!strcasecmp(key, "uri") && (message->uri != NULL))
+	if (!strcasecmp(key, "host"))
+	{
+		valuelen = dbentry_search(message->headers, key, value);
+		const char *end = strchr(*value, ':');
+		if (end)
+			valuelen = end - *value;
+	}
+	else if (!strcasecmp(key, "uri") && (message->uri != NULL))
 	{
 		*value = _buffer_get(message->uri, 0);
 		valuelen = _buffer_length(message->uri);
@@ -1666,8 +1673,6 @@ size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char
 			valuelen = tcpserver_getname(&sin, len, service, NI_MAXSERV, 2);
 			if ((ssize_t)valuelen > -1)
 				*value = service;
-			else
-				return 0;
 		}
 	}
 	else if (!strcasecmp(key, "addr"))
