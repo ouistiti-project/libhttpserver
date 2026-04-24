@@ -51,6 +51,7 @@
 #include <sys/resource.h>
 #include <time.h>
 #include <signal.h>
+#include <arpa/inet.h>
 
 #ifdef USE_POLL
 #include <poll.h>
@@ -262,6 +263,44 @@ int httpclient_addmodule(http_client_t *client, http_server_mod_t *mod)
 	http_client_modctx_t *modctx = vcalloc(1, sizeof(*modctx));
 	if (modctx == NULL)
 		return EREJECT;
+	if (client->addr.ss_family == AF_INET)
+	{
+		struct sockaddr_in *addr = (struct sockaddr_in *)&client->addr;
+		if (addr->sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+		{
+			client->state |= CLIENT_LOCALHOST;
+#ifdef DEBUG
+			client->state |= CLIENT_INFO;
+#endif
+		}
+	}
+	if (client->addr.ss_family == AF_INET6)
+	{
+		struct sockaddr_in6 *addr = (struct sockaddr_in6 *)&client->addr;
+
+		if (IN6_IS_ADDR_V4MAPPED(&addr->sin6_addr))
+		{
+			uint32_t v4;
+			memcpy(&v4, &addr->sin6_addr.s6_addr[12], sizeof(v4));
+			if (v4 == htonl(INADDR_LOOPBACK))
+			{
+				client->state |= CLIENT_LOCALHOST;
+#ifdef DEBUG
+				client->state |= CLIENT_INFO;
+#endif
+			}
+		}
+		if (IN6_IS_ADDR_LINKLOCAL(&addr->sin6_addr) ||
+			IN6_IS_ADDR_LOOPBACK(&addr->sin6_addr))
+		{
+			client->state |= CLIENT_LOCALHOST;
+#ifdef DEBUG
+			client->state |= CLIENT_INFO;
+#endif
+		}
+	}
+	if (client->state & CLIENT_LOCALHOST)
+		warn("client: connection from localhost");
 	if (mod->func)
 	{
 		modctx->ctx = mod->func(mod->arg, client, (struct sockaddr *)&client->addr, client->addr_size);
