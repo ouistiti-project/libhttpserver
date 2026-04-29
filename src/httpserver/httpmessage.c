@@ -1523,16 +1523,24 @@ int httpmessage_isprotected(http_message_t *message)
 }
 
 static char host[NI_MAXHOST] = {0};
-static char service[NI_MAXSERV];
+static char service[NI_MAXSERV] = {0};
 
 const char *httpmessage_SERVER(http_message_t *message, const char *key)
 {
-	if (message->client == NULL || httpclient_server(message->client) == NULL)
-		return NULL;
 	const char *value = NULL;
-
-	httpmessage_REQUEST2(message, key, &value);
+	httpmessage_SERVER2(message, key, &value);
 	return value;
+}
+
+static const char default_value[8] = {0};
+
+size_t httpmessage_SERVER2(http_message_t *message, const char *key, const char **value)
+{
+	if (message->client == NULL || httpclient_server(message->client) == NULL)
+		return 0;
+
+	size_t valuelen = httpserver_INFO2(httpclient_server(message->client), key, value);
+	return valuelen;
 }
 
 const char *httpmessage_REQUEST(http_message_t *message, const char *key)
@@ -1545,11 +1553,13 @@ const char *httpmessage_REQUEST(http_message_t *message, const char *key)
 size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char **value)
 {
 	size_t valuelen = 0;
-	*value = NULL;
+	*value = default_value;
 	if (!strcasecmp(key, "host"))
 	{
 		valuelen = dbentry_search(message->headers, key, value);
-		const char *end = strchr(*value, ':');
+		const char *end = NULL;
+		if (*value)
+			end = strchr(*value, ':');
 		if (end)
 			valuelen = end - *value;
 	}
@@ -1662,19 +1672,6 @@ size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char
 		else
 			return 0;
 	}
-	else if (!strcasecmp(key, "port"))
-	{
-		struct sockaddr_storage sin = {0};
-		socklen_t len = sizeof(sin);
-
-		memset(service, 0, NI_MAXSERV);
-		if (!getsockname(httpclient_socket(message->client), (struct sockaddr *)&sin, &len))
-		{
-			valuelen = tcpserver_getname(&sin, len, service, NI_MAXSERV, 2);
-			if ((ssize_t)valuelen > -1)
-				*value = service;
-		}
-	}
 	else if (!strcasecmp(key, "addr"))
 	{
 		struct sockaddr_storage sin = {0};
@@ -1686,21 +1683,11 @@ size_t httpmessage_REQUEST2(http_message_t *message, const char *key, const char
 			valuelen = tcpserver_getname(&sin, len, host, NI_MAXHOST, 0);
 			if ((ssize_t)valuelen > -1)
 				*value = host;
-			else
-				return 0;
-		}
-		if (*value != host)
-		{
-			valuelen = httpserver_INFO2(httpclient_server(message->client), "addr", value);
 		}
 	}
 	else
 	{
 		valuelen = dbentry_search(message->headers, key, value);
-	}
-	if (valuelen == (size_t)EREJECT)
-	{
-		valuelen = httpserver_INFO2(httpclient_server(message->client), key, value);
 	}
 	return valuelen;
 }
@@ -1712,6 +1699,8 @@ size_t httpmessage_parameter(http_message_t *message, const char *key, const cha
 		_buffer_filldb(message->query_storage, &message->queries, '=', '&');
 	}
 	ssize_t valuelen = 0;
+	if (value)
+		*value = default_value;
 	if (message->queries != NULL)
 		valuelen = dbentry_search(message->queries, key, value);
 	if (valuelen == EREJECT)
@@ -1723,6 +1712,8 @@ size_t httpmessage_cookie(http_message_t *message, const char *key, const char *
 {
 	size_t length = 0;
 	dbentry_t *entry = dbentry_get(message->cookies, key);
+	if (cookie)
+		*cookie = default_value;
 	if (entry && cookie)
 	{
 		*cookie = message->cookie_storage->data + entry->value.offset;
@@ -1736,7 +1727,7 @@ const void *httpmessage_SESSION(http_message_t *message, const char *key, void *
 	return httpclient_session(message->client, key, strlen(key), value, size);
 }
 
-size_t httpmessage_SESSION2(http_message_t *message, const char *key, void **value)
+size_t httpmessage_SESSION2(http_message_t *message, const char *key, const void **value)
 {
 	size_t length = 0;
 	http_client_t * client = message->client;

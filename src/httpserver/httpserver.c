@@ -93,6 +93,8 @@ static const char str_methods[] = "methods";
 
 static char _httpserver_software[] = "libhttpserver";
 char *httpserver_software = _httpserver_software;
+
+extern ssize_t tcpserver_getname(struct sockaddr_storage *addr, socklen_t addrlen, char *buffer, size_t length, int flag);
 /***********************************************************************
  * http_server
  */
@@ -852,6 +854,8 @@ size_t httpserver_INFO2(http_server_t *server, const char *key, const char **val
 {
 	size_t valuelen = 0;
 	*value = default_value;
+	static char host[NI_MAXHOST] = {0};
+	static char service[NI_MAXSERV] = {0};
 
 	if (!strcasecmp(key, "name") || !strcasecmp(key, "hostname"))
 	{
@@ -928,8 +932,21 @@ size_t httpserver_INFO2(http_server_t *server, const char *key, const char **val
 	}
 	else if (!strcasecmp(key, "port"))
 	{
-		*value = server->s_port.data;
-		valuelen = server->s_port.length;
+		struct sockaddr_storage sin = {0};
+		socklen_t len = sizeof(sin);
+
+		memset(service, 0, NI_MAXSERV);
+		if (!getsockname(server->sock, (struct sockaddr *)&sin, &len))
+		{
+			valuelen = tcpserver_getname(&sin, len, service, NI_MAXSERV, 2);
+			if ((ssize_t)valuelen > -1)
+				*value = service;
+		}
+		if (*value == NULL)
+		{
+			*value = server->s_port.data;
+			valuelen = server->s_port.length;
+		}
 	}
 	else if (!strcasecmp(key, "chunksize"))
 	{

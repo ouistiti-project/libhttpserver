@@ -572,6 +572,7 @@ EXPORT_SYMBOL int httpmessage_parsecgi(http_message_t *message, char *data, int 
  */
 
 EXPORT_SYMBOL const char * httpmessage_SERVER(http_message_t *message, const char *key);
+EXPORT_SYMBOL size_t httpmessage_SERVER2(http_message_t *message, const char *key, const char **value);
 
 /**
  * @brief get value for different attributs of the request
@@ -611,7 +612,7 @@ EXPORT_SYMBOL const void *httpmessage_SESSION(http_message_t *message, const cha
  *
  * @return the length of the content
  */
-EXPORT_SYMBOL size_t httpmessage_SESSION2(http_message_t *message, const char *key, void **value);
+EXPORT_SYMBOL size_t httpmessage_SESSION2(http_message_t *message, const char *key, const void **value);
 
 /**
  * @brief get value from query parameters and/or POST form data
