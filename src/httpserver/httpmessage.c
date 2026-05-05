@@ -1055,7 +1055,8 @@ int _httpmessage_parserequest(http_message_t *message, buffer_t *data)
 			case PARSE_END:
 			{
 				message_dbg("parse end with %lu data: %s", _buffer_length(data), data->offset);
-
+				if (message->client->state & CLIENT_INFO && message->query_storage)
+					warn("message: query %.*s", message->query_storage->length, message->query_storage->data);
 				if (message->result == RESULT_200)
 					ret = ESUCCESS;
 				else
@@ -1147,7 +1148,8 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 	else
 	{
 		message->headers_storage->offset = (char *)_buffer_get(message->headers_storage, 0);
-		warn("message: response headers \n%.*s", message->headers_storage->length, message->headers_storage->data);
+		 if (message->client->state & CLIENT_INFO)
+			warn("message: response headers \n%.*s", message->headers_storage->length, message->headers_storage->data);
 	}
 	return message->headers_storage;
 }
