@@ -784,6 +784,7 @@ int httpserver_reloadclient(http_server_t *server, http_client_t *client)
 	{
 		httpclient_addconnector(client, callback->func, callback->arg, callback->priority, callback->name);
 	}
+	client->server = server;
 	return EREJECT;
 }
 
