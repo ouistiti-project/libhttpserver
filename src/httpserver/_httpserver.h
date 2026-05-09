@@ -96,6 +96,7 @@ struct http_server_s
 	fd_set fds[3];
 	int numfds;
 	http_server_session_t *sessions;
+	http_server_t *parent;
 	http_server_t *next;
 };
 

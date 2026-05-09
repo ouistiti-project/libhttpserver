@@ -359,8 +359,10 @@ static int _httpmesssage_parsefailed(http_message_t *message)
 static int _httpmessage_parseinit(http_message_t *message, buffer_t *data)
 {
 	int next = PARSE_INIT;
-
-	for (const http_message_method_t *method = httpclient_server(message->client)->methods; method != NULL; method = method->next)
+	http_server_t *server = httpclient_server(message->client);
+	if (server->parent)
+		server = server->parent;
+	for (const http_message_method_t *method = server->methods; method != NULL; method = method->next)
 	{
 		size_t length = _string_length(&method->key);
 		if (!_string_cmp(&method->key, data->offset, -1) &&

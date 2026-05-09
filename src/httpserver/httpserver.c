@@ -638,11 +638,13 @@ http_server_t *httpserver_create(http_server_config_t *config)
 http_server_t *httpserver_dup(http_server_t *server, http_server_config_t *config)
 {
 	http_server_t *vserver;
-
+	if (server->parent)
+		return NULL;
 	vserver = vcalloc(1, sizeof(*vserver));
 	if (vserver == NULL)
 		return NULL;
 	vserver->config = config;
+	vserver->parent = server;
 	vserver->ops = server->ops;
 	if (config->hostname)
 		_string_store(&vserver->hostname, config->hostname, -1);
@@ -666,6 +668,8 @@ void httpserver_addmethod(http_server_t *server, const char *key, size_t keylen,
 {
 	short id = -1;
 
+	if (server->parent)
+		server = server->parent;
 	http_message_method_t *method;
 	for (method = server->methods; method != NULL; method = method->next)
 	{
