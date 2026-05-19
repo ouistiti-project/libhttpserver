@@ -147,10 +147,11 @@ uri_t *uri_create(char *src)
 	entry = calloc(1, sizeof(*entry));
 	if (entry == NULL)
 		return NULL;
-	entry->storage = calloc(1, strlen(src) + 1);
+	size_t length = strnlen(src, PATH_MAX);
+	entry->storage = calloc(1, length + 1);
 	if (entry->storage == NULL)
 		return NULL;
-	strcpy(entry->storage, src);
+	strncpy(entry->storage, src, length);
 	uri_parse(entry, entry->storage);
 	return entry;
 }
