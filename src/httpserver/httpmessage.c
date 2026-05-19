@@ -1497,7 +1497,12 @@ int httpmessage_appendcontent(http_message_t *message, const char *content, int 
 		size_t contentlength = _buffer_length(message->content);
 		if (length == -1)
 			length = strnlen(content, message->content->size - message->content->length);
-		if (!_httpmessage_contentempty(message, 1))
+		/**
+		 *  the contentlength is automaticly unset with addcontent.
+		 * if contentlength is greater than the buffer,
+		 * the contentlength was initialized with final value
+		 */
+		if (contentlength == message->content_length)
 			message->content_length += length;
 		if (_buffer_append(message->content, content, length) < 0)
 			return EREJECT;

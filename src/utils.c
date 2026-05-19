@@ -163,7 +163,7 @@ char *utils_urldecode(const char *encoded, size_t length)
 {
 	if (encoded == NULL)
 		return NULL;
-	if (length == -1)
+	if (length == (size_t)-1)
 		length = strlen(encoded);
 	if (length == 0)
 		return NULL;
