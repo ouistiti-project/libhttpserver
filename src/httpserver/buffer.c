@@ -430,6 +430,15 @@ dbentry_t *dbentry_get(dbentry_t *entry, const char *key)
 	return entry;
 }
 
+size_t dbentry_value(dbentry_t *entry, const char **value)
+{
+	if (entry == NULL)
+		return 0;
+	if (value)
+		*value = entry->storage->data + entry->value.offset;
+	return entry->value.length;
+}
+
 #if 0
 //used only in httpclient and disabled
 int _buffer_deletedb(buffer_t *storage, dbentry_t *entry, int shrink)

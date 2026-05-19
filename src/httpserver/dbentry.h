@@ -50,5 +50,6 @@ ssize_t dbentry_search(dbentry_t *entry, const char *key, const char **value);
 void dbentry_destroy(dbentry_t *entry);
 void dbentry_revert(dbentry_t *constentry, char separator, char fieldsep);
 dbentry_t *dbentry_get(dbentry_t *entry, const char *key);
+size_t dbentry_value(dbentry_t *entry, const char **value);
 
 #endif
