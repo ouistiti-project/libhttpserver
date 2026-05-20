@@ -1313,8 +1313,8 @@ int _httpmessage_fillheaderdb(http_message_t *message)
 	char *endvalue;
 	if (valuelen > 0)
 	{
-		long intvalue = strtol(value, &endvalue, 10);
-		if (endvalue - value == valuelen)
+		long intvalue = strtoull(value, &endvalue, 10);
+		if (endvalue - value == valuelen && intvalue > 0)
 			message->content_length = intvalue;
 	}
 	valuelen = dbentry_search(message->headers, "Status", &value);
