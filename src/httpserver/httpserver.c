@@ -646,6 +646,7 @@ http_server_t *httpserver_dup(http_server_t *server, http_server_config_t *confi
 	vserver->config = config;
 	vserver->parent = server;
 	vserver->ops = server->ops;
+	memcpy(&vserver->name, &server->name, sizeof(vserver->name));
 	if (config->hostname)
 		_string_store(&vserver->hostname, config->hostname, -1);
 	if (config->service)
