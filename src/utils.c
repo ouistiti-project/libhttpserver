@@ -179,7 +179,7 @@ char *utils_urldecode(const char *encoded, size_t length)
 		if (*encoded == '%')
 		{
 			encoded++;
-			char *end = strchr(encoded, ';');
+			const char *end = strchr(encoded, ';');
 			if (end == NULL)
 			{
 				int encval = 0;
