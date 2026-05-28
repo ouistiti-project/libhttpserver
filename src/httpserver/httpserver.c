@@ -204,7 +204,6 @@ static http_client_t *_httpserver_removeclient(http_server_t *server, http_clien
 
 static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const fd_set *pwfds, const fd_set *pefds)
 {
-	int error = 0;
 	int ret = 0;
 	http_client_t *client = server->clients;
 	while (client != NULL)
@@ -252,9 +251,9 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 #endif
 		if (_httpclient_isalive(client) == EREJECT)
 		{
-			warn("client %p died", client);
+			warn("server: client %p died", client);
 			if (httpclient_state(client) & CLIENT_ERROR)
-				error++;
+				warn("server: client in error");
 			http_client_t *next = _httpserver_removeclient(server, client);
 			httpclient_destroy(client);
 			client = next;
@@ -810,7 +809,6 @@ void httpserver_destroy(http_server_t *server)
 		server->thread = NULL;
 	}
 #endif
-	http_client_t *client = server->clients;
 	_httpserver_closeclients(server);
 	http_connector_list_t *callback = server->callbacks;
 	while (callback)
@@ -860,7 +858,6 @@ size_t httpserver_INFO2(http_server_t *server, const char *key, const char **val
 {
 	size_t valuelen = 0;
 	*value = default_value;
-	static char host[NI_MAXHOST] = {0};
 	static char service[NI_MAXSERV] = {0};
 
 	if (!strcasecmp(key, "name") || !strcasecmp(key, "hostname"))
