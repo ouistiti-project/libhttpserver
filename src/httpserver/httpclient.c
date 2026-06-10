@@ -1278,10 +1278,22 @@ static int _httpclient_thread_statemachine(http_client_t *client)
 			if (ret == EREJECT && errno == EAGAIN)
 			{
 				err("client: %p timeout", client);
-				httpclient_flag(client, 0, CLIENT_STOPPED);
-#if 0
-				ret = ESUCCESS;
+#ifndef SERVER_NO_DDOS_PENALTY
+				struct linger sl = { .l_onoff = 1, .l_linger = 0 };
+				setsockopt(client->sock, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
+				int count = _httserver_counttimeout(client->server);
+				if (count > 0)
+				{
+					struct timespec penalty = { 0 };
+					penalty.tv_nsec = (count % 10) * 100000000;
+					penalty.tv_sec = (count / 10);
+					struct timespec remain;
+					while (nanosleep(&penalty, &remain) == -1 && errno == EINTR)
+						penalty = remain;
+				}
 #endif
+				httpclient_flag(client, 0, CLIENT_EXIT);
+				ret = ECONTINUE;
 			}
 		}
 		break;

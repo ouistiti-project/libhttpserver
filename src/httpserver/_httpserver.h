@@ -77,6 +77,7 @@ struct http_server_s
 	int run;
 	vthread_t thread;
 	http_client_t *clients;
+	unsigned int timeout_count;
 	http_connector_list_t *callbacks;
 	http_server_config_t *config;
 	http_server_mod_t *mod;
@@ -113,6 +114,7 @@ typedef int (*checksession_t)(void * arg, http_server_session_t*session);
 http_server_session_t *_httpserver_createsession(http_server_t *server, const http_client_t *client);
 http_server_session_t *_httpserver_searchsession(const http_server_t *server, checksession_t cb, void *cbarg);
 void _httpserver_dropsession(http_server_t *server, http_server_session_t *session);
+int _httserver_counttimeout(http_server_t *server);
 
 extern const char str_defaultscheme[];
 

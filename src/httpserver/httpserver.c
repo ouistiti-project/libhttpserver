@@ -265,15 +265,9 @@ static int _httpserver_checkclients(http_server_t *server, fd_set *prfds, const 
 		}
 	}
 	server_dbg("server: %d clients running", ret);
-/// The timer doesn't stop the DDOS attacks, it's just slower
-#if 0
-	if (error > 0)
-	{
-		/// try to stop a DDOS attack
-		struct timespec waittime = {0};
-		waittime.tv_nsec = server->config->keepalive * 1000000000;
-		nanosleep(&waittime, NULL);
-	}
+#ifndef SERVER_NO_DDOS_PENALTY
+	if (ret == 0)
+		server->timeout_count = 0;
 #endif
 
 	return ret;
@@ -524,12 +518,6 @@ static int _httpserver_run(http_server_t *server)
 			if (ret == EINCOMPLETE)
 			{
 				warn("server: too many clients");
-				/// DDOS attack
-				if (errno == EMFILE)
-				{
-					kill(0, SIGPIPE);
-					_httpserver_closeclients(server);
-				}
 #ifdef VTHREAD
 				vthread_yield(server->thread);
 				struct timespec waittime = {0};
@@ -791,6 +779,15 @@ int httpserver_reloadclient(http_server_t *server, http_client_t *client)
 	client->server = server;
 	return EREJECT;
 }
+
+#ifndef SERVER_NO_DDOS_PENALTY
+int _httserver_counttimeout(http_server_t *server)
+{
+	if (server->timeout_count < 20)
+		server->timeout_count++;
+	return server->timeout_count;
+}
+#endif
 
 void httpserver_disconnect(http_server_t *server)
 {
