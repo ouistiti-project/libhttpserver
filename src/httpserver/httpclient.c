@@ -538,8 +538,6 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		}
 		if (size > 0)
 		{
-			data->length += size;
-			data->data[data->length] = 0;
 			dbg("client: response receive:\n%s", data->data);
 
 			data->offset = data->data;
