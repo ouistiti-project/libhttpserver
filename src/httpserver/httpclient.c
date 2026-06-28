@@ -73,6 +73,8 @@
 
 #define client_dbg(...)
 
+#define MAX_TRIES 5
+
 static const char str_sockdata[] = "sockdata";
 static const char str_header[] = "header";
 
@@ -524,13 +526,15 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 		data = client->sockdata;
 		_buffer_reset(data, 0);
 
+		size = 0;
 		ret = _httpclient_wait(request->client, WAIT_SEND);
 		if (ret == ESUCCESS)
 		{
+			int tries = 0;
 			do {
 				size = _buffer_fill(data, client->client_recv, client->recv_arg);
 				sched_yield();
-			} while (size == EINCOMPLETE);
+			} while (size == EINCOMPLETE && tries++ < MAX_TRIES);
 		}
 		if (size > 0)
 		{
@@ -546,10 +550,12 @@ int httpclient_sendrequest(http_client_t *client, http_message_t *request, http_
 				ret = _httpmessage_parserequest(response, data);
 			}
 		}
-		if (size == EREJECT || _httpmessage_state(response, PARSE_END))
+		else
 		{
 			request->state = GENERATE_ERROR;
 		}
+		if (_httpmessage_state(response, PARSE_END))
+				request->state = GENERATE_ERROR;
 	break;
 	case GENERATE_ERROR:
 		data = client->sockdata;
@@ -897,7 +903,7 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
 		while (buffer->length > 0)
 		{
 			size = client->client_send(client->send_arg, buffer->offset, buffer->length);
-			if (size < 0)
+			if (size <= 0)
 				break;
 			buffer->length -= size;
 			buffer->offset += size;
@@ -906,11 +912,11 @@ static int _httpclient_sendpart(http_client_t *client, buffer_t *buffer)
 		{
 			ret = EINCOMPLETE;
 		}
-		else if (size < 0)
+		else if (size <= 0)
 		{
 			err("client %p rest %lu send error %s", client, buffer->length, strerror(errno));
 			/**
-			 * error on sending the communication is broken and the thread must die
+			 * error (or closing) on sending, the communication is broken and the thread must die
 			 */
 			ret = EREJECT;
 		}
