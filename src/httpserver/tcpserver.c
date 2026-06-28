@@ -630,6 +630,7 @@ static void _tcpserver_close(http_server_t *server)
 	if (server->sock > 0)
 	{
 		shutdown(server->sock, SHUT_RDWR);
+		close(server->sock);
 	}
 	warn("tcpserver: %p close", server);
 	server->sock = -1;
