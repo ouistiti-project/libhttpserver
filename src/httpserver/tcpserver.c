@@ -412,7 +412,7 @@ static void tcpclient_disconnect(void *ctl)
 static void tcpclient_destroy(void *ctl)
 {
 	http_client_t *client = (http_client_t *)ctl;
-	if (client->sock > 0)
+	if (client->sock > -1)
 	{
 		/**
 		 * Every body is aware about the closing.
@@ -627,7 +627,7 @@ static http_client_t *_tcpserver_createclient(http_server_t *server)
 
 static void _tcpserver_close(http_server_t *server)
 {
-	if (server->sock > 0)
+	if (server->sock > -1)
 	{
 		shutdown(server->sock, SHUT_RDWR);
 		close(server->sock);
