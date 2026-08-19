@@ -98,7 +98,7 @@ int vthread_create(vthread_t *thread, vthread_attr_t *attr,
 	vthread->data = arg;
 	vthread->id = threadpool_get(g_pool, threadhandler, vthread, arg);
 	*thread = vthread;
-	if (vthread->id == 0)
+	if (vthread->id < 0)
 	{
 		free(vthread);
 		ret = EREJECT;
@@ -112,7 +112,7 @@ int vthread_join(vthread_t vthread, void **value_ptr)
 	if (g_pool == NULL || vthread == NULL)
 		return -1;
 	int ret = 0;
-	if (vthread->id != 0)
+	if (vthread->id > -1)
 	{
 		if (threadpool_wait(g_pool, vthread->id) == -1)
 		{
