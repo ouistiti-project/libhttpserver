@@ -1069,7 +1069,7 @@ static int _httpclient_response_generate_separator(http_client_t *client, http_m
 		 * The next loop may append data into the content, but
 		 * the first part has to be already sent
 		 */
-		if (_httpmessage_contentempty(response, 1))
+		if (!_httpmessage_contentempty(response, 1))
 			response->content_length -= contentlength;
 		sent = _httpclient_sendpart(client, response->content);
 		if (sent == EREJECT)
@@ -1106,7 +1106,7 @@ static int _httpclient_response_generate_content(http_client_t *client, http_mes
 	 * In this case the content doesn't existe but the connector
 	 * has to be called
 	 */
-	if (response->content != NULL && response->content->length > 0)
+	if (response->content != NULL && !_httpmessage_contentempty(response, 0))
 	{
 		size_t contentlength = _buffer_length(response->content);
 		if (!_httpmessage_contentempty(response, 1))

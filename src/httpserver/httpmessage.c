@@ -955,7 +955,8 @@ static int _httpmessage_parsepostcontent(http_message_t *message, buffer_t *data
 	else
 	{
 		data->offset += length;
-		message->content_length -= length;
+		if (!_httpmessage_contentempty(message, 1))
+			message->content_length -= length;
 		message->state |= PARSE_CONTINUE;
 	}
 	return next;
@@ -1108,6 +1109,10 @@ buffer_t *_httpmessage_buildheader(http_message_t *message)
 		_buffer_serializedb(message->headers_storage, message->headers, ':', '\n');
 		dbentry_destroy(message->headers);
 		message->headers = NULL;
+	}
+	if (message->content_length == (unsigned long long)-1)
+	{
+		message->mode &= ~HTTPMESSAGE_KEEPALIVE;
 	}
 	if (!_httpmessage_contentempty(message, 1) && ! headers_contains_length)
 	{
