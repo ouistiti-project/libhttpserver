@@ -1,5 +1,5 @@
 package?=libouistiti
-version=3.5
+version=3.6
 
 pkgconfig-y+=ouistiti
 includedir=$(prefix)/include/$(package)
