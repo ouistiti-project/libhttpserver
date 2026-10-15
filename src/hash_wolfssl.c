@@ -76,6 +76,7 @@ const hash_t *hash_sha256 = &(const hash_t)
 };
 
 const hash_t *hash_sha512 = NULL;
+const sign_t *sign_sha256 = NULL;
 
 static void *MD5_init()
 {

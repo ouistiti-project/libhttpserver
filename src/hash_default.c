@@ -57,6 +57,7 @@ const hash_t *hash_sha1 = &(const hash_t)
 const hash_t *hash_sha224 = NULL;
 const hash_t *hash_sha256 = NULL;
 const hash_t *hash_sha512 = NULL;
+const sign_t *sign_sha256 = NULL;
 
 #if defined (MD5_RONRIVEST)
 

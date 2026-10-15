@@ -34,6 +34,12 @@
 # include <mbedtls/sha256.h>
 # include <mbedtls/base64.h>
 # include <mbedtls/md.h>
+# include <mbedtls/pk.h>
+# include <mbedtls/asn1.h>
+# include <mbedtls/asn1write.h>
+# include <mbedtls/bignum.h>
+# include <mbedtls/entropy.h>
+# include <mbedtls/ctr_drbg.h>
 
 #include "ouistiti/hash.h"
 #include "ouistiti/log.h"
@@ -64,6 +70,11 @@ static void *HMACSHA1_initkey(const char *key, size_t keylen);
 static void HMAC_update(void *ctx, const char *in, size_t len);
 static int HMAC_finish(void *ctx, char *out);
 static int HMAC_length(void *ctx);
+static void *SIGN_initkey(const char *key, size_t keylen);
+static const char *SIGN_algo(void *ctx);
+static int SIGN_sign(void *ctx, const char *in, size_t inlen, char *out, size_t outlen);
+static int SIGN_verify(void *ctx, const char *in, size_t inlen, const char *sign, size_t signlen);
+static void SIGN_freekey(void *ctx);
 
 #ifndef LIBB64
 const base64_t *base64 = &(const base64_t)
@@ -125,6 +136,15 @@ const hash_t *hash_macsha256 = &(const hash_t)
 	.update = &HMAC_update,
 	.finish = &HMAC_finish,
 	.length = &HMAC_length,
+};
+const sign_t *sign_sha256 = &(const sign_t)
+{
+	.name = "sign-sha256",
+	.initkey = &SIGN_initkey,
+	.algo = &SIGN_algo,
+	.sign = &SIGN_sign,
+	.verify = &SIGN_verify,
+	.freekey = &SIGN_freekey,
 };
 
 static void *MD5_init()
@@ -296,6 +316,198 @@ static int HMAC_finish(void *ctx, char *output)
 	count = mbedtls_md_get_size(pctx->md_info);
 	free(pctx);
 	return count;
+}
+
+typedef struct _sign_ctx_s _sign_ctx_t;
+struct _sign_ctx_s
+{
+	mbedtls_pk_context pk;
+	mbedtls_entropy_context entropy;
+	mbedtls_ctr_drbg_context drbg;
+	int ec;
+	int private;
+	/// size of r and s into raw ECDSA signature
+	size_t ecsize;
+};
+
+static void SIGN_freekey(void *arg)
+{
+	_sign_ctx_t *ctx = (_sign_ctx_t *)arg;
+	mbedtls_pk_free(&ctx->pk);
+	mbedtls_ctr_drbg_free(&ctx->drbg);
+	mbedtls_entropy_free(&ctx->entropy);
+	free(ctx);
+}
+
+static void *SIGN_initkey(const char *key, size_t keylen)
+{
+	_sign_ctx_t *ctx = calloc(1, sizeof(*ctx));
+	/// mbedtls requires a PEM buffer terminated by '\0' and its length including '\0'
+	unsigned char *pem = calloc(1, keylen + 1);
+	if (ctx == NULL || pem == NULL)
+	{
+		free(ctx);
+		free(pem);
+		return NULL;
+	}
+	memcpy(pem, key, keylen);
+	mbedtls_pk_init(&ctx->pk);
+	mbedtls_entropy_init(&ctx->entropy);
+	mbedtls_ctr_drbg_init(&ctx->drbg);
+	const char pers[] = "ouistiti_sign";
+	int ret = mbedtls_ctr_drbg_seed(&ctx->drbg, mbedtls_entropy_func, &ctx->entropy,
+				(const unsigned char *)pers, sizeof(pers) - 1);
+	if (ret == 0)
+	{
+		ctx->private = 1;
+#if MBEDTLS_VERSION_NUMBER >= 0x03000000
+		ret = mbedtls_pk_parse_key(&ctx->pk, pem, keylen + 1, NULL, 0, mbedtls_ctr_drbg_random, &ctx->drbg);
+#else
+		ret = mbedtls_pk_parse_key(&ctx->pk, pem, keylen + 1, NULL, 0);
+#endif
+		if (ret != 0)
+		{
+			mbedtls_pk_free(&ctx->pk);
+			mbedtls_pk_init(&ctx->pk);
+			ctx->private = 0;
+			ret = mbedtls_pk_parse_public_key(&ctx->pk, pem, keylen + 1);
+		}
+	}
+	free(pem);
+	if (ret != 0)
+	{
+		err("sign: key format not supported (%d)", ret);
+		SIGN_freekey(ctx);
+		return NULL;
+	}
+	if (mbedtls_pk_can_do(&ctx->pk, MBEDTLS_PK_ECDSA))
+		ctx->ec = 1;
+	else if (!mbedtls_pk_can_do(&ctx->pk, MBEDTLS_PK_RSA))
+	{
+		err("sign: key type not supported (only RSA and EC)");
+		SIGN_freekey(ctx);
+		return NULL;
+	}
+	ctx->ecsize = (mbedtls_pk_get_bitlen(&ctx->pk) + 7) / 8;
+	return ctx;
+}
+
+static const char *SIGN_algo(void *arg)
+{
+	const _sign_ctx_t *ctx = (const _sign_ctx_t *)arg;
+	if (ctx->ec)
+		return "ES256";
+	return "RS256";
+}
+
+static int _sign_der2raw(const _sign_ctx_t *ctx, unsigned char *der, size_t derlen, char *out, size_t outlen)
+{
+	if (outlen < 2 * ctx->ecsize)
+		return -1;
+	unsigned char *p = der;
+	const unsigned char *end = der + derlen;
+	size_t len = 0;
+	mbedtls_mpi r, s;
+	mbedtls_mpi_init(&r);
+	mbedtls_mpi_init(&s);
+	int ret = -1;
+	if (mbedtls_asn1_get_tag(&p, end, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE) == 0 &&
+		mbedtls_asn1_get_mpi(&p, end, &r) == 0 &&
+		mbedtls_asn1_get_mpi(&p, end, &s) == 0 &&
+		mbedtls_mpi_write_binary(&r, (unsigned char *)out, ctx->ecsize) == 0 &&
+		mbedtls_mpi_write_binary(&s, (unsigned char *)out + ctx->ecsize, ctx->ecsize) == 0)
+		ret = 2 * (int)ctx->ecsize;
+	mbedtls_mpi_free(&r);
+	mbedtls_mpi_free(&s);
+	return ret;
+}
+
+/**
+ * the DER signature is written at the end of der buffer,
+ * the function returns its length and its start into *start
+ */
+static int _sign_raw2der(const _sign_ctx_t *ctx, const char *raw, size_t rawlen,
+			unsigned char *der, size_t dersize, unsigned char **start)
+{
+	if (rawlen != 2 * ctx->ecsize)
+		return -1;
+	mbedtls_mpi r, s;
+	mbedtls_mpi_init(&r);
+	mbedtls_mpi_init(&s);
+	unsigned char *p = der + dersize;
+	int ret = -1;
+	if (mbedtls_mpi_read_binary(&r, (const unsigned char *)raw, ctx->ecsize) == 0 &&
+		mbedtls_mpi_read_binary(&s, (const unsigned char *)raw + ctx->ecsize, ctx->ecsize) == 0)
+	{
+		int len = 0;
+		int tmp;
+		if ((tmp = mbedtls_asn1_write_mpi(&p, der, &s)) > 0 && (len += tmp) &&
+			(tmp = mbedtls_asn1_write_mpi(&p, der, &r)) > 0 && (len += tmp) &&
+			(tmp = mbedtls_asn1_write_len(&p, der, len)) > 0 && (len += tmp) &&
+			(tmp = mbedtls_asn1_write_tag(&p, der, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE)) > 0)
+		{
+			ret = len + tmp;
+			*start = p;
+		}
+	}
+	mbedtls_mpi_free(&r);
+	mbedtls_mpi_free(&s);
+	return ret;
+}
+
+static int SIGN_sign(void *arg, const char *in, size_t inlen, char *out, size_t outlen)
+{
+	_sign_ctx_t *ctx = (_sign_ctx_t *)arg;
+	if (!ctx->private)
+	{
+		err("sign: private key required to sign");
+		return -1;
+	}
+	unsigned char hash[32];
+	if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), (const unsigned char *)in, inlen, hash) != 0)
+		return -1;
+	unsigned char sign[MBEDTLS_PK_SIGNATURE_MAX_SIZE];
+	size_t signlen = 0;
+#if MBEDTLS_VERSION_NUMBER >= 0x03000000
+	int ret = mbedtls_pk_sign(&ctx->pk, MBEDTLS_MD_SHA256, hash, sizeof(hash),
+				sign, sizeof(sign), &signlen, mbedtls_ctr_drbg_random, &ctx->drbg);
+#else
+	int ret = mbedtls_pk_sign(&ctx->pk, MBEDTLS_MD_SHA256, hash, sizeof(hash),
+				sign, &signlen, mbedtls_ctr_drbg_random, &ctx->drbg);
+#endif
+	if (ret != 0)
+	{
+		err("sign: signature error (%d)", ret);
+		return -1;
+	}
+	if (ctx->ec)
+		return _sign_der2raw(ctx, sign, signlen, out, outlen);
+	if (signlen > outlen)
+		return -1;
+	memcpy(out, sign, signlen);
+	return (int)signlen;
+}
+
+static int SIGN_verify(void *arg, const char *in, size_t inlen, const char *sign, size_t signlen)
+{
+	_sign_ctx_t *ctx = (_sign_ctx_t *)arg;
+	unsigned char hash[32];
+	if (mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), (const unsigned char *)in, inlen, hash) != 0)
+		return -1;
+	const unsigned char *signature = (const unsigned char *)sign;
+	unsigned char der[MBEDTLS_PK_SIGNATURE_MAX_SIZE];
+	if (ctx->ec)
+	{
+		unsigned char *start = NULL;
+		int derlen = _sign_raw2der(ctx, sign, signlen, der, sizeof(der), &start);
+		if (derlen < 0)
+			return -1;
+		signature = start;
+		signlen = (size_t)derlen;
+	}
+	if (mbedtls_pk_verify(&ctx->pk, MBEDTLS_MD_SHA256, hash, sizeof(hash), signature, signlen) != 0)
+		return -1;
+	return 0;
 }
 
 #ifndef LIBB64
