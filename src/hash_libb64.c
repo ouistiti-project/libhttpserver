@@ -136,7 +136,8 @@ static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen)
 	base64_init_decodestate(&decoder);
 	int cnt = base64_decode_block(in, inlen, out, &decoder);
 	int i;
-	for (i = cnt-1; i < outlen; i++)
+	/// only clean the end of the buffer, the decoded data may be binary
+	for (i = cnt; i < outlen; i++)
 	{
 		if ((out[i] == '\n') ||
 			(out[i] == '\r'))
