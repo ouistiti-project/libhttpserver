@@ -81,4 +81,25 @@ extern const hash_t *hash_sha512;
 extern const hash_t *hash_macsha256;
 extern const hash_t *hash_macsha1;
 
+/**
+ * asymmetric signature (RSA PKCS#1 v1.5 or ECDSA) with SHA-256
+ * the key is a PEM buffer: a private key allows sign and verify,
+ * a public key allows only verify.
+ * ECDSA signature uses the raw format r|s (as JWS ES256), not the DER format.
+ */
+#define SIGN_MAX_SIZE 512
+
+typedef struct sign_s sign_t;
+struct sign_s
+{
+	const char *name;
+	void *(*initkey)(const char *key, size_t keylen);
+	const char *(*algo)(void *ctx);
+	int (*sign)(void *ctx, const char *in, size_t inlen, char *out, size_t outlen);
+	int (*verify)(void *ctx, const char *in, size_t inlen, const char *sign, size_t signlen);
+	void (*freekey)(void *ctx);
+};
+
+extern const sign_t *sign_sha256;
+
 #endif
