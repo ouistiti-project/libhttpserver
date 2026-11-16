@@ -127,17 +127,22 @@ static int BASE64_encode2(const char *in, size_t inlen, char *out, size_t outlen
 
 static int BASE64_decode(const char *in, size_t inlen, char *out, size_t outlen)
 {
-	if (outlen < (inlen / 1.5) + 2)
+	if (outlen == 0)
+		return -1;
+	size_t maxout = (inlen * 3) / 4 + 1;
+	if (maxout > outlen)
 	{
-		err("base64: outlen to small for decoding");
+		err("base64: output buffer too small for decoding (need %zu, have %zu)", maxout, outlen);
 		return -1;
 	}
 	base64_decodestate decoder;
 	base64_init_decodestate(&decoder);
 	int cnt = base64_decode_block(in, inlen, out, &decoder);
+	if (cnt < 0 || (size_t)cnt >= outlen)
+		cnt = (int)outlen - 1;
 	int i;
 	/// only clean the end of the buffer, the decoded data may be binary
-	for (i = cnt; i < outlen; i++)
+	for (i = cnt; i < (int)outlen; i++)
 	{
 		if ((out[i] == '\n') ||
 			(out[i] == '\r'))
