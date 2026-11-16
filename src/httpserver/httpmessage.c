@@ -478,6 +478,11 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 							uri,
 							_buffer_get(data, 0));
 				}
+				else if ((unsigned char)code < 0x20 || (unsigned char)code == 0x7f)
+				{
+					next = _httpmesssage_parsefailed(message);
+					err("message: reject control character in uri");
+				}
 				else
 					next = _httpmessage_pushuri(message, next, &code, 1);
 				if (ret > 0)
@@ -532,7 +537,7 @@ static int _httpmessage_parseuri(http_message_t *message, buffer_t *data)
 			break;
 			default:
 			{
-				if ((*data->offset) < 0x19)
+				if (((unsigned char)*data->offset) < 0x20 || ((unsigned char)*data->offset) == 0x7f)
 				{
 					next = _httpmesssage_parsefailed(message);
 					err("message: reject bad chararcter into uri : %s", _buffer_get(data, 0));
