@@ -162,6 +162,9 @@ int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 			return -1;
 		}
 
+		ssize_t inside = -1;
+		if (data >= buffer->data && data < buffer->data + buffer->size)
+			inside = data - buffer->data;
 		char *newptr = vrealloc(buffer->data, buffer->size + chunksize);
 		if (newptr == NULL)
 		{
@@ -181,6 +184,8 @@ int _buffer_append(buffer_t *buffer, const char *data, size_t length)
 			const char *offset = buffer->offset;
 			buffer->offset = newptr + (offset - buffer->data);
 			buffer->data = newptr;
+			if (inside > -1)
+				data = buffer->data + inside;
 		}
 
 		available = buffer->size - (buffer->offset - buffer->data);
