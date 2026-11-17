@@ -665,8 +665,8 @@ ssize_t tcpserver_getname(struct sockaddr_storage *addr, socklen_t addrlen, char
 				0, 0, NI_NUMERICHOST);
 	if (ret == 0)
 	{
-#ifdef USE_IPV6
 			length = strnlen(buffer, length);
+#ifdef USE_IPV6
 			/// IPv4-mapped address on IPv6
 			if (!strncmp(buffer, "::ffff:", 7))
 			{
