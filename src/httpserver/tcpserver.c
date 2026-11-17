@@ -531,6 +531,7 @@ static int _tcpserver_start(http_server_t *server)
 		memset(&saddr_in, 0, sizeof(saddr_in));
 		saddr_in.sin_family = AF_INET;
 		saddr_in.sin_addr.s_addr = htonl(INADDR_ANY);
+		rp->ai_family = AF_INET;
 		rp->ai_addr = (struct sockaddr *)&saddr_in;
 		rp->ai_addrlen = sizeof(saddr_in);
 #endif
